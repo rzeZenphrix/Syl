@@ -238,7 +238,22 @@ const prefixCommands = {
       poll: 'Create a poll with reactions',
       say: 'Make bot say something',
       help: 'Show this help message',
-      reset: 'Reset the command prefix to default (; and &)'
+      reset: 'Reset the command prefix to default (; and &)',
+      spy: 'Secretly logs all messages from a specific user (admin only)',
+      ghostping: 'Sends and deletes a ping instantly (for fun/testing mods)',
+      sniper: 'Logs and shows deleted messages (message sniping)',
+      revert: 'Removes user\'s last 10 messages (like a soft purge)',
+      modview: 'See all hidden mod actions in the server',
+      shadowban: 'Bans without showing a ban message or logging (silent ban)',
+      massban: 'Ban all users with a specific role',
+      lock: 'Locks the channel',
+      unlock: 'Unlocks the channel',
+      crontab: 'Schedule a command (e.g., ban @user in 5m)',
+      top: 'Show top users by message count, infractions, or uptime',
+      trace: 'Simulates tracking a user\'s origin (fun visual output)',
+      man: 'Returns the help info like a Linux manpage',
+      sysinfo: 'Shows CPU/RAM use, total guilds, users (mimics htop)',
+      passwd: 'Sets a secret "codeword" for an event or action'
     };
     
     // Group commands by category
@@ -319,6 +334,151 @@ const prefixCommands = {
       console.error('Prefix reset error:', e);
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to reset prefix.').setColor(0xe74c3c)] });
     }
+  },
+  
+  spy: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to spy on.');
+    // Store user ID in a spy list (in-memory for now, can be persisted)
+    global.spyUsers = global.spyUsers || {};
+    global.spyUsers[msg.guild.id] = global.spyUsers[msg.guild.id] || new Set();
+    global.spyUsers[msg.guild.id].add(user.id);
+    return msg.reply(`Now spying on <@${user.id}>. All their messages will be logged to the console.`);
+  },
+
+  ghostping: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to ghost ping.');
+    const pingMsg = await msg.channel.send(`<@${user.id}>`);
+    setTimeout(() => pingMsg.delete().catch(() => {}), 1000);
+    return msg.reply('Ghost ping sent!');
+  },
+
+  sniper: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const arg = args[0]?.toLowerCase();
+    if (arg === 'on') {
+      global.sniperEnabled = global.sniperEnabled || {};
+      global.sniperEnabled[msg.guild.id] = true;
+      return msg.reply('Sniper enabled. Deleted messages will be logged.');
+    } else if (arg === 'off') {
+      global.sniperEnabled = global.sniperEnabled || {};
+      global.sniperEnabled[msg.guild.id] = false;
+      return msg.reply('Sniper disabled.');
+    } else {
+      return msg.reply('Usage: &sniper on/off');
+    }
+  },
+
+  revert: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to revert.');
+    const messages = await msg.channel.messages.fetch({ limit: 100 });
+    const userMessages = messages.filter(m => m.author.id === user.id).first(10);
+    for (const m of userMessages) {
+      await m.delete().catch(() => {});
+    }
+    return msg.reply(`Removed last ${userMessages.length} messages from <@${user.id}>.`);
+  },
+
+  modview: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    // This would show a log of all mod actions (stub for now)
+    return msg.reply('Modview: (stub) All hidden mod actions would be shown here.');
+  },
+
+  shadowban: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to shadowban.');
+    await msg.guild.members.ban(user.id, { reason: 'Shadowban (silent ban)' });
+    return msg.reply(`User <@${user.id}> has been shadowbanned (no message/log).`);
+  },
+
+  massban: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    const role = msg.mentions.roles.first();
+    if (!role) return msg.reply('Please mention a role to massban.');
+    const members = msg.guild.members.cache.filter(m => m.roles.cache.has(role.id));
+    for (const member of members.values()) {
+      await member.ban({ reason: 'Massban by role' }).catch(() => {});
+    }
+    return msg.reply(`Massbanned all users with the role ${role.name}.`);
+  },
+
+  lock: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: false });
+    return msg.reply('Channel locked.');
+  },
+
+  unlock: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    }
+    await msg.channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: true });
+    return msg.reply('Channel unlocked.');
+  },
+
+  crontab: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    const [time, ...commandArr] = args;
+    if (!time || commandArr.length === 0) return msg.reply('Usage: &crontab <time> <command>');
+    // For demo: just acknowledge scheduling
+    return msg.reply(`Scheduled command \`${commandArr.join(' ')}\` to run in ${time}. (Stub)`);
+  },
+
+  top: async (msg, args) => {
+    // For demo: show a fake leaderboard
+    return msg.reply('Top users by message count (stub):\n1. @UserA (1234 msgs)\n2. @UserB (1100 msgs)\n3. @UserC (900 msgs)');
+  },
+
+  trace: async (msg, args) => {
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to trace.');
+    // Fun visual output
+    return msg.reply(`Tracing <@${user.id}>...\n🌐 [█████-----]\nIP: 127.0.0.1\nLocation: Unknown\nStatus: 🟢 Online\n(This is a fun simulation!)`);
+  },
+
+  man: async (msg, args) => {
+    const command = args[0];
+    if (!command) return msg.reply('Usage: &man <command>');
+    // Lookup help info from commandDescriptions
+    const desc = (typeof commandDescriptions === 'object' ? commandDescriptions[command] : null) || 'No manual entry for this command.';
+    return msg.reply(`NAME\n    ${command} - ${desc}`);
+  },
+
+  sysinfo: async (msg, args) => {
+    // For demo: show fake system info
+    return msg.reply('System Info (stub):\nCPU: 12%\nRAM: 512MB/2GB\nGuilds: 5\nUsers: 1234');
+  },
+
+  passwd: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    const user = msg.mentions.users.first();
+    const codeword = args.slice(1).join(' ');
+    if (!user || !codeword) return msg.reply('Usage: &passwd @user <codeword>');
+    // For demo: just acknowledge
+    return msg.reply(`Set a secret codeword for <@${user.id}>. (Stub)`);
   }
 };
 
@@ -345,12 +505,6 @@ const slashCommands = [
     .setName('poll')
     .setDescription('Create a poll with reactions')
     .addStringOption(opt => opt.setName('question').setDescription('Poll question').setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName('translate')
-    .setDescription('Translate text to different languages')
-    .addStringOption(opt => opt.setName('text').setDescription('Text to translate').setRequired(true))
-    .addStringOption(opt => opt.setName('language').setDescription('Target language (e.g., spanish, french, german)').setRequired(false))
 ];
 
 // Slash command handlers
@@ -431,49 +585,6 @@ const slashHandlers = {
       await pollMsg.react(reaction);
     }
   },
-
-  translate: async (interaction) => {
-    const text = interaction.options.getString('text');
-    const targetLang = interaction.options.getString('language') || 'en';
-    
-    await interaction.deferReply();
-    
-    try {
-      const result = await translateText(text, targetLang);
-      
-      if (!result) {
-        return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. The translation service may be temporarily unavailable.\n\n**Supported languages:** English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Turkish, Greek, Hebrew, Thai, Vietnamese, Indonesian, Malay, Filipino').setColor(0xe74c3c)] });
-      }
-      
-      if (result.sameLang) {
-        return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('No Translation Needed').setDescription('The detected language is the same as the target language.').setColor(0xf1c40f)] });
-      }
-      
-      // Warn if translation is identical to input
-      let warning = '';
-      if (result.translated.trim().toLowerCase() === text.trim().toLowerCase()) {
-        warning = '\n\n⚠️ The translation is identical to the input. For best results, try translating shorter or simpler sentences.';
-      }
-      
-      const resultEmbed = new EmbedBuilder()
-        .setTitle('🌐 Translation')
-        .addFields(
-          { name: 'Original Text', value: text, inline: false },
-          { name: 'Translated Text', value: result.translated + warning, inline: false },
-          { name: 'Detected Language', value: result.detectedLang.toUpperCase(), inline: true },
-          { name: 'Target Language', value: targetLang.toUpperCase(), inline: true },
-          { name: 'Confidence', value: `${Math.round(result.confidence * 100)}%`, inline: true }
-        )
-        .setColor(0x2ecc71)
-        .setFooter({ text: `Requested by ${interaction.user.tag}` })
-        .setTimestamp();
-      
-      return interaction.editReply({ embeds: [resultEmbed] });
-    } catch (error) {
-      console.error('Translation error:', error);
-      return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again in a few moments.\n\n**Usage:** `/translate text:<text> language:<language>`').setColor(0xe74c3c)] });
-    }
-  }
 };
 
 module.exports = {
