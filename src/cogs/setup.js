@@ -225,69 +225,54 @@ const prefixCommands = {
         .setColor(0x3498db)
         .setTimestamp();
       
-      // Basic Settings
+      // Basic Settings - Combine into fewer fields
       if (data) {
+        const adminRole = data.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set';
+        const extraRoles = data.extra_role_ids?.length ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None';
+        const logChannel = data.log_channel ? `<#${data.log_channel}>` : 'Not set';
+        const autorole = data.autorole ? `<@&${data.autorole}>` : 'Not set';
+        const prefix = data.custom_prefix ? `**${data.custom_prefix}**` : '; or & (default)';
+        
         embed.addFields(
           { name: '🔧 Basic Settings', value: 'Server configuration and permissions', inline: false },
-          { name: 'Admin Role', value: data.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set', inline: true },
-          { name: 'Extra Roles', value: data.extra_role_ids?.length ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None', inline: true },
-          { name: 'Log Channel', value: data.log_channel ? `<#${data.log_channel}>` : 'Not set', inline: true },
-          { name: 'Autorole', value: data.autorole ? `<@&${data.autorole}>` : 'Not set', inline: true },
-          { name: 'Custom Prefix', value: data.custom_prefix ? `**${data.custom_prefix}**` : '; or & (default)', inline: true }
+          { name: 'Admin Role', value: adminRole, inline: true },
+          { name: 'Extra Roles', value: extraRoles, inline: true },
+          { name: 'Log Channel', value: logChannel, inline: true },
+          { name: 'Autorole', value: autorole, inline: true },
+          { name: 'Custom Prefix', value: prefix, inline: true }
         );
         
         if (data.disabled_commands?.length) {
           embed.addFields(
-            { name: '🚫 Disabled Commands', value: `${data.disabled_commands.length} commands disabled`, inline: true },
-            { name: 'Commands', value: data.disabled_commands.join(', '), inline: false }
+            { name: '🚫 Disabled Commands', value: `${data.disabled_commands.length} commands: ${data.disabled_commands.join(', ')}`, inline: false }
           );
         }
       }
       
-      // Welcome Settings
-      if (welcome && welcome.enabled) {
-        embed.addFields(
-          { name: '👋 Welcome Settings', value: 'Welcome message configuration', inline: false },
-          { name: 'Status', value: '✅ Enabled', inline: true },
-          { name: 'Channel', value: welcome.channel_id ? `<#${welcome.channel_id}>` : 'Not set', inline: true },
-          { name: 'Format', value: welcome.embed ? 'Embed' : 'Text', inline: true },
-          { name: 'Message', value: welcome.message ? welcome.message.substring(0, 100) + (welcome.message.length > 100 ? '...' : '') : 'Default', inline: false }
-        );
-      } else {
-        embed.addFields({ name: '👋 Welcome Settings', value: '❌ Disabled', inline: false });
-      }
+      // Welcome & Goodbye Settings - Combine into one section
+      const welcomeStatus = welcome && welcome.enabled ? '✅ Enabled' : '❌ Disabled';
+      const goodbyeStatus = goodbye && goodbye.enabled ? '✅ Enabled' : '❌ Disabled';
       
-      // Goodbye Settings
-      if (goodbye && goodbye.enabled) {
-        embed.addFields(
-          { name: '👋 Goodbye Settings', value: 'Goodbye message configuration', inline: false },
-          { name: 'Status', value: '✅ Enabled', inline: true },
-          { name: 'Channel', value: goodbye.channel_id ? `<#${goodbye.channel_id}>` : 'Not set', inline: true },
-          { name: 'Format', value: goodbye.embed ? 'Embed' : 'Text', inline: true },
-          { name: 'Message', value: goodbye.message ? goodbye.message.substring(0, 100) + (goodbye.message.length > 100 ? '...' : '') : 'Default', inline: false }
-        );
-      } else {
-        embed.addFields({ name: '👋 Goodbye Settings', value: '❌ Disabled', inline: false });
-      }
+      embed.addFields(
+        { name: '👋 Welcome & Goodbye', value: 'Message system status', inline: false },
+        { name: 'Welcome', value: welcomeStatus, inline: true },
+        { name: 'Goodbye', value: goodbyeStatus, inline: true }
+      );
       
-      // Ticket Settings
+      // Ticket Settings - Simplified
       if (ticket) {
         embed.addFields(
-          { name: '🎫 Ticket Settings', value: 'Support ticket system configuration', inline: false },
+          { name: '🎫 Ticket System', value: 'Support ticket configuration', inline: false },
           { name: 'Panel Channel', value: ticket.channel_id ? `<#${ticket.channel_id}>` : 'Not set', inline: true },
-          { name: 'Staff Role', value: ticket.staff_role_id ? `<@&${ticket.staff_role_id}>` : 'None', inline: true },
-          { name: 'Category', value: ticket.category_id ? `<#${ticket.category_id}>` : 'None', inline: true }
+          { name: 'Staff Role', value: ticket.staff_role_id ? `<@&${ticket.staff_role_id}>` : 'None', inline: true }
         );
       } else {
-        embed.addFields({ name: '🎫 Ticket Settings', value: '❌ Not configured', inline: false });
+        embed.addFields({ name: '🎫 Ticket System', value: '❌ Not configured', inline: false });
       }
       
-      // Server Info
+      // Server Info - Combine into one field
       embed.addFields(
-        { name: '📊 Server Info', value: 'Current server statistics', inline: false },
-        { name: 'Members', value: `${msg.guild.memberCount}`, inline: true },
-        { name: 'Channels', value: `${msg.guild.channels.cache.size}`, inline: true },
-        { name: 'Roles', value: `${msg.guild.roles.cache.size}`, inline: true }
+        { name: '📊 Server Statistics', value: `Members: ${msg.guild.memberCount} | Channels: ${msg.guild.channels.cache.size} | Roles: ${msg.guild.roles.cache.size}`, inline: false }
       );
       
       return msg.reply({ embeds: [embed] });
@@ -1196,69 +1181,54 @@ const slashHandlers = {
         .setColor(0x3498db)
         .setTimestamp();
       
-      // Basic Settings
+      // Basic Settings - Combine into fewer fields
       if (data) {
+        const adminRole = data.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set';
+        const extraRoles = data.extra_role_ids?.length ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None';
+        const logChannel = data.log_channel ? `<#${data.log_channel}>` : 'Not set';
+        const autorole = data.autorole ? `<@&${data.autorole}>` : 'Not set';
+        const prefix = data.custom_prefix ? `**${data.custom_prefix}**` : '; or & (default)';
+        
         embed.addFields(
           { name: '🔧 Basic Settings', value: 'Server configuration and permissions', inline: false },
-          { name: 'Admin Role', value: data.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set', inline: true },
-          { name: 'Extra Roles', value: data.extra_role_ids?.length ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None', inline: true },
-          { name: 'Log Channel', value: data.log_channel ? `<#${data.log_channel}>` : 'Not set', inline: true },
-          { name: 'Autorole', value: data.autorole ? `<@&${data.autorole}>` : 'Not set', inline: true },
-          { name: 'Custom Prefix', value: data.custom_prefix ? `**${data.custom_prefix}**` : '; or & (default)', inline: true }
+          { name: 'Admin Role', value: adminRole, inline: true },
+          { name: 'Extra Roles', value: extraRoles, inline: true },
+          { name: 'Log Channel', value: logChannel, inline: true },
+          { name: 'Autorole', value: autorole, inline: true },
+          { name: 'Custom Prefix', value: prefix, inline: true }
         );
         
         if (data.disabled_commands?.length) {
           embed.addFields(
-            { name: '🚫 Disabled Commands', value: `${data.disabled_commands.length} commands disabled`, inline: true },
-            { name: 'Commands', value: data.disabled_commands.join(', '), inline: false }
+            { name: '🚫 Disabled Commands', value: `${data.disabled_commands.length} commands: ${data.disabled_commands.join(', ')}`, inline: false }
           );
         }
       }
       
-      // Welcome Settings
-      if (welcome && welcome.enabled) {
-        embed.addFields(
-          { name: '👋 Welcome Settings', value: 'Welcome message configuration', inline: false },
-          { name: 'Status', value: '✅ Enabled', inline: true },
-          { name: 'Channel', value: welcome.channel_id ? `<#${welcome.channel_id}>` : 'Not set', inline: true },
-          { name: 'Format', value: welcome.embed ? 'Embed' : 'Text', inline: true },
-          { name: 'Message', value: welcome.message ? welcome.message.substring(0, 100) + (welcome.message.length > 100 ? '...' : '') : 'Default', inline: false }
-        );
-      } else {
-        embed.addFields({ name: '👋 Welcome Settings', value: '❌ Disabled', inline: false });
-      }
+      // Welcome & Goodbye Settings - Combine into one section
+      const welcomeStatus = welcome && welcome.enabled ? '✅ Enabled' : '❌ Disabled';
+      const goodbyeStatus = goodbye && goodbye.enabled ? '✅ Enabled' : '❌ Disabled';
       
-      // Goodbye Settings
-      if (goodbye && goodbye.enabled) {
-        embed.addFields(
-          { name: '👋 Goodbye Settings', value: 'Goodbye message configuration', inline: false },
-          { name: 'Status', value: '✅ Enabled', inline: true },
-          { name: 'Channel', value: goodbye.channel_id ? `<#${goodbye.channel_id}>` : 'Not set', inline: true },
-          { name: 'Format', value: goodbye.embed ? 'Embed' : 'Text', inline: true },
-          { name: 'Message', value: goodbye.message ? goodbye.message.substring(0, 100) + (goodbye.message.length > 100 ? '...' : '') : 'Default', inline: false }
-        );
-      } else {
-        embed.addFields({ name: '👋 Goodbye Settings', value: '❌ Disabled', inline: false });
-      }
+      embed.addFields(
+        { name: '👋 Welcome & Goodbye', value: 'Message system status', inline: false },
+        { name: 'Welcome', value: welcomeStatus, inline: true },
+        { name: 'Goodbye', value: goodbyeStatus, inline: true }
+      );
       
-      // Ticket Settings
+      // Ticket Settings - Simplified
       if (ticket) {
         embed.addFields(
-          { name: '🎫 Ticket Settings', value: 'Support ticket system configuration', inline: false },
+          { name: '🎫 Ticket System', value: 'Support ticket configuration', inline: false },
           { name: 'Panel Channel', value: ticket.channel_id ? `<#${ticket.channel_id}>` : 'Not set', inline: true },
-          { name: 'Staff Role', value: ticket.staff_role_id ? `<@&${ticket.staff_role_id}>` : 'None', inline: true },
-          { name: 'Category', value: ticket.category_id ? `<#${ticket.category_id}>` : 'None', inline: true }
+          { name: 'Staff Role', value: ticket.staff_role_id ? `<@&${ticket.staff_role_id}>` : 'None', inline: true }
         );
       } else {
-        embed.addFields({ name: '🎫 Ticket Settings', value: '❌ Not configured', inline: false });
+        embed.addFields({ name: '🎫 Ticket System', value: '❌ Not configured', inline: false });
       }
       
-      // Server Info
+      // Server Info - Combine into one field
       embed.addFields(
-        { name: '📊 Server Info', value: 'Current server statistics', inline: false },
-        { name: 'Members', value: `${interaction.guild.memberCount}`, inline: true },
-        { name: 'Channels', value: `${interaction.guild.channels.cache.size}`, inline: true },
-        { name: 'Roles', value: `${interaction.guild.roles.cache.size}`, inline: true }
+        { name: '📊 Server Statistics', value: `Members: ${interaction.guild.memberCount} | Channels: ${interaction.guild.channels.cache.size} | Roles: ${interaction.guild.roles.cache.size}`, inline: false }
       );
       
       return interaction.reply({ embeds: [embed], ephemeral: true });

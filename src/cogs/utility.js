@@ -1,6 +1,59 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 
+// Translation function using Google Translate API (free alternative)
+async function translateText(text, targetLang = 'en') {
+  try {
+    // Using a simple translation service (you can replace with Google Translate API)
+    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=auto|${targetLang}`);
+    const data = await response.json();
+    
+    if (data.responseStatus === 200) {
+      return {
+        translated: data.responseData.translatedText,
+        detectedLang: data.responseData.detectedLanguage?.lang || 'unknown',
+        confidence: data.responseData.detectedLanguage?.confidence || 0
+      };
+    } else {
+      throw new Error('Translation failed');
+    }
+  } catch (error) {
+    console.error('Translation error:', error);
+    return null;
+  }
+}
+
+// Language codes mapping
+const languageCodes = {
+  'english': 'en', 'en': 'en',
+  'spanish': 'es', 'es': 'es',
+  'french': 'fr', 'fr': 'fr',
+  'german': 'de', 'de': 'de',
+  'italian': 'it', 'it': 'it',
+  'portuguese': 'pt', 'pt': 'pt',
+  'russian': 'ru', 'ru': 'ru',
+  'japanese': 'ja', 'ja': 'ja',
+  'korean': 'ko', 'ko': 'ko',
+  'chinese': 'zh', 'zh': 'zh',
+  'arabic': 'ar', 'ar': 'ar',
+  'hindi': 'hi', 'hi': 'hi',
+  'dutch': 'nl', 'nl': 'nl',
+  'swedish': 'sv', 'sv': 'sv',
+  'norwegian': 'no', 'no': 'no',
+  'danish': 'da', 'da': 'da',
+  'finnish': 'fi', 'fi': 'fi',
+  'polish': 'pl', 'pl': 'pl',
+  'turkish': 'tr', 'tr': 'tr',
+  'greek': 'el', 'el': 'el',
+  'hebrew': 'he', 'he': 'he',
+  'thai': 'th', 'th': 'th',
+  'vietnamese': 'vi', 'vi': 'vi',
+  'indonesian': 'id', 'id': 'id',
+  'malay': 'ms', 'ms': 'ms',
+  'filipino': 'tl', 'tl': 'tl',
+  'auto': 'auto'
+};
+
 // Permission checking
 async function isAdmin(member) {
   try {
@@ -116,6 +169,60 @@ const prefixCommands = {
     return msg.reply({ embeds: [embed] });
   },
   
+  translate: async (msg, args) => {
+    if (args.length < 1) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';translate <text> [target language]\nExample: `;translate Hello world spanish`').setColor(0xe74c3c)] });
+    }
+    
+    const text = args.slice(0, -1).join(' ');
+    const targetLang = args[args.length - 1].toLowerCase();
+    
+    // Check if the last argument is a language code
+    const langCode = languageCodes[targetLang];
+    let finalText = text;
+    let finalTargetLang = 'en';
+    
+    if (langCode) {
+      finalTargetLang = langCode;
+    } else {
+      // If no language specified, use the full text and default to English
+      finalText = args.join(' ');
+    }
+    
+    const embed = new EmbedBuilder()
+      .setTitle('🔄 Translating...')
+      .setDescription('Please wait while I translate your text.')
+      .setColor(0x3498db);
+    
+    const loadingMsg = await msg.reply({ embeds: [embed] });
+    
+    try {
+      const result = await translateText(finalText, finalTargetLang);
+      
+      if (!result) {
+        return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. Please try again.').setColor(0xe74c3c)] });
+      }
+      
+      const resultEmbed = new EmbedBuilder()
+        .setTitle('🌐 Translation')
+        .addFields(
+          { name: 'Original Text', value: finalText, inline: false },
+          { name: 'Translated Text', value: result.translated, inline: false },
+          { name: 'Detected Language', value: result.detectedLang.toUpperCase(), inline: true },
+          { name: 'Target Language', value: finalTargetLang.toUpperCase(), inline: true },
+          { name: 'Confidence', value: `${Math.round(result.confidence * 100)}%`, inline: true }
+        )
+        .setColor(0x2ecc71)
+        .setFooter({ text: `Requested by ${msg.author.tag}` })
+        .setTimestamp();
+      
+      return loadingMsg.edit({ embeds: [resultEmbed] });
+    } catch (error) {
+      console.error('Translation error:', error);
+      return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again.').setColor(0xe74c3c)] });
+    }
+  },
+  
   help: async (msg, args) => {
     const commandDescriptions = {
       // Setup & Configuration
@@ -157,6 +264,7 @@ const prefixCommands = {
       server: 'Show server info',
       roles: 'List all roles',
       avatar: 'Show a user avatar',
+      translate: 'Translate text to different languages',
       poll: 'Create a poll with reactions',
       say: 'Make bot say something',
       help: 'Show this help message'
@@ -168,7 +276,7 @@ const prefixCommands = {
       '👋 Welcome & Goodbye': ['welcomesetup', 'goodbyesetup'],
       '🎫 Ticket System': ['ticketsetup'],
       '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout'],
-      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'help']
+      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'translate', 'poll', 'say', 'help']
     };
     
     let helpText = '';
@@ -244,7 +352,13 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('poll')
     .setDescription('Create a poll with reactions')
-    .addStringOption(opt => opt.setName('question').setDescription('Poll question').setRequired(true))
+    .addStringOption(opt => opt.setName('question').setDescription('Poll question').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('translate')
+    .setDescription('Translate text to different languages')
+    .addStringOption(opt => opt.setName('text').setDescription('Text to translate').setRequired(true))
+    .addStringOption(opt => opt.setName('language').setDescription('Target language (e.g., spanish, french, german)').setRequired(false))
 ];
 
 // Slash command handlers
@@ -323,6 +437,39 @@ const slashHandlers = {
     const reactions = ['👍', '👎', '🤷'];
     for (const reaction of reactions) {
       await pollMsg.react(reaction);
+    }
+  },
+
+  translate: async (interaction) => {
+    const text = interaction.options.getString('text');
+    const targetLang = interaction.options.getString('language') || 'en';
+    
+    await interaction.deferReply();
+    
+    try {
+      const result = await translateText(text, targetLang);
+      
+      if (!result) {
+        return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. Please try again.').setColor(0xe74c3c)] });
+      }
+      
+      const resultEmbed = new EmbedBuilder()
+        .setTitle('🌐 Translation')
+        .addFields(
+          { name: 'Original Text', value: text, inline: false },
+          { name: 'Translated Text', value: result.translated, inline: false },
+          { name: 'Detected Language', value: result.detectedLang.toUpperCase(), inline: true },
+          { name: 'Target Language', value: targetLang.toUpperCase(), inline: true },
+          { name: 'Confidence', value: `${Math.round(result.confidence * 100)}%`, inline: true }
+        )
+        .setColor(0x2ecc71)
+        .setFooter({ text: `Requested by ${interaction.user.tag}` })
+        .setTimestamp();
+      
+      return interaction.editReply({ embeds: [resultEmbed] });
+    } catch (error) {
+      console.error('Translation error:', error);
+      return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again.').setColor(0xe74c3c)] });
     }
   }
 };
