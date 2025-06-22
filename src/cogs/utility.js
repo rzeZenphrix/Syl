@@ -194,64 +194,6 @@ const prefixCommands = {
     return msg.reply({ embeds: [embed] });
   },
   
-  translate: async (msg, args) => {
-    if (args.length < 1) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';translate <text> [target language]\nExample: `;translate Hello world spanish`').setColor(0xe74c3c)] });
-    }
-    
-    const text = args.slice(0, -1).join(' ');
-    const targetLang = args[args.length - 1].toLowerCase();
-    
-    // Check if the last argument is a language code
-    const langCode = languageCodes[targetLang];
-    let finalText = text;
-    let finalTargetLang = 'en';
-    
-    if (langCode) {
-      finalTargetLang = langCode;
-    } else {
-      // If no language specified, use the full text and default to English
-      finalText = args.join(' ');
-    }
-    
-    const embed = new EmbedBuilder()
-      .setTitle('🔄 Translating...')
-      .setDescription('Please wait while I translate your text.')
-      .setColor(0x3498db);
-    
-    const loadingMsg = await msg.reply({ embeds: [embed] });
-    
-    try {
-      const result = await translateText(finalText, finalTargetLang);
-      
-      if (!result) {
-        return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. The translation service may be temporarily unavailable.\n\n**Supported languages:** English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Turkish, Greek, Hebrew, Thai, Vietnamese, Indonesian, Malay, Filipino').setColor(0xe74c3c)] });
-      }
-      
-      if (result.sameLang) {
-        return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('No Translation Needed').setDescription('The detected language is the same as the target language.').setColor(0xf1c40f)] });
-      }
-      
-      const resultEmbed = new EmbedBuilder()
-        .setTitle('🌐 Translation')
-        .addFields(
-          { name: 'Original Text', value: finalText, inline: false },
-          { name: 'Translated Text', value: result.translated, inline: false },
-          { name: 'Detected Language', value: result.detectedLang.toUpperCase(), inline: true },
-          { name: 'Target Language', value: finalTargetLang.toUpperCase(), inline: true },
-          { name: 'Confidence', value: `${Math.round(result.confidence * 100)}%`, inline: true }
-        )
-        .setColor(0x2ecc71)
-        .setFooter({ text: `Requested by ${msg.author.tag}` })
-        .setTimestamp();
-      
-      return loadingMsg.edit({ embeds: [resultEmbed] });
-    } catch (error) {
-      console.error('Translation error:', error);
-      return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again in a few moments.\n\n**Usage:** `;translate <text> [language]`\n**Example:** `;translate Hello world spanish`').setColor(0xe74c3c)] });
-    }
-  },
-  
   help: async (msg, args) => {
     const commandDescriptions = {
       // Setup & Configuration
@@ -293,7 +235,6 @@ const prefixCommands = {
       server: 'Show server info',
       roles: 'List all roles',
       avatar: 'Show a user avatar',
-      translate: 'Translate text to different languages',
       poll: 'Create a poll with reactions',
       say: 'Make bot say something',
       help: 'Show this help message',
@@ -306,7 +247,7 @@ const prefixCommands = {
       '👋 Welcome & Goodbye': ['welcomesetup', 'goodbyesetup'],
       '🎫 Ticket System': ['ticketsetup'],
       '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout'],
-      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'translate', 'poll', 'say', 'help', 'reset']
+      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'help', 'reset']
     };
     
     let helpText = '';
@@ -508,11 +449,17 @@ const slashHandlers = {
         return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('No Translation Needed').setDescription('The detected language is the same as the target language.').setColor(0xf1c40f)] });
       }
       
+      // Warn if translation is identical to input
+      let warning = '';
+      if (result.translated.trim().toLowerCase() === text.trim().toLowerCase()) {
+        warning = '\n\n⚠️ The translation is identical to the input. For best results, try translating shorter or simpler sentences.';
+      }
+      
       const resultEmbed = new EmbedBuilder()
         .setTitle('🌐 Translation')
         .addFields(
           { name: 'Original Text', value: text, inline: false },
-          { name: 'Translated Text', value: result.translated, inline: false },
+          { name: 'Translated Text', value: result.translated + warning, inline: false },
           { name: 'Detected Language', value: result.detectedLang.toUpperCase(), inline: true },
           { name: 'Target Language', value: targetLang.toUpperCase(), inline: true },
           { name: 'Confidence', value: `${Math.round(result.confidence * 100)}%`, inline: true }
@@ -524,7 +471,7 @@ const slashHandlers = {
       return interaction.editReply({ embeds: [resultEmbed] });
     } catch (error) {
       console.error('Translation error:', error);
-      return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again in a few moments.\n\n**Usage:** `;translate <text> [language]`\n**Example:** `;translate Hello world spanish`').setColor(0xe74c3c)] });
+      return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Error').setDescription('An error occurred while translating. Please try again in a few moments.\n\n**Usage:** `/translate text:<text> language:<language>`').setColor(0xe74c3c)] });
     }
   }
 };
