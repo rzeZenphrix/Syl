@@ -104,3 +104,43 @@
 [2025-06-20T14:30:45.247Z] Akane's server
 [2025-06-20T14:31:43.863Z] Akane's server
 [2025-06-20T14:32:06.213Z] Akane's server
+[2025-06-20T18:25:42.903Z] Akane's server
+[2025-06-20T18:25:56.333Z] Akane's server
+[2025-06-20T19:14:11.981Z] [Slash command: logchannel] [object Object]
+[2025-06-20T19:42:07.945Z] [Slash command: logchannel] [object Object]
+[2025-06-20T19:43:31.370Z] [Slash command: kill] DiscordAPIError[50013]: Missing Permissions
+    at handleErrors (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:748:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async SequentialHandler.runRequest (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:1149:23)
+    at async SequentialHandler.queueRequest (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:980:14)
+    at async _REST.request (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:1293:22)
+    at async GuildBanManager.create (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\managers\GuildBanManager.js:169:5)
+    at async Client.<anonymous> (C:\Users\buchi\OneDrive\Desktop\Asylum\index.js:655:7)
+[2025-06-20T19:45:22.222Z] [Slash command: rm] DiscordAPIError[50013]: Missing Permissions
+    at handleErrors (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:748:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async SequentialHandler.runRequest (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:1149:23)
+    at async SequentialHandler.queueRequest (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:980:14)
+    at async _REST.request (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@discordjs\rest\dist\index.js:1293:22)
+    at async GuildMemberManager.kick (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\managers\GuildMemberManager.js:466:5)
+    at async Client.<anonymous> (C:\Users\buchi\OneDrive\Desktop\Asylum\index.js:662:7)
+[2025-06-20T19:45:34.685Z] [Slash command: rm] [object Object]
+[2025-06-20T20:08:53.197Z] [Prefix command: help] ReferenceError: commandDescriptions is not defined
+    at C:\Users\buchi\OneDrive\Desktop\Asylum\index.js:448:32
+    at Array.map (<anonymous>)
+    at Object.help (C:\Users\buchi\OneDrive\Desktop\Asylum\index.js:448:8)
+    at Client.<anonymous> (C:\Users\buchi\OneDrive\Desktop\Asylum\index.js:597:30)
+    at Client.emit (node:events:513:28)
+    at MessageCreateAction.handle (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\client\actions\MessageCreate.js:32:14)
+    at module.exports [as MESSAGE_CREATE] (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\client\websocket\handlers\MESSAGE_CREATE.js:4:32)
+    at WebSocketManager.handlePacket (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\client\websocket\WebSocketManager.js:351:31)
+    at WebSocketManager.<anonymous> (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\discord.js\src\client\websocket\WebSocketManager.js:235:12)
+    at WebSocketManager.emit (C:\Users\buchi\OneDrive\Desktop\Asylum\node_modules\@vladfrangu\async_event_emitter\dist\index.cjs:287:31)
+[2025-06-20T20:12:04.444Z] [Slash command: logchannel] [object Object]
+[2025-06-21T05:36:52.410Z] [Prefix command: kick] [object Object]
+[2025-06-21T07:22:07.470Z] [slash-command] Slash command not implemented: config
+[2025-06-21T07:29:20.238Z] [slash-command] Slash command not implemented: poll
+[2025-06-21T07:29:52.839Z] [slash-command:blacklist] [object Object]
+[2025-06-21T07:30:09.702Z] [slash-command] Slash command not implemented: reset-config
+[2025-06-21T07:37:30.865Z] [autorole-set] [object Object]
+[2025-06-21T13:50:20.010Z] [autorole-fetch] TypeError: Cannot read properties of null (reading 'name')

@@ -11,28 +11,27 @@ const {
   REST,
   Routes,
   SlashCommandBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelType,
+  PermissionFlagsBits
 } = require('discord.js');
-const {
-  checkCooldown,
-  isBlacklisted,
-  isWhitelisted,
-  isUserRestricted,
-  protectBot
-} = require('./src/features');
-const { logEvent } = require('./src/utils/logger');
-const { supabase } = require('./src/utils/supabase');
+const { createClient } = require('@supabase/supabase-js');
+const CogManager = require('./src/cogManager');
 
+// Environment variables
 const token = process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
-const prefixes = [';', '&'];
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
-// Load or initialize guild configs
-const configPath = path.resolve(__dirname, 'guildConfigs.json');
-let guildConfigs = {};
-if (fs.existsSync(configPath)) {
-  guildConfigs = JSON.parse(fs.readFileSync(configPath));
-}
+// Initialize Supabase
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Bot configuration
+const prefixes = [';', '&'];
 
 // Initialize client with necessary intents
 const client = new Client({
@@ -45,67 +44,237 @@ const client = new Client({
   ]
 });
 
-// Define slash commands with extended setup
-const slashCommands = [
-  new SlashCommandBuilder()
-    .setName('setup')
-    .setDescription('Initialize bot roles and restrictions')
-    .addRoleOption(opt => opt.setName('adminrole').setDescription('Primary admin role').setRequired(true))
-    .addStringOption(opt => opt.setName('extras').setDescription('Comma-separated additional roles'))
-    .addStringOption(opt => opt.setName('disabled').setDescription('Comma-separated commands to disable')),
-  new SlashCommandBuilder().setName('ls').setDescription('List text channels'),
-  new SlashCommandBuilder().setName('ps').setDescription('List online members'),
-  new SlashCommandBuilder()
-    .setName('whois')
-    .setDescription('Get user info')
-    .addUserOption(opt => opt.setName('member').setDescription('Member to lookup')),
-  new SlashCommandBuilder()
-    .setName('kill')
-    .setDescription('Ban a member')
-    .addUserOption(opt => opt.setName('member').setDescription('Member to ban').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for ban')),
-  new SlashCommandBuilder()
-    .setName('rm')
-    .setDescription('Kick a member')
-    .addUserOption(opt => opt.setName('member').setDescription('Member to kick').setRequired(true))
-    .addStringOption(opt => opt.setName('reason').setDescription('Reason for kick')),
-  new SlashCommandBuilder()
-    .setName('purge')
-    .setDescription('Delete messages')
-    .addIntegerOption(opt => opt.setName('limit').setDescription('Number of messages').setMinValue(1).setMaxValue(100).setRequired(true)),
-  new SlashCommandBuilder()    .setName('mkdir')
-    .setDescription('Create a role')
-    .addStringOption(opt => opt.setName('name').setDescription('Name for the new role').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('rmdir')
-    .setDescription('Delete a role')
-    .addRoleOption(opt => opt.setName('role').setDescription('Role to delete').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('echo')
-    .setDescription('Echo text')
-    .addStringOption(opt => opt.setName('message').setDescription('Text to echo').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('config')
-    .setDescription('View or edit guild configuration')
-    .addStringOption(opt => opt.setName('action').setDescription('view or edit').setRequired(true))
-    .addStringOption(opt => opt.setName('key').setDescription('Config key for editing'))
-    .addStringOption(opt => opt.setName('value').setDescription('New value for the config key')),
-  new SlashCommandBuilder()
-    .setName('prefix')
-    .setDescription('Change the command prefix for the server')
-    .addStringOption(opt => opt.setName('symbol').setDescription('New prefix symbol').setRequired(true)),
-  new SlashCommandBuilder()
-    .setName('reset-config')
-    .setDescription('Reset the guild configuration to default'),
-  new SlashCommandBuilder()
-    .setName('logchannel')
-    .setDescription('Set the channel for bot logs')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send logs')),
-  new SlashCommandBuilder()
-    .setName('say')
-    .setDescription('Make the bot say something')
-    .addStringOption(opt => opt.setName('message').setDescription('Message for the bot to say').setRequired(true))
-].map(cmd => cmd.toJSON());
+// Initialize cog manager
+const cogManager = new CogManager(client);
+
+// Supabase helper functions
+async function addWarning(guildId, userId, reason, warnedBy) {
+  const { error } = await supabase.from('warnings').insert([
+    { guild_id: guildId, user_id: userId, reason, warned_by: warnedBy, date: Date.now() }
+  ]);
+  if (error) throw error;
+}
+
+async function getWarnings(guildId, userId) {
+  const { data, error } = await supabase.from('warnings').select('*').eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+  return data;
+}
+
+async function clearWarnings(guildId, userId) {
+  const { error } = await supabase.from('warnings').delete().eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+async function addMute(guildId, userId, mutedBy, reason, durationMs) {
+  const start = Date.now();
+  const end = durationMs ? start + durationMs : null;
+  const { error } = await supabase.from('mutes').insert([
+    { guild_id: guildId, user_id: userId, muted_by: mutedBy, reason, start_time: start, end_time: end }
+  ]);
+  if (error) throw error;
+}
+
+async function removeMute(guildId, userId) {
+  const { error } = await supabase.from('mutes').delete().eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+async function isMuted(guildId, userId) {
+  const { data, error } = await supabase.from('mutes').select('*').eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+  return data && data.length > 0;
+}
+
+async function addBlacklist(guildId, userId, addedBy, reason) {
+  const { error } = await supabase.from('blacklist').insert([
+    { guild_id: guildId, user_id: userId, added_by: addedBy, reason, date: Date.now() }
+  ]);
+  if (error) throw error;
+}
+
+async function removeBlacklist(guildId, userId) {
+  const { error } = await supabase.from('blacklist').delete().eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+}
+
+async function isBlacklisted(guildId, userId) {
+  const { data, error } = await supabase.from('blacklist').select('*').eq('guild_id', guildId).eq('user_id', userId);
+  if (error) throw error;
+  return data && data.length > 0;
+}
+
+async function addModlog(guildId, userId, action, moderatorId, reason) {
+  const { error } = await supabase.from('modlogs').insert([
+    { guild_id: guildId, user_id: userId, action, moderator_id: moderatorId, reason, date: Date.now() }
+  ]);
+  if (error) throw error;
+}
+
+async function getAutorole(guildId) {
+  const { data, error } = await supabase.from('guild_configs').select('autorole').eq('guild_id', guildId).single();
+  if (error) return null;
+  return data?.autorole || null;
+}
+
+async function setAutorole(guildId, roleId) {
+  const { error } = await supabase.from('guild_configs').upsert([{ guild_id: guildId, autorole: roleId }], { onConflict: ['guild_id'] });
+  if (error) throw error;
+}
+
+async function getLogChannel(guildId) {
+  const { data, error } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', guildId).single();
+  if (error) return null;
+  return data?.log_channel || null;
+}
+
+async function setLogChannel(guildId, channelId) {
+  const { error } = await supabase.from('guild_configs').upsert([{ guild_id: guildId, log_channel: channelId }], { onConflict: ['guild_id'] });
+  if (error) throw error;
+}
+
+// Ticketing system helpers
+async function addTicketType(guildId, label, description, tags, color, createdBy) {
+  const { error } = await supabase.from('ticket_types').insert([
+    { guild_id: guildId, label, description, tags, color, created_by: createdBy }
+  ]);
+  if (error) throw error;
+}
+
+async function getTicketTypes(guildId) {
+  const { data, error } = await supabase.from('ticket_types').select('*').eq('guild_id', guildId);
+  if (error) throw error;
+  return data;
+}
+
+async function getTicketTypeById(id) {
+  const { data, error } = await supabase.from('ticket_types').select('*').eq('id', id).single();
+  if (error) throw error;
+  return data;
+}
+
+async function createTicket(guildId, userId, typeId) {
+  const { error } = await supabase.from('tickets').insert([
+    { guild_id: guildId, user_id: userId, type_id: typeId, created_at: Date.now() }
+  ]);
+  if (error) throw error;
+}
+
+// Permission checking functions
+async function isAdmin(member) {
+  try {
+    if (!member || !member.guild) return false;
+    
+    // Always allow the server owner
+    if (member.guild.ownerId === member.id) return true;
+    
+    // Check for Administrator permission
+    if (member.permissions.has('Administrator')) return true;
+    
+    // Check guild config for admin roles
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('admin_role_id, extra_role_ids')
+      .eq('guild_id', member.guild.id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error checking admin roles:', error);
+      return false;
+    }
+    
+    if (!data) return false;
+    
+    const adminRoles = [data.admin_role_id, ...(data.extra_role_ids || [])].filter(Boolean);
+    return member.roles.cache.some(role => adminRoles.includes(role.id));
+  } catch (err) {
+    console.error('Error in isAdmin check:', err);
+    return false;
+  }
+}
+
+async function isCommandEnabled(guildId, commandName, member = null) {
+  try {
+    // If we have member info, check if they should bypass disabled commands
+    if (member) {
+      // Always allow server owner
+      if (member.guild.ownerId === member.id) {
+        return true;
+      }
+      
+      // Always allow users with Administrator permission
+      if (member.permissions.has('Administrator')) {
+        return true;
+      }
+      
+      // Check if user has admin roles configured
+      const { data: config, error: configError } = await supabase
+        .from('guild_configs')
+        .select('admin_role_id, extra_role_ids')
+        .eq('guild_id', guildId)
+        .single();
+      
+      if (!configError && config) {
+        const adminRoles = [config.admin_role_id, ...(config.extra_role_ids || [])].filter(Boolean);
+        if (member.roles.cache.some(role => adminRoles.includes(role.id))) {
+          return true;
+        }
+      }
+    }
+    
+    // Check if command is disabled
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('disabled_commands')
+      .eq('guild_id', guildId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error checking disabled commands:', error);
+      return true; // Allow command if can't check
+    }
+    
+    if (!data || !data.disabled_commands) {
+      return true; // No disabled commands list means all commands are enabled
+    }
+    
+    return !data.disabled_commands.includes(commandName);
+  } catch (err) {
+    console.error('Error in isCommandEnabled check:', err);
+    return true; // Allow command if can't check
+  }
+}
+
+function isBotProtected(targetId, clientId) {
+  return targetId === clientId;
+}
+
+// Utility functions
+function logError(context, error) {
+  console.error(`[${context}] Error:`, error);
+  const logLine = `[${new Date().toISOString()}] [${context}] ${error}\n`;
+  fs.appendFileSync('logs.txt', logLine);
+}
+
+async function sendErrorToLogChannel(guild, context, error) {
+  try {
+    const logChannelId = await getLogChannel(guild.id);
+    if (!logChannelId) return;
+    
+    const channel = guild.channels.cache.get(logChannelId);
+    if (!channel) return;
+    
+    const embed = new EmbedBuilder()
+      .setTitle('Error')
+      .setDescription(`**Context:** ${context}\n**Error:** ${error.message || error}`)
+      .setColor(0xe74c3c)
+      .setTimestamp();
+    
+    await channel.send({ embeds: [embed] });
+  } catch (e) {
+    console.error('Failed to send error to log channel:', e);
+  }
+}
 
 // Validate environment variables
 if (!token || !clientId) {
@@ -113,549 +282,317 @@ if (!token || !clientId) {
   process.exit(1);
 }
 
+// Event handlers
+client.on('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`Serving ${client.guilds.cache.size} guilds`);
+  
+  // Load cogs
+  await cogManager.loadCogs();
+
 // Register slash commands
 const rest = new REST({ version: '10' }).setToken(token);
-(async () => {
   try {
+    const slashCommands = cogManager.getAllSlashCommands();
     await rest.put(Routes.applicationCommands(clientId), { body: slashCommands });
-    console.log('Slash commands registered.');
-  } catch (err) { console.error(err); }
-})();
-
-// Save configs helper
-function saveConfigs() {
-  fs.writeFileSync(configPath, JSON.stringify(guildConfigs, null, 2));
-}
-
-// Helper: fetch guild config from Supabase
-async function getGuildConfig(guildId) {
-  const { data, error } = await supabase.from('guild_configs').select('*').eq('guild_id', guildId).single();
-  if (error && error.code !== 'PGRST116') console.error('Supabase fetch error:', error);
-  return data || {};
-}
-// Helper: save guild config to Supabase
-async function setGuildConfig(guildId, config) {
-  const { error } = await supabase.from('guild_configs').upsert([{ guild_id: guildId, ...config }], { onConflict: ['guild_id'] });
-  if (error) console.error('Supabase upsert error:', error);
-}
-
-// Check if member is admin per guild config
-async function isAdmin(member) {
-  const cfg = await getGuildConfig(member.guild.id);
-  const roles = [cfg.admin_role, ...(cfg.extra_roles || [])].filter(Boolean);
-  return member.permissions.has(PermissionsBitField.Flags.Administrator) ||
-         roles.some(r => member.roles.cache.has(r));
-}
-
-// Check if command disabled
-async function isDisabled(cmd, guildId) {
-  const cfg = await getGuildConfig(guildId);
-  return (cfg.disabled_commands || []).includes(cmd);
-}
-
-// Utility to send embed
-async function sendEmbed(target, title, description, fields = []) {
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(description || '\u200B')
-    .setColor(0x3498db)
-    .addFields(fields);
-  await target.send({ embeds: [embed] });
-}
-
-client.once('ready', () => console.log(`Logged in as ${client.user.tag}`));
-
-// Global error handler
-client.on('error', (err) => {
-  console.error('Discord client error:', err);
-});
-process.on('unhandledRejection', (err) => {
-  console.error('Unhandled promise rejection:', err);
-});
-
-// PREFIX COMMANDS
-// Modular command registry for prefix commands
-const prefixCommands = {
-  ls: async (msg, args) => {
-    const names = msg.guild.channels.cache.filter(c => c.isTextBased()).map(c => c.name).join(', ');
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channels').setDescription(names || 'None').setColor(0x3498db)] });
-  },
-  ps: async (msg, args) => {
-    const online = msg.guild.members.cache.filter(m => m.presence?.status === 'online').map(m => m.user.tag).join(', ');
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Online Members').setDescription(online || 'None').setColor(0x3498db)] });
-  },
-  whoami: async (msg, args) => {
-    const member = msg.member;
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setTitle('User Info')
-      .addFields(
-        { name: 'Username', value: member.user.tag, inline: true },
-        { name: 'ID', value: member.id, inline: true },
-        { name: 'Joined', value: `<t:${Math.floor(member.joinedTimestamp/1000)}:R>`, inline: true }
-      )
-      .setColor(0x3498db)
-    ] });
-  },
-  echo: async (msg, args) => {
-    const text = args.join(' ');
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Echo').setDescription(text).setColor(0x3498db)] });
-  },
-  ban: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const reason = args.slice(1).join(' ') || 'No reason';
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user to ban.').setColor(0xe74c3c)] });
-    await target.ban({ reason });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Ban Executed').setDescription(`${target.user.tag} banned\nReason: ${reason}`).setColor(0xe74c3c)] });
-  },
-  kick: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const reason = args.slice(1).join(' ') || 'No reason';
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user to kick.').setColor(0xe67e22)] });
-    await target.kick(reason);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Kick Executed').setDescription(`${target.user.tag} kicked\nReason: ${reason}`).setColor(0xe67e22)] });
-  },
-  warn: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const reason = args.slice(1).join(' ');
-    if (!target || !reason) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Usage: ;warn @user <reason>').setColor(0xf1c40f)] });
-    const warns = guildConfigs[msg.guild.id]?.warnings || {};
-    warns[target.id] = warns[target.id] || [];
-    warns[target.id].push({ reason, by: msg.author.id, date: Date.now() });
-    guildConfigs[msg.guild.id] = { ...guildConfigs[msg.guild.id], warnings: warns };
-    saveConfigs();
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Warned').setDescription(`${target.user.tag} warned: ${reason}`).setColor(0xf1c40f)] });
-  },
-  warnings: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user.').setColor(0xf1c40f)] });
-    const warns = guildConfigs[msg.guild.id]?.warnings?.[target.id] || [];
-    if (!warns.length) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Warnings').setDescription('No warnings.').setColor(0xf1c40f)] });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Warnings').setDescription(warns.map((w, i) => `${i+1}. ${w.reason} (<@${w.by}>, <t:${Math.floor(w.date/1000)}:R>)`).join('\n')).setColor(0xf1c40f)] });
-  },
-  clearwarn: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user.').setColor(0xf1c40f)] });
-    if (guildConfigs[msg.guild.id]?.warnings) {
-      delete guildConfigs[msg.guild.id].warnings[target.id];
-      saveConfigs();
-    }
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Warnings Cleared').setDescription(`Cleared warnings for ${target.user.tag}`).setColor(0xf1c40f)] });
-  },
-  mute: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user.').setColor(0x95a5a6)] });
-    let muteRole = msg.guild.roles.cache.find(r => r.name.toLowerCase() === 'muted');
-    if (!muteRole) muteRole = await msg.guild.roles.create({ name: 'Muted', color: 0x95a5a6 });
-    await target.roles.add(muteRole);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Muted').setDescription(`${target.user.tag} has been muted.`).setColor(0x95a5a6)] });
-  },
-  unmute: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    if (!target) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Mention a user.').setColor(0x95a5a6)] });
-    let muteRole = msg.guild.roles.cache.find(r => r.name.toLowerCase() === 'muted');
-    if (muteRole) await target.roles.remove(muteRole);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unmuted').setDescription(`${target.user.tag} has been unmuted.`).setColor(0x95a5a6)] });
-  },
-  purge: async (msg, args) => {
-    let limit = parseInt(args[0]) || 10;
-    if (isNaN(limit) || limit < 1 || limit > 100) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Limit must be between 1 and 100.').setColor(0xe74c3c)] });
-    try {
-      const deleted = await msg.channel.bulkDelete(limit, true);
-      return msg.channel.send({ embeds: [new EmbedBuilder().setTitle('Purge').setDescription(`${deleted.size} messages deleted`).setColor(0x3498db)] });
-    } catch (e) {
-      console.error('Prefix command error (purge):', e);
-      return msg.channel.send({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to purge messages.').setColor(0xe74c3c)] });
-    }
-  },
-  lock: async (msg, args) => {
-    const channel = msg.mentions.channels.first() || msg.channel;
-    await channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: false });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Locked').setDescription(`${channel} is now locked.`).setColor(0x34495e)] });
-  },
-  unlock: async (msg, args) => {
-    const channel = msg.mentions.channels.first() || msg.channel;
-    await channel.permissionOverwrites.edit(msg.guild.roles.everyone, { SendMessages: true });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Unlocked').setDescription(`${channel} is now unlocked.`).setColor(0x2ecc71)] });
-  },
-  slowmode: async (msg, args) => {
-    const seconds = parseInt(args[0]);
-    if (isNaN(seconds) || seconds < 0 || seconds > 21600) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Provide a valid number of seconds (0-21600).').setColor(0xe67e22)] });
-    await msg.channel.setRateLimitPerUser(seconds);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Slowmode').setDescription(`Set slowmode to ${seconds} seconds.`).setColor(0xe67e22)] });
-  },
-  timeout: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const duration = args[1];
-    if (!target || !duration) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Usage: ;timeout @user <duration>').setColor(0xe67e22)] });
-    const ms = require('ms')(duration);
-    if (!ms) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Invalid duration.').setColor(0xe67e22)] });
-    await target.timeout(ms);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Timeout').setDescription(`${target.user.tag} timed out for ${duration}.`).setColor(0xe67e22)] });
-  },
-  nuke: async (msg, args) => {
-    try {
-      const channel = msg.mentions.channels.first() || msg.channel;
-      const newChannel = await channel.clone();
-      await channel.delete();
-      await newChannel.send({ embeds: [new EmbedBuilder().setTitle('Nuked').setDescription(`${newChannel} has been created and old messages cleared.`).setColor(0xe74c3c)] });
-    } catch (e) {
-      console.error('Prefix command error (nuke):', e);
-      // Can't reply in deleted channel, so log only
-    }
-  },
-  useradd: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const roleName = args.slice(1).join(' ');
-    const role = msg.guild.roles.cache.find(r => r.name === roleName) || msg.mentions.roles.first();
-    if (!target || !role) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Usage: ;useradd @user <role>').setColor(0x9b59b6)] });
-    await target.roles.add(role);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Role Added').setDescription(`${role.name} added to ${target.user.tag}.`).setColor(0x9b59b6)] });
-  },
-  userdel: async (msg, args) => {
-    const target = msg.mentions.members.first();
-    const roleName = args.slice(1).join(' ');
-    const role = msg.guild.roles.cache.find(r => r.name === roleName) || msg.mentions.roles.first();
-    if (!target || !role) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Usage: ;userdel @user <role>').setColor(0x9b59b6)] });
-    await target.roles.remove(role);
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Role Removed').setDescription(`${role.name} removed from ${target.user.tag}.`).setColor(0x9b59b6)] });
-  },
-  server: async (msg, args) => {
-    const g = msg.guild;
-    return msg.reply({ embeds: [new EmbedBuilder()
-      .setTitle('Server Info')
-      .addFields(
-        { name: 'Name', value: g.name, inline: true },
-        { name: 'Members', value: `${g.memberCount}`, inline: true },
-        { name: 'Roles', value: `${g.roles.cache.size}`, inline: true }
-      )
-      .setColor(0x1abc9c)
-    ] });
-  },
-  roles: async (msg, args) => {
-    const roles = msg.guild.roles.cache.map(r => r.name).join(', ');
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Roles').setDescription(roles || 'None').setColor(0x1abc9c)] });
-  },
-  avatar: async (msg, args) => {
-    const target = msg.mentions.users.first() || msg.author;
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle(`${target.tag}'s Avatar`).setImage(target.displayAvatarURL({ dynamic: true, size: 512 })).setColor(0x7289da)] });
-  },
-  ping: async (msg, args) => {
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Pong!').setDescription(`Latency: ${Date.now() - msg.createdTimestamp}ms`).setColor(0x7289da)] });
-  },
-  uptime: async (msg, args) => {
-    const ms = require('ms');
-    const uptime = ms(process.uptime() * 1000, { long: true });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Uptime').setDescription(uptime).setColor(0x7289da)] });
-  },
-  poll: async (msg, args) => {
-    const match = msg.content.match(/"([^"]+)"/g);
-    if (!match || match.length < 2) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';poll "Question?" "Option1" "Option2" ...').setColor(0x7289da)] });
-    const question = match[0].replace(/"/g, '');
-    const options = match.slice(1).map(s => s.replace(/"/g, ''));
-    if (options.length < 2 || options.length > 10) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Provide 2-10 options.').setColor(0xe74c3c)] });
-    const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
-    let desc = options.map((opt, i) => `${emojis[i]} ${opt}`).join('\n');
-    const pollMsg = await msg.channel.send({ embeds: [new EmbedBuilder().setTitle('Poll').setDescription(`**${question}**\n\n${desc}`).setColor(0x7289da)] });
-    for (let i = 0; i < options.length; i++) await pollMsg.react(emojis[i]);
-    return msg.reply({ content: 'Poll created!', allowedMentions: { repliedUser: true } });
-  },
-  embed: async (msg, args) => {
-    const content = args.join(' ').split('|');
-    if (content.length < 2) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';embed <title> | <description>').setColor(0x7289da)] });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle(content[0].trim()).setDescription(content[1].trim()).setColor(0x7289da)] });
-  },
-  emoji: async (msg, args) => {
-    const name = args[0];
-    if (!name) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';emoji <name>').setColor(0x7289da)] });
-    const emoji = msg.guild.emojis.cache.find(e => e.name.toLowerCase() === name.toLowerCase());
-    if (!emoji) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Not Found').setDescription('No emoji found.').setColor(0xe74c3c)] });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Emoji').setDescription(`${emoji} \\:${emoji.name}\\:`).setColor(0x7289da)] });
-  },
-  translate: async (msg, args) => {
-    const lang = args[0];
-    const text = args.slice(1).join(' ');
-    if (!lang || !text) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';translate <lang> <text>').setColor(0x7289da)] });
-    // Placeholder: Integrate with a translation API for real translation
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Translate').setDescription(`(Pretend this is "${text}" in ${lang})`).setColor(0x7289da)] });
-  },
-  createrole: async (msg, args) => {
-    const name = args[0];
-    const color = args[1] || undefined;
-    if (!name) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';createrole <name> [color]').setColor(0x1abc9c)] });
-    const role = await msg.guild.roles.create({ name, color });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Role Created').setDescription(`Created role: ${role.name}`).setColor(0x1abc9c)] });
-  },
-  deleterole: async (msg, args) => {
-    const name = args[0];
-    if (!name) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';deleterole <name>').setColor(0x1abc9c)] });
-    const role = msg.guild.roles.cache.find(r => r.name === name);
-    if (!role) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Not Found').setDescription('Role not found.').setColor(0xe74c3c)] });
-    await role.delete();
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Role Deleted').setDescription(`Deleted role: ${name}`).setColor(0x1abc9c)] });
-  },
-  roleinfo: async (msg, args) => {
-    const name = args[0];
-    const role = msg.guild.roles.cache.find(r => r.name === name) || msg.mentions.roles.first();
-    if (!role) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Not Found').setDescription('Role not found.').setColor(0xe74c3c)] });
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Role Info').addFields(
-      { name: 'Name', value: role.name, inline: true },
-      { name: 'ID', value: role.id, inline: true },
-      { name: 'Color', value: role.hexColor, inline: true },
-      { name: 'Members', value: `${role.members.size}`, inline: true }
-    ).setColor(role.color || 0x1abc9c)] });
-  },
-  autorole: async (msg, args) => {
-    const name = args[0];
-    const role = msg.guild.roles.cache.find(r => r.name === name) || msg.mentions.roles.first();
-    if (!role) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Not Found').setDescription('Role not found.').setColor(0xe74c3c)] });
-    if (!guildConfigs[msg.guild.id]) guildConfigs[msg.guild.id] = {};
-    guildConfigs[msg.guild.id].autorole = role.id;
-    saveConfigs();
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Autorole Set').setDescription(`New users will get ${role.name}.`).setColor(0x1abc9c)] });
-  },
-  eval: async (msg, args) => {
-    if (msg.author.id !== process.env.BOT_OWNER_ID) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Owner only.').setColor(0xe74c3c)] });
-    try {
-      const code = args.join(' ');
-      let evaled = eval(code);
-      if (typeof evaled !== 'string') evaled = require('util').inspect(evaled);
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Eval Result').setDescription('```js\n' + evaled + '\n```').setColor(0x7289da)] });
-    } catch (e) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Eval Error').setDescription('```js\n' + e + '\n```').setColor(0xe74c3c)] });
-    }
-  },
-  reload: async (msg, args) => {
-    if (msg.author.id !== process.env.BOT_OWNER_ID) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Owner only.').setColor(0xe74c3c)] });
-    // In a real bot, reload command modules dynamically
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Reload').setDescription('Command handlers reloaded (placeholder).').setColor(0x7289da)] });
-  },
-  shutdown: async (msg, args) => {
-    if (msg.author.id !== process.env.BOT_OWNER_ID) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Owner only.').setColor(0xe74c3c)] });
-    await msg.reply({ embeds: [new EmbedBuilder().setTitle('Shutdown').setDescription('Bot is shutting down...').setColor(0xe74c3c)] });
-    process.exit(0);
-  },
-  logs: async (msg, args) => {
-    if (msg.author.id !== process.env.BOT_OWNER_ID) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Owner only.').setColor(0xe74c3c)] });
-    // Placeholder: send latest logs as file or DM
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Logs').setDescription('Log sending not implemented.').setColor(0x7289da)] });
-  },
-  help: async (msg, args) => {
-    const helpText = `**Available Commands:**\n\n` +
-      Object.keys(prefixCommands).map(cmd => `;${cmd}`).join(', ') +
-      `\n\nUse / for slash command versions where available.`;
-    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Help').setDescription(helpText).setColor(0x7289da)] });
-  },
-  // --- Security features (scaffolded) ---
-  // To implement: blacklist/whitelist, cooldowns, user restrictions, bot self-protection
-};
-
-client.on('messageCreate', async msg => {
-  try {
-    if (!msg.guild || msg.author.bot) return;
-    const prefix = (guildConfigs[msg.guild.id]?.prefixes || prefixes).find(p => msg.content.startsWith(p));
-    if (!prefix) return;
-    const args = msg.content.slice(prefix.length).trim().split(/ +/);
-    const cmd = args.shift().toLowerCase();
-    if (cmd === 'setup') return; // handled elsewhere
-    if (!isAdmin(msg.member) || isDisabled(cmd, msg.guild.id)) return;
-    if (protectBot(msg.member)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('You cannot use this command on the bot.').setColor(0xe74c3c)] });
-    if (isBlacklisted(msg.guild.id, msg.author.id, cmd)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted').setDescription('You are blacklisted from this command.').setColor(0xe74c3c)] });
-    if (isUserRestricted(msg.guild.id, msg.author.id, cmd)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Restricted').setDescription('You are restricted from this command.').setColor(0xe74c3c)] });
-    const cooldown = checkCooldown(msg.author.id, cmd, 3000);
-    if (cooldown) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Cooldown').setDescription(`Wait ${Math.ceil(cooldown/1000)}s before using this command again.`).setColor(0xf1c40f)] });
-    if (prefixCommands[cmd]) {
-      try {
-        await prefixCommands[cmd](msg, args);
-        logEvent(msg.guild, 'Command Used', `${msg.author.tag} used \`${cmd}\` in ${msg.channel}`);
-      } catch (e) {
-        console.error(`Prefix command error (${cmd}):`, e);
-        await msg.reply({ content: `Error: ${e.message}` });
-      }
-      return;
-    }
-  } catch (e) {
-    console.error('messageCreate handler error:', e);
+    console.log('Slash commands registered successfully.');
+  } catch (err) {
+    console.error('Error registering slash commands:', err);
   }
 });
 
-// SLASH COMMANDS
-// Modular slash command registry
-const slashCommandHandlers = {
-  setup: async (inter) => {
-    // Only allow server owner
-    if (inter.guild.ownerId !== inter.user.id) {
-      return inter.reply({ content: 'Only the server owner can run /setup.', ephemeral: true });
+client.on('messageCreate', async (msg) => {
+  if (msg.author.bot) return;
+  
+  // Get custom prefix for this guild
+  let guildPrefixes = prefixes;
+  try {
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('custom_prefix')
+      .eq('guild_id', msg.guild.id)
+      .single();
+    
+    if (!error && data?.custom_prefix) {
+      guildPrefixes = [data.custom_prefix];
     }
-    // Prompt for admin role, extra roles, and disabled commands
-    const adminRole = inter.options.getRole('adminrole');
-    const extras = inter.options.getString('extras')?.split(',').map(r => r.trim()).filter(Boolean) || [];
-    const disabled = inter.options.getString('disabled')?.split(',').map(c => c.trim()).filter(Boolean) || [];
-    const config = { admin_role: adminRole.id, extra_roles: extras, disabled_commands: disabled };
-    await setGuildConfig(inter.guild.id, config);
-    return inter.reply({ content: `✅ Config Saved\nAdmin: <@&${adminRole.id}>\nExtras: ${extras.map(r => `<@&${r}>`).join(', ') || 'None'}\nDisabled: ${disabled.join(', ') || 'None'}`, ephemeral: true });
-  },
-  ls: async (inter) => {
-    const names = inter.guild.channels.cache.filter(c => c.isTextBased()).map(c => c.name).join(', ');
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Channels').setDescription(`📂 ${names || 'None'}`)] });
-  },
-  ps: async (inter) => {
-    const online = inter.guild.members.cache.filter(m => m.presence?.status === 'online').map(m => m.user.tag).join(', ');
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Online Members').setDescription(`👥 ${online || 'None'}`)] });
-  },
-  whois: async (inter) => {
-    const member = inter.options.getMember('member') || inter.member;
-    return inter.reply({ embeds: [new EmbedBuilder()
-      .setTitle('User Info')
-      .addFields(
-        { name: 'Username', value: member.user.tag, inline: true },
-        { name: 'ID', value: member.id, inline: true },
-        { name: 'Joined', value: `<t:${Math.floor(member.joinedTimestamp/1000)}:R>`, inline: true }
-      )
-    ] });
-  },
-  kill: async (inter) => {
-    const target = inter.options.getMember('member');
-    const reason = inter.options.getString('reason') || 'No reason';
-    await target.ban({ reason });
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Ban Executed').setDescription(`${target.user.tag} banned
-Reason: ${reason}`)] });
-  },
-  rm: async (inter) => {
-    const target = inter.options.getMember('member');
-    const reason = inter.options.getString('reason') || 'No reason';
-    await target.kick(reason);
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Kick Executed').setDescription(`${target.user.tag} kicked
-Reason: ${reason}`)] });
-  },
-  purge: async (inter) => {
-    const limit = inter.options.getInteger('limit');
-    const deleted = await inter.channel.bulkDelete(limit, true);
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Purge').setDescription(`${deleted.size} messages deleted`)] });
-  },
-  mkdir: async (inter) => {
-    const name = inter.options.getString('name');
-    const role = await inter.guild.roles.create({ name });
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Role Created').setDescription(`Role: ${role.name}`)] });
-  },
-  rmdir: async (inter) => {
-    const role = inter.options.getRole('role');
-    await role.delete();
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Role Deleted').setDescription(role.name)] });
-  },
-  echo: async (inter) => {
-    const text = inter.options.getString('message');
-    return inter.reply({ embeds: [new EmbedBuilder().setTitle('Echo').setDescription(text)] });
-  },
-  config: async (inter) => {
-    const action = inter.options.getString('action');
-    if (action === 'view') {
-      const cfg = guildConfigs[inter.guild.id] || {};
-      return inter.reply({ embeds: [new EmbedBuilder().setTitle('Guild Config').setDescription('```json\n' + JSON.stringify(cfg, null, 2) + '\n```').setColor(0x95a5a6)] });
-    } else if (action === 'edit') {
-      const key = inter.options.getString('key');
-      const value = inter.options.getString('value');
-      if (!key || !value) return inter.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Key and value are required.').setColor(0xe74c3c)] });
-      guildConfigs[inter.guild.id] = { ...guildConfigs[inter.guild.id], [key]: value };
-      saveConfigs();
-      return inter.reply({ embeds: [new EmbedBuilder().setTitle('Config Updated').setDescription(`${key} set to ${value}`).setColor(0x2ecc71)] });
+  } catch (e) {
+    // If error, fall back to default prefixes
+    console.error('Error fetching custom prefix:', e);
+  }
+  
+  const prefix = guildPrefixes.find(p => msg.content.startsWith(p));
+  if (!prefix) return;
+  
+  const args = msg.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
+  
+  const commandHandler = cogManager.getPrefixCommand(command);
+  if (!commandHandler) return;
+  
+  try {
+    // Check if command is enabled for this guild
+    const isEnabled = await isCommandEnabled(msg.guild.id, command, msg.member);
+    if (!isEnabled) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Command Disabled').setDescription('This command is disabled in this server.').setColor(0xe74c3c)] });
+    }
+    
+    await commandHandler(msg, args);
+  } catch (e) {
+    console.error('Command error:', e.message || JSON.stringify(e));
+    await msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('An error occurred while processing the command.').setColor(0xe74c3c)] });
+    sendErrorToLogChannel(msg.guild, 'command', e.message || JSON.stringify(e));
+  }
+});
+
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
+  
+  try {
+    const { commandName } = interaction;
+    
+    // Check if command is enabled for this guild
+    const isEnabled = await isCommandEnabled(interaction.guild.id, commandName, interaction.member);
+    if (!isEnabled) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Command Disabled').setDescription('This command is disabled in this server.').setColor(0xe74c3c)], ephemeral: true });
+    }
+    
+    const handler = cogManager.getSlashHandler(commandName);
+    if (!handler) {
+      return interaction.reply({ content: 'Command not implemented.', ephemeral: true });
+    }
+    
+    await handler(interaction);
+  } catch (e) {
+    console.error('Interaction error:', e.message || JSON.stringify(e));
+    await interaction.reply({ content: 'An error occurred while processing the command.', ephemeral: true });
+    sendErrorToLogChannel(interaction.guild, 'interaction', e.message || JSON.stringify(e));
+  }
+});
+
+// Handle button interactions
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isButton()) return;
+  try {
+    const buttonId = interaction.customId;
+    let handler = cogManager.getButtonHandler(buttonId);
+    // Support dynamic ticket button IDs
+    if (!handler) {
+      if (buttonId.startsWith('ticket_close_')) handler = cogManager.getButtonHandler('ticket_close');
+      else if (buttonId.startsWith('ticket_claim_')) handler = cogManager.getButtonHandler('ticket_claim');
+      else if (buttonId.startsWith('ticket_delete_')) handler = cogManager.getButtonHandler('ticket_delete');
+      else if (buttonId.startsWith('ticket_reopen_')) handler = cogManager.getButtonHandler('ticket_reopen');
+    }
+    if (handler) {
+      await handler(interaction);
     } else {
-      return inter.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('/config view | /config edit <key> <value>').setColor(0x95a5a6)] });
-    }
-  },
-  logchannel: async (inter) => {
-    try {
-      const channel = inter.options.getChannel('channel');
-      if (!channel) return await inter.reply({ content: 'Please specify a channel.', ephemeral: true });
-      guildConfigs[inter.guild.id] = guildConfigs[inter.guild.id] || {};
-      guildConfigs[inter.guild.id].logChannel = channel.id;
-      saveConfigs();
-      await inter.reply({ content: `Log channel set to <#${channel.id}>.`, ephemeral: true });
-    } catch (e) {
-      console.error('Slash command error (logchannel):', e);
-      if (!inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
-    }
-  },
-  prefix: async (inter) => {
-    try {
-      const symbol = inter.options.getString('symbol');
-      if (!symbol) return await inter.reply({ content: 'Please provide a prefix symbol.', ephemeral: true });
-      guildConfigs[inter.guild.id] = guildConfigs[inter.guild.id] || {};
-      guildConfigs[inter.guild.id].prefixes = [symbol];
-      saveConfigs();
-      await inter.reply({ content: `Prefix set to \`${symbol}\``, ephemeral: true });
-    } catch (e) {
-      console.error('Slash command error (prefix):', e);
-      if (!inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
-    }
-  },
-  'reset-config': async (inter) => {
-    try {
-      guildConfigs[inter.guild.id] = {};
-      saveConfigs();
-      await inter.reply({ content: 'All settings reset to default.', ephemeral: true });
-    } catch (e) {
-      console.error('Slash command error (reset-config):', e);
-      if (!inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
-    }
-  },
-  say: async (inter) => {
-    try {
-      const text = inter.options.getString('message');
-      if (!text) return await inter.reply({ content: 'Please provide a message.', ephemeral: true });
-      await inter.reply({ content: text });
-    } catch (e) {
-      console.error('Slash command error (say):', e);
-      if (!inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
-    }
-  },
-  help: async (inter) => {
-    const helpText = `**Available Commands:**\n\n` +
-      Object.keys(prefixCommands).map(cmd => `;${cmd}`).join(', ') +
-      `\n\nUse / for slash command versions where available.`;
-    await inter.reply({ embeds: [new EmbedBuilder().setTitle('Help').setDescription(helpText).setColor(0x7289da)], ephemeral: true });
-  },
-};
-
-client.on('interactionCreate', async inter => {
-  try {
-    if (!inter.isCommand()) return;
-    const cmd = inter.commandName;
-    if (!isAdmin(inter.member) || isDisabled(cmd, inter.guild.id))
-      return inter.reply({ content: '🚫 Not authorized or command disabled', ephemeral: true });
-    if (protectBot(inter.member)) return inter.reply({ content: 'You cannot use this command on the bot.', ephemeral: true });
-    if (isBlacklisted(inter.guild.id, inter.user.id, cmd)) return inter.reply({ content: 'You are blacklisted from this command.', ephemeral: true });
-    if (isUserRestricted(inter.guild.id, inter.user.id, cmd)) return inter.reply({ content: 'You are restricted from this command.', ephemeral: true });
-    const cooldown = checkCooldown(inter.user.id, cmd, 3000);
-    if (cooldown) return inter.reply({ content: `Wait ${Math.ceil(cooldown/1000)}s before using this command again.`, ephemeral: true });
-    if (slashCommandHandlers[cmd]) {
-      try {
-        await slashCommandHandlers[cmd](inter);
-        logEvent(inter.guild, 'Slash Command Used', `${inter.user.tag} used /${cmd} in <#${inter.channel.id}>`);
-      } catch (e) {
-        console.error(`Slash command error (${cmd}):`, e);
-        if (!inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
-      }
-      return;
+      console.log(`No handler found for button: ${buttonId}`);
     }
   } catch (e) {
-    console.error('interactionCreate handler error:', e);
-    if (inter && !inter.replied) await inter.reply({ content: `Error: ${e.message}`, ephemeral: true });
+    console.error('Button interaction error:', e.message || JSON.stringify(e));
+    await interaction.reply({ content: 'An error occurred while processing the button.', ephemeral: true });
+    sendErrorToLogChannel(interaction.guild, 'button-interaction', e.message || JSON.stringify(e));
   }
 });
 
-client.login(token);
+// Handle modal submissions
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isModalSubmit()) return;
+  
+  try {
+    const modalId = interaction.customId;
+    const handler = cogManager.getModalHandler(modalId);
+    
+    if (handler) {
+      await handler(interaction);
+    } else {
+      console.log(`No handler found for modal: ${modalId}`);
+    }
+  } catch (e) {
+    console.error('Modal interaction error:', e.message || JSON.stringify(e));
+    await interaction.reply({ content: 'An error occurred while processing the form.', ephemeral: true });
+    sendErrorToLogChannel(interaction.guild, 'modal-interaction', e.message || JSON.stringify(e));
+  }
+});
 
-// --- Event listeners for logging moderation events ---
-client.on('guildBanAdd', ban => {
-  logEvent(ban.guild, 'Ban', `${ban.user.tag} was banned.`);
+// Welcome/Goodbye/Autorole on member join
+client.on('guildMemberAdd', async (member) => {
+  try {
+    console.log(`[DEBUG] guildMemberAdd fired for ${member.user.tag} (${member.id}) in ${member.guild.name}`);
+    // Autorole
+    const roleId = await getAutorole(member.guild.id);
+    if (roleId) {
+      console.log(`[AUTOROLE] Attempting to assign role ${roleId} to ${member.user.tag} in ${member.guild.name}`);
+      
+      let role = member.guild.roles.cache.get(roleId);
+      if (!role) {
+        try { 
+          role = await member.guild.roles.fetch(roleId); 
+        } catch (e) { 
+          console.error(`[AUTOROLE] Failed to fetch role ${roleId}:`, e.message || JSON.stringify(e));
+          logError('autorole-fetch', e.message || JSON.stringify(e));
+        }
+      }
+      if (!role) {
+        const msg = `[AUTOROLE] Role ${roleId} not found in ${member.guild.name}. Autorole assignment skipped.`;
+        console.error(msg);
+        logError('autorole-missing', msg);
+        const owner = await member.guild.fetchOwner().catch(() => null);
+        if (owner) owner.send(`Autorole failed: The configured autorole (ID: ${roleId}) does not exist in your server **${member.guild.name}**. Please update your autorole settings.`).catch(() => {});
+        return;
+      }
+      // Check if bot has permission to assign this role
+      if (!member.guild.members.me.permissions.has('ManageRoles')) {
+        const msg = `[AUTOROLE] Bot doesn't have ManageRoles permission in ${member.guild.name}`;
+        console.error(msg);
+        logError('autorole-permission', msg);
+        return;
+      }
+      // Check if the role is manageable (not higher than bot's highest role)
+      if (role.position >= member.guild.members.me.roles.highest.position) {
+        const msg = `[AUTOROLE] Role ${role.name} is higher than bot's highest role in ${member.guild.name}`;
+        console.error(msg);
+        logError('autorole-unmanageable', msg);
+        return;
+      }
+      try {
+        await member.roles.add(role, 'Autorole assignment');
+        console.log(`[AUTOROLE] Successfully assigned role ${role.name} to ${member.user.tag} in ${member.guild.name}`);
+      } catch (e) { 
+        const msg = `[AUTOROLE] Failed to assign role ${role.name} to ${member.user.tag}: ${e.message || JSON.stringify(e)}`;
+        console.error(msg);
+        logError('autorole-add', msg); 
+      }
+    }
+    
+    // Welcome message
+    const { data: welcome } = await supabase.from('welcome_configs').select('*').eq('guild_id', member.guild.id).single();
+    console.log('[DEBUG] Welcome config:', welcome);
+    if (welcome && welcome.enabled && welcome.channel_id) {
+      const channel = member.guild.channels.cache.get(welcome.channel_id);
+      console.log('[DEBUG] Welcome channel:', channel ? `${channel.name} (${channel.id})` : 'Not found');
+      if (!channel || channel.type !== 0) { // 0 = GUILD_TEXT
+        const msg = `[WELCOME] Configured channel (${welcome.channel_id}) is missing or not a text channel in ${member.guild.name}.`;
+        console.error(msg);
+        logError('welcome-channel-missing', msg);
+        return;
+      }
+      if (!channel.permissionsFor(member.guild.members.me).has('SendMessages')) {
+        const msg = `[WELCOME] Bot lacks SendMessages permission in channel ${channel.name} (${channel.id}) in ${member.guild.name}.`;
+        console.error(msg);
+        logError('welcome-permission', msg);
+        return;
+      }
+        let msg = welcome.message || 'Welcome, {user}, to {server}!';
+      msg = msg.replace('{user}', `<@${member.id}>`).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
+      try {
+        if (welcome.embed) {
+          const embed = new EmbedBuilder().setDescription(msg).setColor(welcome.color || 0x1abc9c);
+          
+          // Validate and set image if provided
+          if (welcome.image && welcome.image.trim()) {
+            const imageUrl = welcome.image.trim();
+            // Check if it's a valid URL
+            try {
+              const url = new URL(imageUrl);
+              // Check if it's an image or GIF URL
+              const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+              const hasValidExtension = validExtensions.some(ext => 
+                url.pathname.toLowerCase().endsWith(ext)
+              );
+              
+              if (hasValidExtension || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net')) {
+                embed.setImage(imageUrl);
+                console.log(`[WELCOME] Set image: ${imageUrl}`);
+              } else {
+                console.warn(`[WELCOME] Invalid image URL format: ${imageUrl}. Must be a direct link ending in .jpg, .png, .gif, etc.`);
+              }
+            } catch (urlError) {
+              console.warn(`[WELCOME] Invalid image URL: ${imageUrl}`, urlError.message);
+            }
+          }
+          
+          await channel.send({ embeds: [embed] });
+        } else {
+          await channel.send(msg);
+        }
+      } catch (e) {
+        const errMsg = `[WELCOME] Failed to send welcome message in ${channel.name} (${channel.id}): ${e.message || JSON.stringify(e)}`;
+        console.error(errMsg);
+        logError('welcome-send', errMsg);
+      }
+    }
+  } catch (e) {
+    console.error(`[MEMBER-JOIN] Error processing member join for ${member.user.tag} in ${member.guild.name}:`, e.message || JSON.stringify(e));
+    logError('member-join', e.message || JSON.stringify(e));
+  }
 });
-client.on('guildMemberRemove', member => {
-  logEvent(member.guild, 'Member Left', `${member.user.tag} left or was kicked.`);
+
+// Goodbye message on member leave
+client.on('guildMemberRemove', async (member) => {
+  try {
+    console.log(`[DEBUG] guildMemberRemove fired for ${member.user.tag} (${member.id}) in ${member.guild.name}`);
+    const { data: goodbye } = await supabase.from('goodbye_configs').select('*').eq('guild_id', member.guild.id).single();
+    console.log('[DEBUG] Goodbye config:', goodbye);
+    if (goodbye && goodbye.enabled && goodbye.channel_id) {
+      const channel = member.guild.channels.cache.get(goodbye.channel_id);
+      console.log('[DEBUG] Goodbye channel:', channel ? `${channel.name} (${channel.id})` : 'Not found');
+      if (!channel || channel.type !== 0) { // 0 = GUILD_TEXT
+        const msg = `[GOODBYE] Configured channel (${goodbye.channel_id}) is missing or not a text channel in ${member.guild.name}.`;
+        console.error(msg);
+        logError('goodbye-channel-missing', msg);
+        return;
+      }
+      if (!channel.permissionsFor(member.guild.members.me).has('SendMessages')) {
+        const msg = `[GOODBYE] Bot lacks SendMessages permission in channel ${channel.name} (${channel.id}) in ${member.guild.name}.`;
+        console.error(msg);
+        logError('goodbye-permission', msg);
+        return;
+      }
+        let msg = goodbye.message || 'Goodbye, {user}! We\'ll miss you!';
+      msg = msg.replace('{user}', member.user.tag).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
+      try {
+        if (goodbye.embed) {
+          const embed = new EmbedBuilder().setDescription(msg).setColor(goodbye.color || 0xe74c3c);
+          
+          // Validate and set image if provided
+          if (goodbye.image && goodbye.image.trim()) {
+            const imageUrl = goodbye.image.trim();
+            // Check if it's a valid URL
+            try {
+              const url = new URL(imageUrl);
+              // Check if it's an image or GIF URL
+              const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+              const hasValidExtension = validExtensions.some(ext => 
+                url.pathname.toLowerCase().endsWith(ext)
+              );
+              
+              if (hasValidExtension || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net')) {
+                embed.setImage(imageUrl);
+                console.log(`[GOODBYE] Set image: ${imageUrl}`);
+              } else {
+                console.warn(`[GOODBYE] Invalid image URL format: ${imageUrl}. Must be a direct link ending in .jpg, .png, .gif, etc.`);
+              }
+            } catch (urlError) {
+              console.warn(`[GOODBYE] Invalid image URL: ${imageUrl}`, urlError.message);
+            }
+          }
+          
+          await channel.send({ embeds: [embed] });
+        } else {
+          await channel.send(msg);
+        }
+      } catch (e) {
+        const errMsg = `[GOODBYE] Failed to send goodbye message in ${channel.name} (${channel.id}): ${e.message || JSON.stringify(e)}`;
+        console.error(errMsg);
+        logError('goodbye-send', errMsg);
+      }
+    }
+  } catch (e) {
+    console.error(`[MEMBER-LEAVE] Error processing member leave for ${member.user.tag} in ${member.guild.name}:`, e.message || JSON.stringify(e));
+    logError('member-leave', e.message || JSON.stringify(e));
+  }
 });
-client.on('messageDelete', msg => {
-  logEvent(msg.guild, 'Message Deleted', `A message by ${msg.author?.tag || 'unknown'} was deleted in <#${msg.channel.id}>.`);
-});
-client.on('messageUpdate', (oldMsg, newMsg) => {
-  logEvent(newMsg.guild, 'Message Edited', `A message by ${newMsg.author?.tag || 'unknown'} was edited in <#${newMsg.channel.id}>.`);
-});
-// ...add more as needed...
+
+// Login
+client.login(token); 

@@ -1,12 +1,22 @@
 {
   "name": "asylum",
   "version": "1.0.0",
-  "description": "",
+  "description": "A highly configurable, multi-server Discord moderation bot with Linux-style commands and modular cog system",
   "main": "index.js",
   "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "setup": "node scripts/setup.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "discord",
+    "bot",
+    "moderation",
+    "discord.js",
+    "supabase",
+    "postgresql"
+  ],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
@@ -17,5 +27,11 @@
     "discord.js": "^14.20.0",
     "dotenv": "^16.5.0",
     "ms": "^2.1.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
   }
 }
