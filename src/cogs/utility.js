@@ -20,34 +20,28 @@ async function detectLanguage(text) {
   return 'en'; // fallback
 }
 
-// Translation function using MyMemory API (reliable and free)
+// Translation function using Google Translate (unofficial endpoint, reliable)
 async function translateText(text, targetLang = 'en') {
   try {
-    // Detect source language
-    let sourceLang = await detectLanguage(text);
-    if (!sourceLang) sourceLang = 'en';
-    if (sourceLang === targetLang) {
+    const response = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(text)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    const data = await response.json();
+    // data[2] is the detected source language
+    const detectedLang = data[2] || 'unknown';
+    const translated = data[0]?.map(part => part[0]).join('') || '';
+    if (detectedLang === targetLang) {
       return {
         translated: text,
-        detectedLang: sourceLang,
+        detectedLang,
         confidence: 1,
         sameLang: true
       };
     }
-    const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    const data = await response.json();
-    if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
-      return {
-        translated: data.responseData.translatedText,
-        detectedLang: sourceLang,
-        confidence: 0.8
-      };
-    } else {
-      throw new Error(`API Error: ${data.responseStatus} - ${data.responseDetails || 'Unknown error'}`);
-    }
+    return {
+      translated,
+      detectedLang,
+      confidence: 0.9
+    };
   } catch (error) {
     console.error('Translation error:', error);
     return null;
