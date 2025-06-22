@@ -1,5 +1,9 @@
 // index.js
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
+const express = require('express');
+const app = express();
+app.get('/', (req, res) => res.send('OK'));
+app.listen(process.env.PORT || 3000);
 
 require('dotenv').config();
 const fs = require('fs');
