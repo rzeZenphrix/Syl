@@ -310,19 +310,36 @@ const rest = new REST({ version: '10' }).setToken(token);
 });
 
 client.on('messageCreate', async (msg) => {
-  if (msg.author.bot) return;
+  if (msg.author.bot || !msg.guild) return;
+  // Increment message count in user_stats
+  const { data, error } = await supabase.from('user_stats').select('message_count').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching user_stats:', error);
+    return;
+  }
+  if (!data) {
+    await supabase.from('user_stats').insert({
+      guild_id: msg.guild.id,
+      user_id: msg.author.id,
+      message_count: 1
+    });
+  } else {
+    await supabase.from('user_stats').update({
+      message_count: (data.message_count || 0) + 1
+    }).eq('guild_id', msg.guild.id).eq('user_id', msg.author.id);
+  }
   
   // Get custom prefix for this guild
   let guildPrefixes = prefixes;
   try {
-    const { data, error } = await supabase
+    const { data: config, error: configError } = await supabase
       .from('guild_configs')
       .select('custom_prefix')
       .eq('guild_id', msg.guild.id)
       .single();
     
-    if (!error && data?.custom_prefix) {
-      guildPrefixes = [data.custom_prefix];
+    if (!error && config?.custom_prefix) {
+      guildPrefixes = [config.custom_prefix];
     }
   } catch (e) {
     // If error, fall back to default prefixes
