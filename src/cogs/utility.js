@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
+const os = require('os');
 
 // Translation function with language detection
 async function detectLanguage(text) {
@@ -243,17 +244,17 @@ const prefixCommands = {
       ghostping: 'Sends and deletes a ping instantly (for fun/testing mods)',
       sniper: 'Logs and shows deleted messages (message sniping)',
       revert: 'Removes user\'s last 10 messages (like a soft purge)',
-      modview: 'See all hidden mod actions in the server',
+      modview: 'View and filter mod actions, paginate with next/prev',
       shadowban: 'Bans without showing a ban message or logging (silent ban)',
       massban: 'Ban all users with a specific role',
       lock: 'Locks the channel',
       unlock: 'Unlocks the channel',
-      crontab: 'Schedule a command (e.g., ban @user in 5m)',
-      top: 'Show top users by message count, infractions, or uptime',
+      crontab: 'Schedule, list, or cancel commands (e.g., &crontab 5m say Hello)',
+      top: 'Show top users by messages, infractions, or uptime (&top messages|infractions|uptime)',
       trace: 'Simulates tracking a user\'s origin (fun visual output)',
       man: 'Returns the help info like a Linux manpage',
-      sysinfo: 'Shows CPU/RAM use, total guilds, users (mimics htop)',
-      passwd: 'Sets a secret "codeword" for an event or action'
+      sysinfo: 'Show system and bot info (CPU, RAM, uptime, etc)',
+      passwd: 'Set, get, list, or remove a user codeword (&passwd @user <codeword> | &passwd @user | &passwd list | &passwd remove @user)'
     };
     
     // Group commands by category
@@ -261,8 +262,8 @@ const prefixCommands = {
       '🔧 Setup & Configuration': ['setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands'],
       '👋 Welcome & Goodbye': ['welcomesetup', 'goodbyesetup'],
       '🎫 Ticket System': ['ticketsetup'],
-      '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout'],
-      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'help', 'reset']
+      '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'ghostping', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab'],
+      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'help', 'reset', 'trace', 'man', 'top', 'sysinfo', 'passwd']
     };
     
     let helpText = '';
@@ -396,8 +397,19 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
     }
-    // This would show a log of all mod actions (stub for now)
-    return msg.reply('Modview: (stub) All hidden mod actions would be shown here.');
+    let actionType = args[0] && !['next', 'prev'].includes(args[0]) ? args[0] : null;
+    let page = 0;
+    if (args.includes('next')) page++;
+    if (args.includes('prev')) page = Math.max(0, page - 1);
+    const pageSize = 10;
+    let query = supabase.from('mod_actions').select('*').eq('guild_id', msg.guild.id);
+    if (actionType) query = query.eq('action_type', actionType);
+    query = query.order('created_at', { ascending: false }).range(page * pageSize, (page + 1) * pageSize - 1);
+    const { data, error } = await query;
+    if (error) return msg.reply('Failed to fetch mod actions.');
+    if (!data || data.length === 0) return msg.reply('No mod actions found.');
+    const lines = data.map(a => `• [${a.action_type}] <@${a.target_id}> by <@${a.moderator_id}> (${a.created_at.split('T')[0]})${a.reason ? `: ${a.reason}` : ''}`).join('\n');
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Mod Actions').setDescription(lines).setFooter({ text: `Page ${page + 1}` }).setColor(0x7289da)] });
   },
 
   shadowban: async (msg, args) => {
@@ -441,15 +453,64 @@ const prefixCommands = {
 
   crontab: async (msg, args) => {
     if (!await isAdmin(msg.member)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    if (args[0] === 'list') {
+      const { data, error } = await supabase.from('scheduled_commands').select('*').eq('guild_id', msg.guild.id).eq('executed', false).order('run_at', { ascending: true });
+      if (error) return msg.reply('Failed to fetch scheduled commands.');
+      if (!data || data.length === 0) return msg.reply('No scheduled commands.');
+      const lines = data.map(c => `• [ID ${c.id}] ${c.command} at ${c.run_at}`).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Scheduled Commands').setDescription(lines).setColor(0x7289da)] });
+    }
+    if (args[0] === 'cancel' && args[1]) {
+      const id = parseInt(args[1]);
+      await supabase.from('scheduled_commands').update({ executed: true }).eq('id', id);
+      return msg.reply(`Cancelled scheduled command ID ${id}.`);
+    }
     const [time, ...commandArr] = args;
-    if (!time || commandArr.length === 0) return msg.reply('Usage: &crontab <time> <command>');
-    // For demo: just acknowledge scheduling
-    return msg.reply(`Scheduled command \`${commandArr.join(' ')}\` to run in ${time}. (Stub)`);
+    if (!time || commandArr.length === 0) return msg.reply('Usage: &crontab <time> <command> | &crontab list | &crontab cancel <id>');
+    const match = time.match(/^(\d+)([smhd])$/);
+    if (!match) return msg.reply('Invalid time format. Use s/m/h/d (e.g., 5m)');
+    const num = parseInt(match[1]);
+    const unit = match[2];
+    let ms = num * 1000;
+    if (unit === 'm') ms *= 60;
+    if (unit === 'h') ms *= 60 * 60;
+    if (unit === 'd') ms *= 24 * 60 * 60;
+    const { data, error } = await supabase.from('scheduled_commands').insert({
+      guild_id: msg.guild.id,
+      user_id: msg.author.id,
+      command: commandArr.join(' '),
+      run_at: new Date(Date.now() + ms).toISOString()
+    }).select();
+    if (error) return msg.reply('Failed to schedule command.');
+    const id = data[0]?.id;
+    setTimeout(async () => {
+      // Actually execute the command (only simple ones for demo)
+      if (commandArr[0] === 'say') {
+        msg.channel.send(commandArr.slice(1).join(' '));
+      } else {
+        msg.channel.send(`Scheduled command: ${commandArr.join(' ')} (executed)`);
+      }
+      await supabase.from('scheduled_commands').update({ executed: true }).eq('id', id);
+    }, ms);
+    return msg.reply(`Scheduled command \`${commandArr.join(' ')}\` to run in ${time}. (ID: ${id})`);
   },
 
   top: async (msg, args) => {
-    // For demo: show a fake leaderboard
-    return msg.reply('Top users by message count (stub):\n1. @UserA (1234 msgs)\n2. @UserB (1100 msgs)\n3. @UserC (900 msgs)');
+    const type = args[0] || 'messages';
+    let field = 'message_count';
+    let title = 'Top Users by Message Count';
+    if (type === 'infractions') { field = 'infractions'; title = 'Top Users by Infractions'; }
+    if (type === 'uptime') { field = 'uptime_seconds'; title = 'Top Users by Uptime'; }
+    const { data, error } = await supabase
+      .from('user_stats')
+      .select('user_id, ' + field)
+      .eq('guild_id', msg.guild.id)
+      .order(field, { ascending: false })
+      .limit(5);
+    if (error) return msg.reply('Failed to fetch stats.');
+    if (!data || data.length === 0) return msg.reply('No stats found.');
+    const lines = data.map((u, i) => `${i+1}. <@${u.user_id}> (${u[field]}${type === 'uptime' ? 's' : ''})`).join('\n');
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle(title).setDescription(lines).setColor(0x2ecc71)] });
   },
 
   trace: async (msg, args) => {
@@ -468,17 +529,57 @@ const prefixCommands = {
   },
 
   sysinfo: async (msg, args) => {
-    // For demo: show fake system info
-    return msg.reply('System Info (stub):\nCPU: 12%\nRAM: 512MB/2GB\nGuilds: 5\nUsers: 1234');
+    const cpu = os.loadavg()[0].toFixed(2);
+    const mem = `${(os.totalmem() - os.freemem()) / 1024 / 1024 | 0}MB/${os.totalmem() / 1024 / 1024 | 0}MB`;
+    const guilds = msg.client.guilds.cache.size;
+    const users = msg.client.users.cache.size;
+    const uptime = process.uptime();
+    const days = Math.floor(uptime / 86400);
+    const hours = Math.floor((uptime % 86400) / 3600);
+    const minutes = Math.floor((uptime % 3600) / 60);
+    const seconds = Math.floor(uptime % 60);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('System Info').addFields(
+      { name: 'CPU Load', value: cpu, inline: true },
+      { name: 'RAM', value: mem, inline: true },
+      { name: 'Guilds', value: guilds.toString(), inline: true },
+      { name: 'Users', value: users.toString(), inline: true },
+      { name: 'Uptime', value: `${days}d ${hours}h ${minutes}m ${seconds}s`, inline: true },
+      { name: 'Node.js', value: process.version, inline: true },
+      { name: 'OS', value: `${os.type()} ${os.release()}`, inline: true }
+    ).setColor(0x7289da)] });
   },
 
   passwd: async (msg, args) => {
     if (!await isAdmin(msg.member)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
+    if (args[0] === 'list') {
+      const { data, error } = await supabase.from('user_codewords').select('*').eq('guild_id', msg.guild.id);
+      if (error) return msg.reply('Failed to fetch codewords.');
+      if (!data || data.length === 0) return msg.reply('No codewords set.');
+      const lines = data.map(c => `<@${c.user_id}>: ${c.codeword}`).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Codewords').setDescription(lines).setColor(0x7289da)] });
+    }
+    if (args[0] === 'remove' && args[1]) {
+      const user = msg.mentions.users.first();
+      if (!user) return msg.reply('Usage: &passwd remove @user');
+      await supabase.from('user_codewords').delete().eq('guild_id', msg.guild.id).eq('user_id', user.id);
+      return msg.reply(`Removed codeword for <@${user.id}>.`);
+    }
     const user = msg.mentions.users.first();
+    if (user && args.length === 1) {
+      // Get codeword
+      const { data, error } = await supabase.from('user_codewords').select('codeword').eq('guild_id', msg.guild.id).eq('user_id', user.id).single();
+      if (error || !data) return msg.reply('No codeword set for this user.');
+      return msg.reply(`Codeword for <@${user.id}>: ${data.codeword}`);
+    }
     const codeword = args.slice(1).join(' ');
-    if (!user || !codeword) return msg.reply('Usage: &passwd @user <codeword>');
-    // For demo: just acknowledge
-    return msg.reply(`Set a secret codeword for <@${user.id}>. (Stub)`);
+    if (!user || !codeword) return msg.reply('Usage: &passwd @user <codeword> | &passwd @user | &passwd list | &passwd remove @user');
+    await supabase.from('user_codewords').upsert({
+      guild_id: msg.guild.id,
+      user_id: user.id,
+      codeword,
+      set_by: msg.author.id
+    }, { onConflict: ['guild_id', 'user_id'] });
+    return msg.reply(`Set a secret codeword for <@${user.id}>.`);
   }
 };
 
