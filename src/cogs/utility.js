@@ -1,65 +1,55 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 
+// Translation function with language detection
+async function detectLanguage(text) {
+  try {
+    const response = await fetch('https://libretranslate.de/detect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: text })
+    });
+    if (!response.ok) throw new Error('Failed to detect language');
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return data[0].language;
+    }
+  } catch (e) {
+    console.error('Language detection error:', e);
+  }
+  return 'en'; // fallback
+}
+
 // Translation function using MyMemory API (reliable and free)
 async function translateText(text, targetLang = 'en') {
   try {
-    // MyMemory API doesn't support 'auto' as source language, so we'll use 'en' as default
-    const sourceLang = 'en'; // Default to English as source
-    
+    // Detect source language
+    let sourceLang = await detectLanguage(text);
+    if (!sourceLang) sourceLang = 'en';
+    if (sourceLang === targetLang) {
+      return {
+        translated: text,
+        detectedLang: sourceLang,
+        confidence: 1,
+        sameLang: true
+      };
+    }
     const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceLang}|${targetLang}`);
-    
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
-    
     const data = await response.json();
-    
     if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
       return {
         translated: data.responseData.translatedText,
-        detectedLang: sourceLang, // Since we're using 'en' as source
-        confidence: 0.8 // MyMemory is generally reliable
+        detectedLang: sourceLang,
+        confidence: 0.8
       };
     } else {
       throw new Error(`API Error: ${data.responseStatus} - ${data.responseDetails || 'Unknown error'}`);
     }
   } catch (error) {
     console.error('Translation error:', error);
-    
-    // If API fails, return a simple mock translation for common phrases
-    if (targetLang === 'es' && text.toLowerCase().includes('hello')) {
-      return {
-        translated: 'Hola',
-        detectedLang: 'en',
-        confidence: 0.5
-      };
-    } else if (targetLang === 'fr' && text.toLowerCase().includes('hello')) {
-      return {
-        translated: 'Bonjour',
-        detectedLang: 'en',
-        confidence: 0.5
-      };
-    } else if (targetLang === 'de' && text.toLowerCase().includes('hello')) {
-      return {
-        translated: 'Hallo',
-        detectedLang: 'en',
-        confidence: 0.5
-      };
-    } else if (targetLang === 'it' && text.toLowerCase().includes('hello')) {
-      return {
-        translated: 'Ciao',
-        detectedLang: 'en',
-        confidence: 0.5
-      };
-    } else if (targetLang === 'pt' && text.toLowerCase().includes('hello')) {
-      return {
-        translated: 'Olá',
-        detectedLang: 'en',
-        confidence: 0.5
-      };
-    }
-    
     return null;
   }
 }
@@ -244,6 +234,10 @@ const prefixCommands = {
         return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. The translation service may be temporarily unavailable.\n\n**Supported languages:** English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Turkish, Greek, Hebrew, Thai, Vietnamese, Indonesian, Malay, Filipino').setColor(0xe74c3c)] });
       }
       
+      if (result.sameLang) {
+        return loadingMsg.edit({ embeds: [new EmbedBuilder().setTitle('No Translation Needed').setDescription('The detected language is the same as the target language.').setColor(0xf1c40f)] });
+      }
+      
       const resultEmbed = new EmbedBuilder()
         .setTitle('🌐 Translation')
         .addFields(
@@ -308,7 +302,8 @@ const prefixCommands = {
       translate: 'Translate text to different languages',
       poll: 'Create a poll with reactions',
       say: 'Make bot say something',
-      help: 'Show this help message'
+      help: 'Show this help message',
+      reset: 'Reset the command prefix to default (; and &)'
     };
     
     // Group commands by category
@@ -317,7 +312,7 @@ const prefixCommands = {
       '👋 Welcome & Goodbye': ['welcomesetup', 'goodbyesetup'],
       '🎫 Ticket System': ['ticketsetup'],
       '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout'],
-      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'translate', 'poll', 'say', 'help']
+      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'translate', 'poll', 'say', 'help', 'reset']
     };
     
     let helpText = '';
@@ -367,6 +362,27 @@ const prefixCommands = {
     const reactions = ['👍', '👎', '🤷'];
     for (const reaction of reactions) {
       await pollMsg.react(reaction);
+    }
+  },
+  
+  reset: async (msg, args) => {
+    if (msg.author.id !== msg.guild.ownerId) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only the server owner can reset the prefix.').setColor(0xe74c3c)] });
+    }
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        custom_prefix: null
+      }, { onConflict: ['guild_id'] });
+      const embed = new EmbedBuilder()
+        .setTitle('Prefix Reset')
+        .setDescription('Command prefix reset to defaults (; and &)')
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Prefix reset error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to reset prefix.').setColor(0xe74c3c)] });
     }
   }
 };
@@ -492,6 +508,10 @@ const slashHandlers = {
       
       if (!result) {
         return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('❌ Translation Failed').setDescription('Unable to translate the text. The translation service may be temporarily unavailable.\n\n**Supported languages:** English, Spanish, French, German, Italian, Portuguese, Russian, Japanese, Korean, Chinese, Arabic, Hindi, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Turkish, Greek, Hebrew, Thai, Vietnamese, Indonesian, Malay, Filipino').setColor(0xe74c3c)] });
+      }
+      
+      if (result.sameLang) {
+        return interaction.editReply({ embeds: [new EmbedBuilder().setTitle('No Translation Needed').setDescription('The detected language is the same as the target language.').setColor(0xf1c40f)] });
       }
       
       const resultEmbed = new EmbedBuilder()

@@ -42,7 +42,8 @@ const AVAILABLE_COMMANDS = {
     roles: 'List all roles',
     avatar: 'Show a user avatar',
     poll: 'Create a poll with reactions',
-    help: 'Show help message'
+    help: 'Show help message',
+    reset: 'Reset the command prefix to default (; and &)',
   },
   
   // Slash commands
@@ -493,7 +494,7 @@ const prefixCommands = {
           .addFields(
             { name: 'Total Disabled', value: `${disabledCommands.length} commands`, inline: true },
             { name: 'Available Commands', value: `${Object.keys(allCommands).length} total`, inline: true },
-            { name: 'Usage', value: ';disable-commands add command1,command2\n;disable-commands remove command1,command2\n;disable-commands list\n;disable-commands clear', inline: false }
+            { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
           )
           .setColor(0x3498db)
           .setTimestamp();
@@ -536,7 +537,8 @@ const prefixCommands = {
               .setTitle('Invalid Commands')
               .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
               .addFields(
-                { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false }
+                { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
+                { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
               )
               .setColor(0xe74c3c);
             return msg.reply({ embeds: [embed] });
@@ -943,7 +945,7 @@ const slashHandlers = {
           .addFields(
             { name: 'Total Disabled', value: `${disabledCommands.length} commands`, inline: true },
             { name: 'Available Commands', value: `${Object.keys(allCommands).length} total`, inline: true },
-            { name: 'Usage', value: 'Use the action dropdown to manage disabled commands', inline: false }
+            { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
           )
           .setColor(0x3498db)
           .setTimestamp();
@@ -980,7 +982,7 @@ const slashHandlers = {
               .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
               .addFields(
                 { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
-                { name: 'Usage', value: 'Use `/disable-commands action:list` to see all available commands', inline: false }
+                { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
               )
               .setColor(0xe74c3c);
             return interaction.reply({ embeds: [embed], ephemeral: true });
