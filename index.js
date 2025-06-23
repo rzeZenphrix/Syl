@@ -54,6 +54,7 @@ const client = new Client({
 
 // Initialize cog manager
 const cogManager = new CogManager(client);
+client.cogManager = cogManager;
 
 // Supabase helper functions
 async function addWarning(guildId, userId, reason, warnedBy) {

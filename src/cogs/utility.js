@@ -435,10 +435,10 @@ const prefixCommands = {
         fakeMsg.member = msg.member;
         fakeMsg.guild = msg.guild;
         fakeMsg.channel = msg.channel;
-        // Use the main command handler from index.js
-        const cogManager = require('../../src/cogManager');
+        // Get the command name
         const commandName = commandArr[0].replace(/^;/, '').replace(/^&/, '').toLowerCase();
-        const handler = cogManager.getPrefixCommand(commandName);
+        // Use the cogManager instance from the client
+        const handler = msg.client.cogManager.getPrefixCommand(commandName);
         if (handler) {
           await handler(fakeMsg, commandArr.slice(1));
         } else {
