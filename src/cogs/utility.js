@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const os = require('os');
 
@@ -254,66 +254,6 @@ const prefixCommands = {
       .setColor(0x3498db);
     
     return msg.reply({ embeds: [embed] });
-  },
-  
-  help: async (msg, args) => {
-    // Group commands by category
-    const categories = {
-      '🔧 Setup & Configuration': ['setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands'],
-      '👋 Welcome & Goodbye': ['welcomesetup', 'goodbyesetup'],
-      '🎫 Ticket System': ['ticketsetup'],
-      '🛡️ Moderation': ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'ghostping', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab'],
-      '🛠️ Utility': ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'help', 'reset', 'trace', 'man', 'top', 'sysinfo', 'passwd']
-    };
-    
-    let helpText = '';
-    for (const [category, commands] of Object.entries(categories)) {
-      helpText += `\n**${category}**\n`;
-      for (const cmd of commands) {
-        if (commandDescriptions[cmd]) {
-          helpText += `• **${cmd}** — ${commandDescriptions[cmd]}\n`;
-        }
-      }
-    }
-    
-    const embed = new EmbedBuilder()
-      .setTitle('🤖 Bot Commands')
-      .setDescription(helpText)
-      .addFields(
-        { name: '📝 Usage', value: 'Use `;` or `&` before commands\nExample: `;ping` or `&help`', inline: false },
-        { name: '⚙️ Configuration', value: 'Use `;setup @adminrole` to configure admin roles\nUse `;config` to view current settings', inline: false },
-        { name: '🚫 Command Management', value: 'Use `;disable-commands` to manage which commands are enabled/disabled', inline: false }
-      )
-      .setColor(0x7289da)
-      .setFooter({ text: 'Slash commands are also available for most features' });
-    
-    return msg.reply({ embeds: [embed] });
-  },
-  
-  poll: async (msg, args) => {
-    if (!await isAdmin(msg.member)) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
-    }
-    
-    const question = args.join(' ');
-    if (!question) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';poll <question>').setColor(0xe74c3c)] });
-    }
-    
-    const embed = new EmbedBuilder()
-      .setTitle('📊 Poll')
-      .setDescription(question)
-      .setColor(0x9b59b6)
-      .setFooter({ text: `Poll by ${msg.author.tag}` })
-      .setTimestamp();
-    
-    const pollMsg = await msg.reply({ embeds: [embed] });
-    
-    // Add reaction options
-    const reactions = ['👍', '👎', '🤷'];
-    for (const reaction of reactions) {
-      await pollMsg.react(reaction);
-    }
   },
   
   reset: async (msg, args) => {
@@ -608,6 +548,37 @@ const prefixCommands = {
 };
 
 // Slash commands
+const PAGE_SIZE = 8;
+
+function getAllCommandsByCategory() {
+  return [
+    { category: '🔧 Setup & Configuration', commands: ['setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands'] },
+    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] },
+    { category: '🎫 Ticket System', commands: ['ticketsetup'] },
+    { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'ghostping', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab'] },
+    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'trace', 'man', 'top', 'sysinfo', 'passwd'] }
+  ];
+}
+
+function getPaginatedCommands(page = 0) {
+  const categories = getAllCommandsByCategory();
+  const allCmds = [];
+  for (const cat of categories) {
+    for (const cmd of cat.commands) {
+      if (commandDescriptions[cmd]) {
+        allCmds.push({
+          name: cmd,
+          desc: commandDescriptions[cmd],
+          category: cat.category
+        });
+      }
+    }
+  }
+  const totalPages = Math.ceil(allCmds.length / PAGE_SIZE);
+  const cmdsOnPage = allCmds.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  return { cmdsOnPage, totalPages, allCmds };
+}
+
 const slashCommands = [
   new SlashCommandBuilder()
     .setName('ping')
@@ -630,6 +601,10 @@ const slashCommands = [
     .setName('poll')
     .setDescription('Create a poll with reactions')
     .addStringOption(opt => opt.setName('question').setDescription('Poll question').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('help')
+    .setDescription('Show all bot commands with descriptions and usage (paginated)')
 ];
 
 // Slash command handlers
@@ -710,11 +685,60 @@ const slashHandlers = {
       await pollMsg.react(reaction);
     }
   },
+
+  help: async (interaction) => {
+    let page = 0;
+    const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const embed = new EmbedBuilder()
+      .setTitle('🤖 Bot Commands')
+      .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setColor(0x7289da);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(true),
+      new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
+    );
+    await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+  }
+};
+
+// Add button handler for pagination
+const buttonHandlers = {
+  help_prev: async (interaction) => {
+    let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10) - 2;
+    if (page < 0) page = 0;
+    const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const embed = new EmbedBuilder()
+      .setTitle('🤖 Bot Commands')
+      .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setColor(0x7289da);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
+    );
+    await interaction.update({ embeds: [embed], components: [row] });
+  },
+  help_next: async (interaction) => {
+    let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10);
+    const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const embed = new EmbedBuilder()
+      .setTitle('🤖 Bot Commands')
+      .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setColor(0x7289da);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+      new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
+    );
+    await interaction.update({ embeds: [embed], components: [row] });
+  }
 };
 
 module.exports = {
   name: 'utility',
   prefixCommands,
   slashCommands,
-  slashHandlers
+  slashHandlers,
+  buttonHandlers
 }; 

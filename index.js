@@ -271,12 +271,12 @@ async function sendErrorToLogChannel(guild, context, error) {
     if (logChannelId) {
       const channel = await guild.channels.fetch(logChannelId).catch(() => null);
       if (channel && channel.isTextBased()) {
-        const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
           .setTitle('Bot Error')
           .setDescription(`An error occurred in **${context}**.\n\`\`\`${error.message || error}\`\`\``)
-          .setColor(0xe74c3c)
-          .setTimestamp();
-        await channel.send({ embeds: [embed] });
+      .setColor(0xe74c3c)
+      .setTimestamp();
+    await channel.send({ embeds: [embed] });
       }
     }
   } catch (e) {
