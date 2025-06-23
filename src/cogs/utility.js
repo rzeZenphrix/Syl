@@ -407,7 +407,7 @@ const prefixCommands = {
     }
     const [time, ...commandArr] = args;
     if (!time || commandArr.length === 0) return msg.reply('Usage: &crontab <time> <command> | &crontab list | &crontab cancel <id>');
-    const match = time.match(/^\(\d+\)([smhd])$/);
+    const match = time.match(/^(\d+)([smhd])$/);
     if (!match) return msg.reply('Invalid time format. Use s/m/h/d (e.g., 5m)');
     const num = parseInt(match[1]);
     const unit = match[2];
