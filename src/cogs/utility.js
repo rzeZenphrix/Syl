@@ -2,6 +2,67 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const os = require('os');
 
+const commandDescriptions = {
+  // Setup & Configuration
+  setup: 'Configure server settings and admin roles. Usage: `;setup @adminrole [@extrarole1 ...]` (owner only)',
+  config: 'Show current server configuration and settings. Usage: `;config`',
+  logchannel: 'Set the log channel for moderation actions. Usage: `;logchannel #channel` (admin only)',
+  autorole: 'Set autorole for new members. Usage: `;autorole @role` (admin only)',
+  prefix: 'Set a custom command prefix for this server. Usage: `;prefix <new_prefix>` (owner only)',
+  'reset-config': 'Reset server configuration to defaults. Usage: `;reset-config` (owner only)',
+  'disable-commands': 'Manage which commands are enabled/disabled. Usage: `;disable-commands add/remove/list/clear <commands>` (owner only)',
+  
+  // Welcome & Goodbye
+  welcomesetup: 'Setup welcome messages for new members. Usage: `;welcomesetup` (admin only)',
+  goodbyesetup: 'Setup goodbye messages for leaving members. Usage: `;goodbyesetup` (admin only)',
+  
+  // Ticket System
+  ticketsetup: 'Setup ticket system for support. Usage: `;ticketsetup #channel` (admin only)',
+  
+  // Moderation
+  ban: 'Ban a user from the server (removes them from the server entirely). Usage: `;ban @user [reason]` (admin only)',
+  kick: 'Kick a user from the server (removes them, but they can rejoin if invited). Usage: `;kick @user [reason]` (admin only)',
+  warn: 'Warn a user. Usage: `;warn @user <reason>` (admin only)',
+  warnings: 'Show warnings for a member. Usage: `;warnings [@user]`',
+  clearwarn: 'Clear warnings for a member. Usage: `;clearwarn @user` (admin only)',
+  purge: 'Bulk delete messages. Usage: `;purge <1-100>` (admin only)',
+  nuke: 'Clone and delete the channel. Usage: `;nuke` (admin only)',
+  blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>` (admin only)',
+  unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user` (admin only)',
+  mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]` (admin only)',
+  unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user` (admin only)',
+  timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]` (admin only)',
+  lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock` (admin only)',
+  unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock` (admin only)',
+  spy: 'Secretly logs all messages from a specific user for moderation. Only affects bot logging, does not affect the user\'s server permissions. Usage: `&spy @user` (admin only)',
+  ghostping: 'Sends and deletes a ping instantly for fun or to test mod reactions. Usage: `&ghostping @user` (admin only)',
+  sniper: 'Logs and shows deleted messages (message sniping). Only affects bot logging, does not restore deleted messages in the server. Usage: `&sniper on` to enable, `&sniper off` to disable (admin only)',
+  revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user` (admin only)',
+  modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Does not show server audit log. Usage: `&modview [action] [next|prev]` (admin only)',
+  shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user` (admin only)',
+  massban: 'Ban all users with a specific role from the server. Usage: `&massban @role` (admin only)',
+  crontab: 'Schedule, list, or cancel commands to run after a delay. Usage: `&crontab <time> <command>` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel (admin only)',
+  
+  // Utility
+  ls: 'List all text channels in the server. Usage: `;ls`',
+  ps: 'Show all online members in the server. Usage: `;ps`',
+  whoami: 'Show your user info, including username, ID, join date, and roles. Usage: `;whoami`',
+  ping: 'Check the bot\'s latency to Discord. Usage: `;ping`',
+  uptime: 'Show how long the bot has been running. Usage: `;uptime`',
+  server: 'Show detailed info about the server, including owner, members, channels, roles, creation date, and boost level. Usage: `;server`',
+  roles: 'List all roles in the server. Usage: `;roles`',
+  avatar: 'Show the avatar of a user. Usage: `;avatar [@user]` (defaults to yourself if no user is mentioned)',
+  poll: 'Create a poll with reactions. Usage: `;poll <question>` (admin only)',
+  say: 'Make the bot say something as an embed. Usage: `;say <message>` (admin only)',
+  help: 'Show this help message. Usage: `;help`',
+  reset: 'Reset the command prefix to default (; and &). Usage: `;reset` (owner only)',
+  top: 'Show top users by messages, infractions, or uptime. Usage: `&top messages`, `&top infractions`, or `&top uptime`',
+  sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Usage: `&sysinfo`',
+  trace: 'Simulates tracking a user\'s origin for fun. Usage: `&trace @user`',
+  man: 'Returns the help info for a command like a Linux manpage. Usage: `&man <command>`',
+  passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
+};
+
 // Translation function with language detection
 async function detectLanguage(text) {
   try {
@@ -196,96 +257,6 @@ const prefixCommands = {
   },
   
   help: async (msg, args) => {
-    const commandDescriptions = {
-      // Setup & Configuration
-      setup: 'Configure server settings and admin roles (owner only)',
-      config: 'Show server configuration and settings',
-      logchannel: 'Set log channel for moderation actions',
-      autorole: 'Set autorole for new members',
-      prefix: 'Set custom command prefix (owner only)',
-      'reset-config': 'Reset server configuration to defaults (owner only)',
-      'disable-commands': 'Manage disabled commands (owner only)',
-      
-      // Welcome & Goodbye
-      welcomesetup: 'Setup welcome messages for new members',
-      goodbyesetup: 'Setup goodbye messages for leaving members',
-      
-      // Ticket System
-      ticketsetup: 'Setup ticket system for support',
-      
-      // Moderation
-      ban: 'Ban a user from the server (removes them from the server entirely). Usage: `;ban @user [reason]` (admin only)',
-      kick: 'Kick a user from the server (removes them, but they can rejoin if invited). Usage: `;kick @user [reason]` (admin only)',
-      warn: 'Warn a user',
-      warnings: 'Show warnings for a member',
-      clearwarn: 'Clear warnings for a member',
-      purge: 'Bulk delete messages',
-      nuke: 'Clone and delete the channel',
-      blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>` (admin only)',
-      unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user` (admin only)',
-      mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]` (admin only)',
-      unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user` (admin only)',
-      timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]` (admin only)',
-      
-      // Utility
-      ls: 'List all text channels in the server. Usage: `;ls`',
-      ps: 'Show all online members in the server. Usage: `;ps`',
-      whoami: 'Show your user info, including username, ID, join date, and roles. Usage: `;whoami`',
-      ping: 'Check the bot\'s latency to Discord. Usage: `;ping`',
-      uptime: 'Show how long the bot has been running. Usage: `;uptime`',
-      server: 'Show detailed info about the server, including owner, members, channels, roles, creation date, and boost level. Usage: `;server`',
-      roles: 'List all roles in the server. Usage: `;roles`',
-      avatar: 'Show the avatar of a user. Usage: `;avatar [@user]` (defaults to yourself if no user is mentioned)',
-      poll: 'Create a poll with reactions. Usage: `;poll <question>` (admin only)',
-      say: 'Make the bot say something as an embed. Usage: `;say <message>` (admin only)',
-      help: 'Show this help message. Usage: `;help`',
-      reset: 'Reset the command prefix to default (; and &). Usage: `;reset` (owner only)',
-      spy: 'Secretly logs all messages from a specific user for moderation. Only affects bot logging, does not affect the user\'s server permissions. Usage: `&spy @user` (admin only)',
-      ghostping: 'Sends and deletes a ping instantly for fun or to test mod reactions. Usage: `&ghostping @user` (admin only)',
-      sniper: 'Logs and shows deleted messages (message sniping). Only affects bot logging, does not restore deleted messages in the server. Usage: `&sniper on` to enable, `&sniper off` to disable (admin only)',
-      revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user` (admin only)',
-      modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Does not show server audit log. Usage: `&modview [action] [next|prev]` (admin only)',
-      shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user` (admin only)',
-      massban: 'Ban all users with a specific role from the server. Usage: `&massban @role` (admin only)',
-      lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock` (admin only)',
-      unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock` (admin only)',
-      crontab: 'Schedule, list, or cancel commands to run after a delay. Usage: `&crontab 5m say Hello` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel (admin only)',
-      top: 'Show top users by messages, infractions, or uptime. Usage: `&top messages`, `&top infractions`, or `&top uptime`',
-      sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Usage: `&sysinfo`',
-      trace: 'Simulates tracking a user\'s origin for fun. Usage: `&trace @user`',
-      man: 'Returns the help info for a command like a Linux manpage. Usage: `&man <command>`',
-      setup: 'Configure server settings and admin roles. Usage: `;setup @adminrole [@extrarole1 ...]` (owner only)',
-      config: 'Show current server configuration and settings. Usage: `;config`',
-      logchannel: 'Set the log channel for moderation actions. Usage: `;logchannel #channel` (admin only)',
-      autorole: 'Set autorole for new members. Usage: `;autorole @role` (admin only)',
-      prefix: 'Set a custom command prefix for this server. Usage: `;prefix <new_prefix>` (owner only)',
-      'reset-config': 'Reset server configuration to defaults. Usage: `;reset-config` (owner only)',
-      'disable-commands': 'Manage which commands are enabled/disabled. Usage: `;disable-commands add/remove/list/clear <commands>` (owner only)',
-      welcomesetup: 'Setup welcome messages for new members. Usage: `;welcomesetup` (admin only)',
-      goodbyesetup: 'Setup goodbye messages for leaving members. Usage: `;goodbyesetup` (admin only)',
-      ticketsetup: 'Setup ticket system for support. Usage: `;ticketsetup #channel` (admin only)',
-      warn: 'Warn a user. Usage: `;warn @user <reason>` (admin only)',
-      warnings: 'Show warnings for a member. Usage: `;warnings [@user]`',
-      clearwarn: 'Clear warnings for a member. Usage: `;clearwarn @user` (admin only)',
-      purge: 'Bulk delete messages. Usage: `;purge <1-100>` (admin only)',
-      nuke: 'Clone and delete the channel. Usage: `;nuke` (admin only)',
-      blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>` (admin only)',
-      unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user` (admin only)',
-      mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]` (admin only)',
-      unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user` (admin only)',
-      timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]` (admin only)',
-      lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock` (admin only)',
-      unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock` (admin only)',
-      spy: 'Secretly logs all messages from a specific user for moderation. Only affects bot logging, does not affect the user\'s server permissions. Usage: `&spy @user` (admin only)',
-      sniper: 'Logs and shows deleted messages (message sniping). Only affects bot logging, does not restore deleted messages in the server. Usage: `&sniper on` to enable, `&sniper off` to disable (admin only)',
-      shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user` (admin only)',
-      massban: 'Ban all users with a specific role from the server. Usage: `&massban @role` (admin only)',
-      revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user` (admin only)',
-      modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Does not show server audit log. Usage: `&modview [action] [next|prev]` (admin only)',
-      passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
-      crontab: 'Schedule, list, or cancel commands to run after a delay. Usage: `&crontab <time> <command>` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel (admin only)'
-    };
-    
     // Group commands by category
     const categories = {
       '🔧 Setup & Configuration': ['setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands'],
@@ -550,11 +521,35 @@ const prefixCommands = {
   },
 
   man: async (msg, args) => {
-    const command = args[0];
-    if (!command) return msg.reply('Usage: &man <command>');
-    // Lookup help info from commandDescriptions
-    const desc = (typeof commandDescriptions === 'object' ? commandDescriptions[command] : null) || 'No manual entry for this command.';
-    return msg.reply(`NAME\n    ${command} - ${desc}`);
+    const commandName = args[0];
+    if (!commandName) {
+      return msg.reply('Please specify a command. Usage: `&man <command>`');
+    }
+
+    const description = commandDescriptions[commandName.toLowerCase()];
+    if (!description) {
+      return msg.reply(`NAME\n  ${commandName} - No manual entry for this command.`);
+    }
+
+    const embed = new EmbedBuilder()
+      .setTitle(`MAN PAGE: ${commandName.toUpperCase()}`)
+      .addFields(
+        { name: 'NAME', value: `${commandName} - ${description.split(' Usage:')[0]}` },
+      )
+      .setColor(0x2ecc71)
+      .setFooter({ text: 'End of manual page.' });
+    
+    const usageMatch = description.match(/Usage: `(.+?)`/);
+    if (usageMatch && usageMatch[1]) {
+      embed.addFields({ name: 'SYNOPSIS', value: `\`${usageMatch[1]}\`` });
+    }
+    
+    const noteMatch = description.match(/\((.+?)\)/);
+    if (noteMatch && noteMatch[1]) {
+      embed.addFields({ name: 'DESCRIPTION', value: noteMatch[1] });
+    }
+
+    return msg.reply({ embeds: [embed] });
   },
 
   sysinfo: async (msg, args) => {

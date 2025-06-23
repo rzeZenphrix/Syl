@@ -265,22 +265,42 @@ function logError(context, error) {
 }
 
 async function sendErrorToLogChannel(guild, context, error) {
+  if (!guild) return;
   try {
     const logChannelId = await getLogChannel(guild.id);
-    if (!logChannelId) return;
-    
-    const channel = guild.channels.cache.get(logChannelId);
-    if (!channel) return;
-    
-    const embed = new EmbedBuilder()
-      .setTitle('Error')
-      .setDescription(`**Context:** ${context}\n**Error:** ${error.message || error}`)
-      .setColor(0xe74c3c)
-      .setTimestamp();
-    
-    await channel.send({ embeds: [embed] });
+    if (logChannelId) {
+      const channel = await guild.channels.fetch(logChannelId).catch(() => null);
+      if (channel && channel.isTextBased()) {
+        const embed = new EmbedBuilder()
+          .setTitle('Bot Error')
+          .setDescription(`An error occurred in **${context}**.\n\`\`\`${error.message || error}\`\`\``)
+          .setColor(0xe74c3c)
+          .setTimestamp();
+        await channel.send({ embeds: [embed] });
+      }
+    }
   } catch (e) {
     console.error('Failed to send error to log channel:', e);
+  }
+}
+
+async function logCommand(guild, commandName, user, message) {
+  if (!guild) return;
+  try {
+    const logChannelId = await getLogChannel(guild.id);
+    if (logChannelId) {
+      const channel = await guild.channels.fetch(logChannelId).catch(() => null);
+      if (channel && channel.isTextBased()) {
+        const embed = new EmbedBuilder()
+          .setTitle('Command Executed')
+          .setDescription(`**Command:** \`${commandName}\`\n**User:** ${user.tag} (${user.id})\n**Channel:** ${message.channel.name}`)
+          .setColor(0x3498db)
+          .setTimestamp();
+        await channel.send({ embeds: [embed] });
+      }
+    }
+  } catch (e) {
+    console.error('Failed to log command:', e);
   }
 }
 
@@ -363,6 +383,8 @@ client.on('messageCreate', async (msg) => {
     }
     
     await commandHandler(msg, args);
+    // Log successful command execution
+    await logCommand(msg.guild, command, msg.author, msg);
   } catch (e) {
     console.error('Command error:', e.message || JSON.stringify(e));
     await msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('An error occurred while processing the command.').setColor(0xe74c3c)] });
@@ -388,6 +410,8 @@ client.on('interactionCreate', async (interaction) => {
     }
     
     await handler(interaction);
+    // Log successful slash command execution
+    await logCommand(interaction.guild, interaction.commandName, interaction.user, interaction);
   } catch (e) {
     console.error('Interaction error:', e.message || JSON.stringify(e));
     await interaction.reply({ content: 'An error occurred while processing the command.', ephemeral: true });
