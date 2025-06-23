@@ -265,12 +265,12 @@ const prefixCommands = {
         guild_id: msg.guild.id,
         custom_prefix: null
       }, { onConflict: ['guild_id'] });
-      const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setTitle('Prefix Reset')
         .setDescription('Command prefix reset to defaults (; and &)')
         .setColor(0x2ecc71)
         .setTimestamp();
-      return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Prefix reset error:', e);
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to reset prefix.').setColor(0xe74c3c)] });
@@ -407,7 +407,7 @@ const prefixCommands = {
     }
     const [time, ...commandArr] = args;
     if (!time || commandArr.length === 0) return msg.reply('Usage: &crontab <time> <command> | &crontab list | &crontab cancel <id>');
-    const match = time.match(/^(\d+)([smhd])$/);
+    const match = time.match(/^\(\d+\)([smhd])$/);
     if (!match) return msg.reply('Invalid time format. Use s/m/h/d (e.g., 5m)');
     const num = parseInt(match[1]);
     const unit = match[2];
@@ -424,11 +424,28 @@ const prefixCommands = {
     if (error) return msg.reply('Failed to schedule command.');
     const id = data[0]?.id;
     setTimeout(async () => {
-      // Actually execute the command (only simple ones for demo)
-      if (commandArr[0] === 'say') {
-        msg.channel.send(commandArr.slice(1).join(' '));
-      } else {
-        msg.channel.send(`Scheduled command: ${commandArr.join(' ')} (executed)`);
+      // Actually execute the command as if the user sent it
+      try {
+        // Simulate a message object
+        const fakeMsg = Object.create(msg);
+        fakeMsg.content = msg.content.startsWith(';') || msg.content.startsWith('&')
+          ? msg.content[0] + commandArr.join(' ')
+          : ';' + commandArr.join(' ');
+        fakeMsg.author = msg.author;
+        fakeMsg.member = msg.member;
+        fakeMsg.guild = msg.guild;
+        fakeMsg.channel = msg.channel;
+        // Use the main command handler from index.js
+        const cogManager = require('../../src/cogManager');
+        const commandName = commandArr[0].replace(/^;/, '').replace(/^&/, '').toLowerCase();
+        const handler = cogManager.getPrefixCommand(commandName);
+        if (handler) {
+          await handler(fakeMsg, commandArr.slice(1));
+        } else {
+          msg.channel.send(`Scheduled command: ${commandArr.join(' ')} (no such command)`);
+        }
+      } catch (e) {
+        msg.channel.send(`Scheduled command failed: ${commandArr.join(' ')}\nError: ${e.message}`);
       }
       await supabase.from('scheduled_commands').update({ executed: true }).eq('id', id);
     }, ms);
@@ -470,7 +487,7 @@ const prefixCommands = {
     if (!description) {
       return msg.reply(`NAME\n  ${commandName} - No manual entry for this command.`);
     }
-
+    
     const embed = new EmbedBuilder()
       .setTitle(`MAN PAGE: ${commandName.toUpperCase()}`)
       .addFields(
