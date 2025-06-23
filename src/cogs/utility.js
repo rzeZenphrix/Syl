@@ -402,13 +402,13 @@ const prefixCommands = {
     if (args.includes('next')) page++;
     if (args.includes('prev')) page = Math.max(0, page - 1);
     const pageSize = 10;
-    let query = supabase.from('mod_actions').select('*').eq('guild_id', msg.guild.id);
-    if (actionType) query = query.eq('action_type', actionType);
-    query = query.order('created_at', { ascending: false }).range(page * pageSize, (page + 1) * pageSize - 1);
+    let query = supabase.from('modlogs').select('*').eq('guild_id', msg.guild.id);
+    if (actionType) query = query.eq('action', actionType);
+    query = query.order('date', { ascending: false }).range(page * pageSize, (page + 1) * pageSize - 1);
     const { data, error } = await query;
     if (error) return msg.reply('Failed to fetch mod actions.');
     if (!data || data.length === 0) return msg.reply('No mod actions found.');
-    const lines = data.map(a => `• [${a.action_type}] <@${a.target_id}> by <@${a.moderator_id}> (${a.created_at.split('T')[0]})${a.reason ? `: ${a.reason}` : ''}`).join('\n');
+    const lines = data.map(a => `• [${a.action}] <@${a.user_id}> by <@${a.moderator_id}> (${new Date(a.date).toLocaleDateString()})${a.reason ? `: ${a.reason}` : ''}`).join('\n');
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Mod Actions').setDescription(lines).setFooter({ text: `Page ${page + 1}` }).setColor(0x7289da)] });
   },
 
