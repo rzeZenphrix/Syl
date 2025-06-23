@@ -574,6 +574,8 @@ function getPaginatedCommands(page = 0) {
       }
     }
   }
+  // Sort alphabetically by command name
+  allCmds.sort((a, b) => a.name.localeCompare(b.name));
   const totalPages = Math.ceil(allCmds.length / PAGE_SIZE);
   const cmdsOnPage = allCmds.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   return { cmdsOnPage, totalPages, allCmds };
