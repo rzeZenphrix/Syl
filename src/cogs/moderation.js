@@ -116,7 +116,30 @@ async function isAdmin(member) {
   }
 }
 
-// Prefix commands
+// Add new commands to commandDescriptions
+const commandDescriptions = {
+  ban: 'Ban a user from the server. Usage: `/ban @user [reason]`',
+  kick: 'Kick a user from the server. Usage: `/kick @user [reason]`',
+  warn: 'Warn a user. Usage: `/warn @user <reason>`',
+  warnings: 'Show warnings for a user. Usage: `/warnings [@user]`',
+  clearwarn: 'Clear all warnings for a user. Usage: `/clearwarn @user`',
+  purge: 'Delete multiple messages. Usage: `/purge <1-100>`',
+  nuke: 'Nuke a channel. Usage: `/nuke`',
+  blacklist: 'Add a user to the blacklist. Usage: `/blacklist @user <reason>`',
+  unblacklist: 'Remove a user from the blacklist. Usage: `/unblacklist @user`',
+  mute: 'Mute a user. Usage: `/mute @user <duration> [reason]\nDuration format: 30s, 5m, 2h, 1d`',
+  unmute: 'Unmute a user. Usage: `/unmute @user`',
+  timeout: 'Timeout a user. Usage: `/timeout @user <duration> [reason]\nDuration format: 30s, 5m, 2h, 1d`',
+  blacklistchannel: 'Blacklist this channel from bot commands (admin only)',
+  unblacklistchannel: 'Remove this channel from the blacklist (admin only)',
+  report: 'Report a user for breaking rules. Usage: `/report @user <reason>`',
+  modmail: 'Open a private conversation with staff. Usage: `/modmail <message>`',
+  panic: 'Emergency lockdown - locks all channels and pings mods. Usage: `/panic <reason>` (admin only)',
+  feedback: 'Send anonymous feedback to staff. Usage: `/feedback <message>`',
+  case: 'View moderation case details. Usage: `/case view <ID>`'
+};
+
+// Add new commands to prefixCommands
 const prefixCommands = {
   ban: async (msg, args) => {
     if (!await isAdmin(msg.member)) {
@@ -488,6 +511,368 @@ const prefixCommands = {
       console.error('Timeout error:', e);
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to timeout user.').setColor(0xe74c3c)] });
     }
+  },
+
+  blacklistchannel: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
+    }
+    const channelId = msg.channel.id;
+    try {
+      await supabase.from('channel_blacklist').upsert({ guild_id: msg.guild.id, channel_id: channelId });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('This channel is now blacklisted from bot commands.').setColor(0x2c3e50)] });
+    } catch (e) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to blacklist channel.').setColor(0xe74c3c)] });
+    }
+  },
+  unblacklistchannel: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
+    }
+    const channelId = msg.channel.id;
+    try {
+      await supabase.from('channel_blacklist').delete().eq('guild_id', msg.guild.id).eq('channel_id', channelId);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Unblacklisted').setDescription('This channel is no longer blacklisted.').setColor(0x2ecc71)] });
+    } catch (e) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to unblacklist channel.').setColor(0xe74c3c)] });
+    }
+  },
+  
+  report: async (msg, args) => {
+    const user = msg.mentions.users.first();
+    if (!user) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a user to report.\nUsage: `/report @user <reason>`').setColor(0xe74c3c)] });
+    }
+    
+    if (user.id === msg.author.id) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('You cannot report yourself.').setColor(0xe74c3c)] });
+    }
+    
+    const reason = args.slice(1).join(' ');
+    if (!reason) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide a reason for the report.\nUsage: `/report @user <reason>`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      // Save report to database
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          guild_id: msg.guild.id,
+          reporter_id: msg.author.id,
+          reported_user_id: user.id,
+          reason: reason
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      // Get report channel from config
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('report_channel_id')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      const reportEmbed = new EmbedBuilder()
+        .setTitle('🚨 New Report')
+        .setDescription(`**Reported User:** ${user} (${user.id})\n**Reporter:** ${msg.author} (${msg.author.id})\n**Reason:** ${reason}`)
+        .setColor(0xe74c3c)
+        .setTimestamp()
+        .setFooter({ text: `Report ID: ${data.id}` });
+      
+      // Send to report channel if configured
+      if (config?.report_channel_id) {
+        const reportChannel = msg.guild.channels.cache.get(config.report_channel_id);
+        if (reportChannel) {
+          await reportChannel.send({ embeds: [reportEmbed] });
+        }
+      }
+      
+      // Confirm to reporter
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('Report Submitted')
+        .setDescription(`Your report against ${user} has been submitted.\n**Reason:** ${reason}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [confirmEmbed] });
+    } catch (e) {
+      console.error('Report error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to submit report. Please try again.').setColor(0xe74c3c)] });
+    }
+  },
+
+  modmail: async (msg, args) => {
+    const message = args.join(' ');
+    if (!message) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide a message to send to staff.\nUsage: `/modmail <message>`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      // Check if user already has an open thread
+      const { data: existingThread } = await supabase
+        .from('modmail_threads')
+        .select('*')
+        .eq('guild_id', msg.guild.id)
+        .eq('user_id', msg.author.id)
+        .eq('status', 'open')
+        .single();
+      
+      if (existingThread) {
+        // Send message to existing thread
+        const threadChannel = msg.guild.channels.cache.get(existingThread.channel_id);
+        if (threadChannel) {
+          const threadEmbed = new EmbedBuilder()
+            .setTitle('📨 Modmail Message')
+            .setDescription(`**From:** ${msg.author} (${msg.author.id})\n**Message:** ${message}`)
+            .setColor(0x3498db)
+            .setTimestamp();
+          
+          await threadChannel.send({ embeds: [threadEmbed] });
+          
+          const confirmEmbed = new EmbedBuilder()
+            .setTitle('Message Sent')
+            .setDescription('Your message has been sent to staff.')
+            .setColor(0x2ecc71)
+            .setTimestamp();
+          
+          return msg.reply({ embeds: [confirmEmbed] });
+        }
+      }
+      
+      // Get modmail channel from config
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('modmail_channel_id')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      if (!config?.modmail_channel_id) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Modmail is not configured for this server.').setColor(0xe74c3c)] });
+      }
+      
+      const modmailChannel = msg.guild.channels.cache.get(config.modmail_channel_id);
+      if (!modmailChannel) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Modmail channel not found.').setColor(0xe74c3c)] });
+      }
+      
+      // Create new thread
+      const threadEmbed = new EmbedBuilder()
+        .setTitle('📨 New Modmail Thread')
+        .setDescription(`**User:** ${msg.author} (${msg.author.id})\n**Message:** ${message}`)
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      const thread = await modmailChannel.threads.create({
+        name: `Modmail - ${msg.author.username}`,
+        message: { embeds: [threadEmbed] }
+      });
+      
+      // Save thread to database
+      await supabase
+        .from('modmail_threads')
+        .upsert({
+          guild_id: msg.guild.id,
+          user_id: msg.author.id,
+          channel_id: thread.id,
+          status: 'open'
+        }, { onConflict: ['guild_id', 'user_id'] });
+      
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('Modmail Thread Created')
+        .setDescription('Your modmail thread has been created. Staff will respond soon.')
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [confirmEmbed] });
+    } catch (e) {
+      console.error('Modmail error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to create modmail thread. Please try again.').setColor(0xe74c3c)] });
+    }
+  },
+
+  panic: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use panic mode.').setColor(0xe74c3c)] });
+    }
+    
+    const reason = args.join(' ') || 'Emergency lockdown activated';
+    
+    try {
+      // Check if panic mode is already active
+      const { data: existingPanic } = await supabase
+        .from('panic_mode')
+        .select('*')
+        .eq('guild_id', msg.guild.id)
+        .eq('is_active', true)
+        .single();
+      
+      if (existingPanic) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Panic Mode Active').setDescription('Panic mode is already active. Use `/panic off` to disable it.').setColor(0xe74c3c)] });
+      }
+      
+      // Lock all channels
+      const channels = msg.guild.channels.cache.filter(ch => ch.type === 0); // Text channels only
+      const lockedChannels = [];
+      
+      for (const [id, channel] of channels) {
+        try {
+          await channel.permissionOverwrites.edit(msg.guild.roles.everyone, {
+            SendMessages: false,
+            AddReactions: false,
+            CreatePublicThreads: false,
+            CreatePrivateThreads: false,
+            SendMessagesInThreads: false
+          });
+          lockedChannels.push(channel.name);
+        } catch (e) {
+          console.error(`Failed to lock channel ${channel.name}:`, e);
+        }
+      }
+      
+      // Save panic mode to database
+      await supabase
+        .from('panic_mode')
+        .upsert({
+          guild_id: msg.guild.id,
+          is_active: true,
+          activated_by: msg.author.id,
+          reason: reason
+        }, { onConflict: ['guild_id'] });
+      
+      // Ping mods
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('mod_role_id')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      let modPing = '';
+      if (config?.mod_role_id) {
+        const modRole = msg.guild.roles.cache.get(config.mod_role_id);
+        if (modRole) {
+          modPing = `${modRole}`;
+        }
+      }
+      
+      const panicEmbed = new EmbedBuilder()
+        .setTitle('🚨 PANIC MODE ACTIVATED')
+        .setDescription(`**Reason:** ${reason}\n**Activated by:** ${msg.author}\n**Channels locked:** ${lockedChannels.length}`)
+        .addFields(
+          { name: 'Locked Channels', value: lockedChannels.slice(0, 10).join(', ') + (lockedChannels.length > 10 ? '...' : ''), inline: false }
+        )
+        .setColor(0xe74c3c)
+        .setTimestamp();
+      
+      await msg.channel.send({ content: modPing, embeds: [panicEmbed] });
+      
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Panic Mode Activated').setDescription('All channels have been locked and mods have been notified.').setColor(0xe74c3c)] });
+    } catch (e) {
+      console.error('Panic mode error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to activate panic mode.').setColor(0xe74c3c)] });
+    }
+  },
+
+  feedback: async (msg, args) => {
+    const message = args.join(' ');
+    if (!message) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide feedback to send.\nUsage: `/feedback <message>`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      // Save feedback to database
+      await supabase
+        .from('feedback')
+        .insert({
+          guild_id: msg.guild.id,
+          user_id: msg.author.id,
+          message: message,
+          is_anonymous: true
+        });
+      
+      // Get feedback channel from config
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('feedback_channel_id')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      if (config?.feedback_channel_id) {
+        const feedbackChannel = msg.guild.channels.cache.get(config.feedback_channel_id);
+        if (feedbackChannel) {
+          const feedbackEmbed = new EmbedBuilder()
+            .setTitle('📝 Anonymous Feedback')
+            .setDescription(`**Message:** ${message}`)
+            .setColor(0xf39c12)
+            .setTimestamp();
+          
+          await feedbackChannel.send({ embeds: [feedbackEmbed] });
+        }
+      }
+      
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('Feedback Submitted')
+        .setDescription('Your anonymous feedback has been submitted to staff.')
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [confirmEmbed] });
+    } catch (e) {
+      console.error('Feedback error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to submit feedback. Please try again.').setColor(0xe74c3c)] });
+    }
+  },
+
+  case: async (msg, args) => {
+    if (args.length < 2 || args[0] !== 'view') {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Usage: `/case view <ID>`').setColor(0xe74c3c)] });
+    }
+    
+    const caseId = parseInt(args[1]);
+    if (isNaN(caseId)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Please provide a valid case ID.').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      const { data: caseData, error } = await supabase
+        .from('moderation_cases')
+        .select('*')
+        .eq('guild_id', msg.guild.id)
+        .eq('case_number', caseId)
+        .single();
+      
+      if (error || !caseData) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Case Not Found').setDescription(`No case found with ID ${caseId}.`).setColor(0xe74c3c)] });
+      }
+      
+      const caseEmbed = new EmbedBuilder()
+        .setTitle(`Case #${caseData.case_number}`)
+        .addFields(
+          { name: 'User', value: `<@${caseData.user_id}> (${caseData.user_id})`, inline: true },
+          { name: 'Type', value: caseData.case_type.toUpperCase(), inline: true },
+          { name: 'Moderator', value: `<@${caseData.moderator_id}> (${caseData.moderator_id})`, inline: true },
+          { name: 'Reason', value: caseData.reason || 'No reason provided', inline: false },
+          { name: 'Status', value: caseData.active ? 'Active' : 'Inactive', inline: true },
+          { name: 'Created', value: `<t:${Math.floor(new Date(caseData.created_at).getTime() / 1000)}:F>`, inline: true }
+        )
+        .setColor(caseData.case_type === 'ban' ? 0xe74c3c : caseData.case_type === 'kick' ? 0xf39c12 : 0x3498db)
+        .setTimestamp();
+      
+      if (caseData.duration_minutes) {
+        caseEmbed.addFields({ name: 'Duration', value: `${caseData.duration_minutes} minutes`, inline: true });
+      }
+      
+      if (caseData.expires_at) {
+        caseEmbed.addFields({ name: 'Expires', value: `<t:${Math.floor(new Date(caseData.expires_at).getTime() / 1000)}:F>`, inline: true });
+      }
+      
+      return msg.reply({ embeds: [caseEmbed] });
+    } catch (e) {
+      console.error('Case view error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to retrieve case information.').setColor(0xe74c3c)] });
+    }
   }
 };
 
@@ -554,7 +939,44 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('purge')
     .setDescription('Delete multiple messages')
-    .addIntegerOption(opt => opt.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+    .addIntegerOption(opt => opt.setName('amount').setDescription('Number of messages to delete (1-100)').setRequired(true).setMinValue(1).setMaxValue(100)),
+
+  new SlashCommandBuilder()
+    .setName('blacklistchannel')
+    .setDescription('Blacklist this channel from bot commands (admin only)'),
+
+  new SlashCommandBuilder()
+    .setName('unblacklistchannel')
+    .setDescription('Remove this channel from the blacklist (admin only)'),
+
+  new SlashCommandBuilder()
+    .setName('report')
+    .setDescription('Report a user for breaking rules')
+    .addUserOption(opt => opt.setName('user').setDescription('User to report').setRequired(true))
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for report').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('modmail')
+    .setDescription('Open a private conversation with staff')
+    .addStringOption(opt => opt.setName('message').setDescription('Message to send to staff').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('panic')
+    .setDescription('Emergency lockdown - locks all channels and pings mods')
+    .addStringOption(opt => opt.setName('reason').setDescription('Reason for panic mode').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('feedback')
+    .setDescription('Send anonymous feedback to staff')
+    .addStringOption(opt => opt.setName('message').setDescription('Feedback message').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('case')
+    .setDescription('View moderation case details')
+    .addSubcommand(sub => sub
+      .setName('view')
+      .setDescription('View a specific case')
+      .addIntegerOption(opt => opt.setName('id').setDescription('Case ID to view').setRequired(true)))
 ];
 
 // Slash command handlers
@@ -913,6 +1335,318 @@ const slashHandlers = {
     } catch (e) {
       console.error('Nuke error:', e);
       return interaction.channel.send({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to nuke channel.').setColor(0xe74c3c)] });
+    }
+  },
+
+  blacklistchannel: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    const channelId = interaction.channel.id;
+    try {
+      await supabase.from('channel_blacklist').upsert({ guild_id: interaction.guild.id, channel_id: channelId });
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('This channel is now blacklisted from bot commands.').setColor(0x2c3e50)], ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to blacklist channel.').setColor(0xe74c3c)], ephemeral: true });
+    }
+  },
+  unblacklistchannel: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    const channelId = interaction.channel.id;
+    try {
+      await supabase.from('channel_blacklist').delete().eq('guild_id', interaction.guild.id).eq('channel_id', channelId);
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Channel Unblacklisted').setDescription('This channel is no longer blacklisted.').setColor(0x2ecc71)], ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to unblacklist channel.').setColor(0xe74c3c)], ephemeral: true });
+    }
+  },
+  
+  report: async (interaction) => {
+    const user = interaction.options.getUser('user');
+    const reason = interaction.options.getString('reason');
+    
+    if (user.id === interaction.user.id) {
+      return interaction.reply({ content: 'You cannot report yourself.', ephemeral: true });
+    }
+    
+    try {
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          guild_id: interaction.guild.id,
+          reporter_id: interaction.user.id,
+          reported_user_id: user.id,
+          reason: reason
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('report_channel_id')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      const reportEmbed = new EmbedBuilder()
+        .setTitle('🚨 New Report')
+        .setDescription(`**Reported User:** ${user} (${user.id})\n**Reporter:** ${interaction.user} (${interaction.user.id})\n**Reason:** ${reason}`)
+        .setColor(0xe74c3c)
+        .setTimestamp()
+        .setFooter({ text: `Report ID: ${data.id}` });
+      
+      if (config?.report_channel_id) {
+        const reportChannel = interaction.guild.channels.cache.get(config.report_channel_id);
+        if (reportChannel) {
+          await reportChannel.send({ embeds: [reportEmbed] });
+        }
+      }
+      
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle('Report Submitted')
+        .setDescription(`Your report against ${user} has been submitted.`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [confirmEmbed], ephemeral: true });
+    } catch (e) {
+      console.error('Report error:', e);
+      return interaction.reply({ content: 'Failed to submit report. Please try again.', ephemeral: true });
+    }
+  },
+
+  modmail: async (interaction) => {
+    const message = interaction.options.getString('message');
+    
+    try {
+      const { data: existingThread } = await supabase
+        .from('modmail_threads')
+        .select('*')
+        .eq('guild_id', interaction.guild.id)
+        .eq('user_id', interaction.user.id)
+        .eq('status', 'open')
+        .single();
+      
+      if (existingThread) {
+        const threadChannel = interaction.guild.channels.cache.get(existingThread.channel_id);
+        if (threadChannel) {
+          const threadEmbed = new EmbedBuilder()
+            .setTitle('📨 Modmail Message')
+            .setDescription(`**From:** ${interaction.user} (${interaction.user.id})\n**Message:** ${message}`)
+            .setColor(0x3498db)
+            .setTimestamp();
+          
+          await threadChannel.send({ embeds: [threadEmbed] });
+          return interaction.reply({ content: 'Your message has been sent to staff.', ephemeral: true });
+        }
+      }
+      
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('modmail_channel_id')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      if (!config?.modmail_channel_id) {
+        return interaction.reply({ content: 'Modmail is not configured for this server.', ephemeral: true });
+      }
+      
+      const modmailChannel = interaction.guild.channels.cache.get(config.modmail_channel_id);
+      if (!modmailChannel) {
+        return interaction.reply({ content: 'Modmail channel not found.', ephemeral: true });
+      }
+      
+      const threadEmbed = new EmbedBuilder()
+        .setTitle('📨 New Modmail Thread')
+        .setDescription(`**User:** ${interaction.user} (${interaction.user.id})\n**Message:** ${message}`)
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      const thread = await modmailChannel.threads.create({
+        name: `Modmail - ${interaction.user.username}`,
+        message: { embeds: [threadEmbed] }
+      });
+      
+      await supabase
+        .from('modmail_threads')
+        .upsert({
+          guild_id: interaction.guild.id,
+          user_id: interaction.user.id,
+          channel_id: thread.id,
+          status: 'open'
+        }, { onConflict: ['guild_id', 'user_id'] });
+      
+      return interaction.reply({ content: 'Your modmail thread has been created. Staff will respond soon.', ephemeral: true });
+    } catch (e) {
+      console.error('Modmail error:', e);
+      return interaction.reply({ content: 'Failed to create modmail thread. Please try again.', ephemeral: true });
+    }
+  },
+
+  panic: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'Only admins can use panic mode.', ephemeral: true });
+    }
+    
+    const reason = interaction.options.getString('reason') || 'Emergency lockdown activated';
+    
+    try {
+      const { data: existingPanic } = await supabase
+        .from('panic_mode')
+        .select('*')
+        .eq('guild_id', interaction.guild.id)
+        .eq('is_active', true)
+        .single();
+      
+      if (existingPanic) {
+        return interaction.reply({ content: 'Panic mode is already active. Use `/panic off` to disable it.', ephemeral: true });
+      }
+      
+      const channels = interaction.guild.channels.cache.filter(ch => ch.type === 0);
+      const lockedChannels = [];
+      
+      for (const [id, channel] of channels) {
+        try {
+          await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+            SendMessages: false,
+            AddReactions: false,
+            CreatePublicThreads: false,
+            CreatePrivateThreads: false,
+            SendMessagesInThreads: false
+          });
+          lockedChannels.push(channel.name);
+        } catch (e) {
+          console.error(`Failed to lock channel ${channel.name}:`, e);
+        }
+      }
+      
+      await supabase
+        .from('panic_mode')
+        .upsert({
+          guild_id: interaction.guild.id,
+          is_active: true,
+          activated_by: interaction.user.id,
+          reason: reason
+        }, { onConflict: ['guild_id'] });
+      
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('mod_role_id')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      let modPing = '';
+      if (config?.mod_role_id) {
+        const modRole = interaction.guild.roles.cache.get(config.mod_role_id);
+        if (modRole) {
+          modPing = `${modRole}`;
+        }
+      }
+      
+      const panicEmbed = new EmbedBuilder()
+        .setTitle('🚨 PANIC MODE ACTIVATED')
+        .setDescription(`**Reason:** ${reason}\n**Activated by:** ${interaction.user}\n**Channels locked:** ${lockedChannels.length}`)
+        .addFields(
+          { name: 'Locked Channels', value: lockedChannels.slice(0, 10).join(', ') + (lockedChannels.length > 10 ? '...' : ''), inline: false }
+        )
+        .setColor(0xe74c3c)
+        .setTimestamp();
+      
+      await interaction.channel.send({ content: modPing, embeds: [panicEmbed] });
+      
+      return interaction.reply({ content: 'Panic mode activated. All channels have been locked and mods have been notified.', ephemeral: true });
+    } catch (e) {
+      console.error('Panic mode error:', e);
+      return interaction.reply({ content: 'Failed to activate panic mode.', ephemeral: true });
+    }
+  },
+
+  feedback: async (interaction) => {
+    const message = interaction.options.getString('message');
+    
+    try {
+      await supabase
+        .from('feedback')
+        .insert({
+          guild_id: interaction.guild.id,
+          user_id: interaction.user.id,
+          message: message,
+          is_anonymous: true
+        });
+      
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('feedback_channel_id')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      if (config?.feedback_channel_id) {
+        const feedbackChannel = interaction.guild.channels.cache.get(config.feedback_channel_id);
+        if (feedbackChannel) {
+          const feedbackEmbed = new EmbedBuilder()
+            .setTitle('📝 Anonymous Feedback')
+            .setDescription(`**Message:** ${message}`)
+            .setColor(0xf39c12)
+            .setTimestamp();
+          
+          await feedbackChannel.send({ embeds: [feedbackEmbed] });
+        }
+      }
+      
+      return interaction.reply({ content: 'Your anonymous feedback has been submitted to staff.', ephemeral: true });
+    } catch (e) {
+      console.error('Feedback error:', e);
+      return interaction.reply({ content: 'Failed to submit feedback. Please try again.', ephemeral: true });
+    }
+  },
+
+  case: async (interaction) => {
+    const subcommand = interaction.options.getSubcommand();
+    
+    if (subcommand === 'view') {
+      const caseId = interaction.options.getInteger('id');
+      
+      try {
+        const { data: caseData, error } = await supabase
+          .from('moderation_cases')
+          .select('*')
+          .eq('guild_id', interaction.guild.id)
+          .eq('case_number', caseId)
+          .single();
+        
+        if (error || !caseData) {
+          return interaction.reply({ content: `No case found with ID ${caseId}.`, ephemeral: true });
+        }
+        
+        const caseEmbed = new EmbedBuilder()
+          .setTitle(`Case #${caseData.case_number}`)
+          .addFields(
+            { name: 'User', value: `<@${caseData.user_id}> (${caseData.user_id})`, inline: true },
+            { name: 'Type', value: caseData.case_type.toUpperCase(), inline: true },
+            { name: 'Moderator', value: `<@${caseData.moderator_id}> (${caseData.moderator_id})`, inline: true },
+            { name: 'Reason', value: caseData.reason || 'No reason provided', inline: false },
+            { name: 'Status', value: caseData.active ? 'Active' : 'Inactive', inline: true },
+            { name: 'Created', value: `<t:${Math.floor(new Date(caseData.created_at).getTime() / 1000)}:F>`, inline: true }
+          )
+          .setColor(caseData.case_type === 'ban' ? 0xe74c3c : caseData.case_type === 'kick' ? 0xf39c12 : 0x3498db)
+          .setTimestamp();
+        
+        if (caseData.duration_minutes) {
+          caseEmbed.addFields({ name: 'Duration', value: `${caseData.duration_minutes} minutes`, inline: true });
+        }
+        
+        if (caseData.expires_at) {
+          caseEmbed.addFields({ name: 'Expires', value: `<t:${Math.floor(new Date(caseData.expires_at).getTime() / 1000)}:F>`, inline: true });
+        }
+        
+        return interaction.reply({ embeds: [caseEmbed], ephemeral: true });
+      } catch (e) {
+        console.error('Case view error:', e);
+        return interaction.reply({ content: 'Failed to retrieve case information.', ephemeral: true });
+      }
     }
   }
 };

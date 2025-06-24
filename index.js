@@ -305,6 +305,13 @@ async function logCommand(guild, commandName, user, message) {
   }
 }
 
+// Add helper for channel blacklist
+async function isChannelBlacklisted(guildId, channelId) {
+  const { data, error } = await supabase.from('channel_blacklist').select('*').eq('guild_id', guildId).eq('channel_id', channelId);
+  if (error) throw error;
+  return data && data.length > 0;
+}
+
 // Validate environment variables
 if (!token || !clientId) {
   console.error('Missing DISCORD_TOKEN or CLIENT_ID');
@@ -332,6 +339,13 @@ const rest = new REST({ version: '10' }).setToken(token);
 
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot || !msg.guild) return;
+  // Blacklist checks
+  if (await isBlacklisted(msg.guild.id, msg.author.id)) {
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted').setDescription('You are blacklisted from using this bot.').setColor(0xe74c3c)] });
+  }
+  if (await isChannelBlacklisted(msg.guild.id, msg.channel.id)) {
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('Commands are disabled in this channel.').setColor(0xe74c3c)] });
+  }
   // Increment message count in user_stats
   const { data, error } = await supabase.from('user_stats').select('message_count').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
   if (error && error.code !== 'PGRST116') {
@@ -395,6 +409,14 @@ client.on('messageCreate', async (msg) => {
 
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+  
+  // Blacklist checks
+  if (await isBlacklisted(interaction.guild.id, interaction.user.id)) {
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted').setDescription('You are blacklisted from using this bot.').setColor(0xe74c3c)], ephemeral: true });
+  }
+  if (await isChannelBlacklisted(interaction.guild.id, interaction.channel.id)) {
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('Commands are disabled in this channel.').setColor(0xe74c3c)], ephemeral: true });
+  }
   
   try {
     const { commandName } = interaction;
@@ -533,38 +555,25 @@ client.on('guildMemberAdd', async (member) => {
         logError('welcome-permission', msg);
         return;
       }
-        let msg = welcome.message || 'Welcome, {user}, to {server}!';
+      let msg = welcome.message || 'Welcome, {user}, to {server}!';
       msg = msg.replace('{user}', `<@${member.id}>`).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
       try {
+        const imageUrl = welcome.image && welcome.image.trim() ? welcome.image.trim() : null;
+        let validImage = false;
+        if (imageUrl) {
+          try {
+            const url = new URL(imageUrl);
+            const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+            validImage = validExtensions.some(ext => url.pathname.toLowerCase().endsWith(ext)) || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net');
+          } catch {}
+        }
         if (welcome.embed) {
           const embed = new EmbedBuilder().setDescription(msg).setColor(welcome.color || 0x1abc9c);
-          
-          // Validate and set image if provided
-          if (welcome.image && welcome.image.trim()) {
-            const imageUrl = welcome.image.trim();
-            // Check if it's a valid URL
-            try {
-              const url = new URL(imageUrl);
-              // Check if it's an image or GIF URL
-              const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-              const hasValidExtension = validExtensions.some(ext => 
-                url.pathname.toLowerCase().endsWith(ext)
-              );
-              
-              if (hasValidExtension || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net')) {
-                embed.setImage(imageUrl);
-                console.log(`[WELCOME] Set image: ${imageUrl}`);
-              } else {
-                console.warn(`[WELCOME] Invalid image URL format: ${imageUrl}. Must be a direct link ending in .jpg, .png, .gif, etc.`);
-              }
-            } catch (urlError) {
-              console.warn(`[WELCOME] Invalid image URL: ${imageUrl}`, urlError.message);
-            }
-          }
-          
+          if (validImage) embed.setImage(imageUrl);
           await channel.send({ embeds: [embed] });
         } else {
           await channel.send(msg);
+          if (validImage) await channel.send(imageUrl);
         }
       } catch (e) {
         const errMsg = `[WELCOME] Failed to send welcome message in ${channel.name} (${channel.id}): ${e.message || JSON.stringify(e)}`;
@@ -599,38 +608,25 @@ client.on('guildMemberRemove', async (member) => {
         logError('goodbye-permission', msg);
         return;
       }
-        let msg = goodbye.message || 'Goodbye, {user}! We\'ll miss you!';
+      let msg = goodbye.message || 'Goodbye, {user}! We\'ll miss you!';
       msg = msg.replace('{user}', member.user.tag).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
       try {
+        const imageUrl = goodbye.image && goodbye.image.trim() ? goodbye.image.trim() : null;
+        let validImage = false;
+        if (imageUrl) {
+          try {
+            const url = new URL(imageUrl);
+            const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+            validImage = validExtensions.some(ext => url.pathname.toLowerCase().endsWith(ext)) || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net');
+          } catch {}
+        }
         if (goodbye.embed) {
           const embed = new EmbedBuilder().setDescription(msg).setColor(goodbye.color || 0xe74c3c);
-          
-          // Validate and set image if provided
-          if (goodbye.image && goodbye.image.trim()) {
-            const imageUrl = goodbye.image.trim();
-            // Check if it's a valid URL
-            try {
-              const url = new URL(imageUrl);
-              // Check if it's an image or GIF URL
-              const validExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-              const hasValidExtension = validExtensions.some(ext => 
-                url.pathname.toLowerCase().endsWith(ext)
-              );
-              
-              if (hasValidExtension || url.hostname.includes('cdn.discordapp.com') || url.hostname.includes('media.discordapp.net')) {
-                embed.setImage(imageUrl);
-                console.log(`[GOODBYE] Set image: ${imageUrl}`);
-              } else {
-                console.warn(`[GOODBYE] Invalid image URL format: ${imageUrl}. Must be a direct link ending in .jpg, .png, .gif, etc.`);
-              }
-            } catch (urlError) {
-              console.warn(`[GOODBYE] Invalid image URL: ${imageUrl}`, urlError.message);
-            }
-          }
-          
+          if (validImage) embed.setImage(imageUrl);
           await channel.send({ embeds: [embed] });
         } else {
           await channel.send(msg);
+          if (validImage) await channel.send(imageUrl);
         }
       } catch (e) {
         const errMsg = `[GOODBYE] Failed to send goodbye message in ${channel.name} (${channel.id}): ${e.message || JSON.stringify(e)}`;
@@ -642,6 +638,24 @@ client.on('guildMemberRemove', async (member) => {
     console.error(`[MEMBER-LEAVE] Error processing member leave for ${member.user.tag} in ${member.guild.name}:`, e.message || JSON.stringify(e));
     logError('member-leave', e.message || JSON.stringify(e));
   }
+});
+
+// Store last deleted messages for sniping
+// Structure: global.snipedMessages = { [guildId]: { [channelId]: { content, author, timestamp } } }
+global.snipedMessages = global.snipedMessages || {};
+
+client.on('messageDelete', async (message) => {
+  if (!message.guild || !message.channel || message.author?.bot) return;
+  // Check if sniping is enabled for this guild
+  global.sniperEnabled = global.sniperEnabled || {};
+  if (!global.sniperEnabled[message.guild.id]) return;
+  // Store the deleted message
+  if (!global.snipedMessages[message.guild.id]) global.snipedMessages[message.guild.id] = {};
+  global.snipedMessages[message.guild.id][message.channel.id] = {
+    content: message.content || '[No text content]',
+    author: message.author ? `${message.author.tag} (${message.author.id})` : 'Unknown',
+    timestamp: message.createdTimestamp
+  };
 });
 
 // Login

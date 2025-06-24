@@ -1,6 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const os = require('os');
+const fs = require('fs');
+const path = require('path');
+const archiver = require('archiver');
 
 const commandDescriptions = {
   // Setup & Configuration
@@ -58,9 +61,22 @@ const commandDescriptions = {
   reset: 'Reset the command prefix to default (; and &). Usage: `;reset` (owner only)',
   top: 'Show top users by messages, infractions, or uptime. Usage: `&top messages`, `&top infractions`, or `&top uptime`',
   sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Usage: `&sysinfo`',
-  trace: 'Simulates tracking a user\'s origin for fun. Usage: `&trace @user`',
   man: 'Returns the help info for a command like a Linux manpage. Usage: `&man <command>`',
   passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
+  jump: 'Send a clickable link to a message by ID. Usage: `&jump <message_id>` or `/jump <message_id>`',
+  archive: 'Archive messages from a channel to a zip/log file. Usage: `/archive #channel [days]` (admin only)',
+  mirror: 'Automatically mirror messages between channels. Usage: `/mirror #source #target` (admin only)',
+  cooldown: 'Set or view command cooldowns. Usage: `/cooldown <command> <seconds>` (admin only)',
+  watchword: 'Watch for specific words and take actions (delete, warn, log, etc). Usage: `/watchword add/remove <word> <actions...>` (admin only)',
+  cloak: 'Temporarily disguise a user\'s name and avatar. Usage: `/cloak @user <nickname>` (admin only)',
+  blacklistword: 'Ban a word (e.g., "sus"). Deletes and logs messages. Usage: `&blacklistword <word>` or `/blacklistword <word>` (admin only)',
+  curse: 'Edit every message a user sends (add emoji/suffix). Usage: `&curse @user` or `/curse @user` (admin only)',
+  npcgen: 'Generate a random character with traits, class, and name. Usage: `&npcgen` or `/npcgen`',
+  worldstate: 'Describe the fictional world state of the server. Usage: `&worldstate` or `/worldstate`',
+  whois: 'Show another user\'s info. Usage: `;whois [@user]`',
+  'co-owners': 'Manage co-owners for bot setup and management. Usage: `&co-owners add/remove/list @user` (owner only)',
+  'add-co-owner': 'Add a co-owner to help with bot management. Usage: `&add-co-owner @user` (owner only)',
+  'remove-co-owner': 'Remove a co-owner. Usage: `&remove-co-owner @user` (owner only)'
 };
 
 // Translation function with language detection
@@ -283,7 +299,6 @@ const prefixCommands = {
     }
     const user = msg.mentions.users.first();
     if (!user) return msg.reply('Please mention a user to spy on.');
-    // Store user ID in a spy list (in-memory for now, can be persisted)
     global.spyUsers = global.spyUsers || {};
     global.spyUsers[msg.guild.id] = global.spyUsers[msg.guild.id] || new Set();
     global.spyUsers[msg.guild.id].add(user.id);
@@ -314,8 +329,25 @@ const prefixCommands = {
       global.sniperEnabled = global.sniperEnabled || {};
       global.sniperEnabled[msg.guild.id] = false;
       return msg.reply('Sniper disabled.');
+    } else if (!arg) {
+      // Show last deleted message in this channel
+      global.snipedMessages = global.snipedMessages || {};
+      const sniped = global.snipedMessages[msg.guild.id]?.[msg.channel.id];
+      if (!sniped) {
+        return msg.reply('No recently deleted message found in this channel.');
+      }
+      const embed = new EmbedBuilder()
+        .setTitle('Sniped Message')
+        .setDescription(sniped.content)
+        .addFields(
+          { name: 'Author', value: sniped.author, inline: true },
+          { name: 'Deleted At', value: `<t:${Math.floor(sniped.timestamp/1000)}:R>`, inline: true }
+        )
+        .setColor(0x7289da)
+        .setTimestamp(sniped.timestamp);
+      return msg.reply({ embeds: [embed] });
     } else {
-      return msg.reply('Usage: &sniper on/off');
+      return msg.reply('Usage: &sniper on/off or &sniper to snipe the last deleted message.');
     }
   },
 
@@ -561,7 +593,240 @@ const prefixCommands = {
       set_by: msg.author.id
     }, { onConflict: ['guild_id', 'user_id'] });
     return msg.reply(`Set a secret codeword for <@${user.id}>.`);
-  }
+  },
+
+  jump: async (msg, args) => {
+    const messageId = args[0];
+    if (!messageId || !/^[0-9]{17,20}$/.test(messageId)) {
+      return msg.reply('Please provide a valid message ID.');
+    }
+    try {
+      // Try to find the message in the current channel first
+      let message = null;
+      try {
+        message = await msg.channel.messages.fetch(messageId);
+      } catch {}
+      // If not found, search all text channels in the guild
+      if (!message) {
+        for (const channel of msg.guild.channels.cache.values()) {
+          if (channel.isTextBased && channel.isTextBased()) {
+            try {
+              message = await channel.messages.fetch(messageId);
+              if (message) break;
+            } catch {}
+          }
+        }
+      }
+      if (!message) return msg.reply('Message not found in this server or I lack access.');
+      const link = `https://discord.com/channels/${msg.guild.id}/${message.channel.id}/${message.id}`;
+      return msg.reply({ content: `Jump to message: <${link}>` });
+    } catch (e) {
+      return msg.reply('Failed to fetch message.');
+    }
+  },
+
+  archive: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const channel = msg.mentions.channels.first() || msg.channel;
+    let days = parseInt(args[1]);
+    if (isNaN(days) || days < 1) days = null;
+    try {
+      let after = null;
+      if (days) {
+        after = Date.now() - days * 24 * 60 * 60 * 1000;
+      }
+      let messages = [];
+      let lastId = null;
+      let fetched;
+      do {
+        fetched = await channel.messages.fetch({ limit: 100, before: lastId });
+        const filtered = after ? fetched.filter(m => m.createdTimestamp >= after) : fetched;
+        messages.push(...filtered.values());
+        lastId = fetched.size > 0 ? fetched.last().id : null;
+      } while (fetched.size === 100 && messages.length < 1000); // Discord API limit
+      if (messages.length === 0) return msg.reply('No messages found to archive.');
+      // Format messages
+      const log = messages.reverse().map(m => `[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.cleanContent}`).join(os.EOL);
+      const filename = `archive_${channel.id}_${Date.now()}.txt`;
+      fs.writeFileSync(filename, log);
+      // Zip the file
+      const zipname = filename.replace('.txt', '.zip');
+      const output = fs.createWriteStream(zipname);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(output);
+      archive.file(filename, { name: path.basename(filename) });
+      await archive.finalize();
+      // DM the user
+      await msg.author.send({ files: [zipname] });
+      // Log in DB
+      await supabase.from('message_archives').insert({
+        guild_id: msg.guild.id,
+        channel_id: channel.id,
+        requested_by: msg.author.id,
+        file_url: null // Not using external storage
+      });
+      // Cleanup
+      fs.unlinkSync(filename);
+      fs.unlinkSync(zipname);
+      return msg.reply('Archive sent to your DMs!');
+    } catch (e) {
+      return msg.reply('Failed to archive messages.');
+    }
+  },
+
+  mirror: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const source = msg.mentions.channels.first();
+    const target = msg.mentions.channels.last();
+    if (!source || !target || source.id === target.id) return msg.reply('Usage: &mirror #source #target');
+    try {
+      await supabase.from('channel_mirrors').upsert({
+        guild_id: msg.guild.id,
+        source_channel_id: source.id,
+        target_channel_id: target.id,
+        enabled: true
+      });
+      return msg.reply(`Mirroring enabled: ${source} → ${target}`);
+    } catch (e) {
+      return msg.reply('Failed to set up mirror.');
+    }
+  },
+
+  cooldown: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const command = args[0]?.toLowerCase();
+    const seconds = args[1] ? parseInt(args[1]) : null;
+    if (!command) return msg.reply('Usage: &cooldown <command> <seconds>');
+    if (seconds !== null && (isNaN(seconds) || seconds < 0)) return msg.reply('Cooldown must be a non-negative number.');
+    try {
+      if (seconds === null) {
+        // View cooldown
+        const { data } = await supabase.from('command_cooldowns').select('cooldown_seconds').eq('guild_id', msg.guild.id).eq('command', command).single();
+        if (!data) return msg.reply('No cooldown set for this command.');
+        return msg.reply(`Cooldown for \`${command}\` is ${data.cooldown_seconds} seconds.`);
+      } else {
+        // Set cooldown
+        await supabase.from('command_cooldowns').upsert({
+          guild_id: msg.guild.id,
+          command,
+          cooldown_seconds: seconds
+        });
+        return msg.reply(`Cooldown for \`${command}\` set to ${seconds} seconds.`);
+      }
+    } catch (e) {
+      return msg.reply('Failed to set/view cooldown.');
+    }
+  },
+
+  watchword: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const sub = args[0]?.toLowerCase();
+    if (!sub || !['add','remove','list'].includes(sub)) {
+      return msg.reply('Usage: &watchword add <word> <actions...> | remove <word> | list');
+    }
+    if (sub === 'add') {
+      const word = args[1];
+      const actions = args.slice(2).map(a => a.toLowerCase());
+      if (!word || actions.length === 0) return msg.reply('Usage: &watchword add <word> <actions...>');
+      const valid = ['delete','warn','log'];
+      if (!actions.every(a => valid.includes(a))) return msg.reply('Actions: delete, warn, log');
+      await addWatchword(msg.guild.id, word, actions, msg.author.id);
+      return msg.reply(`Watchword "${word}" added with actions: ${actions.join(', ')}`);
+    } else if (sub === 'remove') {
+      const word = args[1];
+      if (!word) return msg.reply('Usage: &watchword remove <word>');
+      await removeWatchword(msg.guild.id, word);
+      return msg.reply(`Watchword "${word}" removed.`);
+    } else if (sub === 'list') {
+      const list = await getWatchwords(msg.guild.id);
+      if (!list.length) return msg.reply('No watchwords set.');
+      const desc = list.map(w => `• **${w.word}** — ${w.actions.join(', ')}`).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)] });
+    }
+  },
+
+  cloak: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const user = msg.mentions.users.first();
+    const nickname = args.slice(1).join(' ');
+    if (!user || !nickname) return msg.reply('Usage: &cloak @user <nickname>');
+    const ok = await cloakUser(msg.guild, user.id, nickname);
+    if (ok) return msg.reply(`User <@${user.id}> is now cloaked as "${nickname}".`);
+    return msg.reply('Failed to cloak user.');
+  },
+
+  blacklistword: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const sub = args[0]?.toLowerCase();
+    if (!sub || !['add','remove','list'].includes(sub)) {
+      return msg.reply('Usage: &blacklistword add <word> | remove <word> | list');
+    }
+    if (sub === 'add') {
+      const word = args[1];
+      if (!word) return msg.reply('Usage: &blacklistword add <word>');
+      await addBlacklistedWord(msg.guild.id, word, msg.author.id);
+      return msg.reply(`Blacklisted word "${word}" added.`);
+    } else if (sub === 'remove') {
+      const word = args[1];
+      if (!word) return msg.reply('Usage: &blacklistword remove <word>');
+      await removeBlacklistedWord(msg.guild.id, word);
+      return msg.reply(`Blacklisted word "${word}" removed.`);
+    } else if (sub === 'list') {
+      const list = await getBlacklistedWords(msg.guild.id);
+      if (!list.length) return msg.reply('No blacklisted words set.');
+      const desc = list.map(w => `• **${w.word}**`).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)] });
+    }
+  },
+
+  curse: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const user = msg.mentions.users.first();
+    const suffix = args.slice(1).join(' ') || '😈';
+    if (!user) return msg.reply('Usage: &curse @user [suffix]');
+    await addCursedUser(msg.guild.id, user.id, suffix, msg.author.id);
+    return msg.reply(`User <@${user.id}> is now cursed. All their messages will end with "${suffix}".`);
+  },
+
+  npcgen: async (msg, args) => {
+    const npc = generateNPC();
+    const desc = `**Name:** ${npc.name}\n**Race:** ${npc.race}\n**Class:** ${npc.class}\n**Trait:** ${npc.trait}`;
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Random NPC').setDescription(desc).setColor(0x8e44ad)] });
+  },
+
+  worldstate: async (msg, args) => {
+    if (!args.length) {
+      const state = await getWorldState(msg.guild.id);
+      if (!state) return msg.reply('No world state set.');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('World State').setDescription(state).setColor(0x16a085)] });
+    }
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const state = args.join(' ');
+    await setWorldState(msg.guild.id, state);
+    return msg.reply('World state updated.');
+  },
+
+  whois: async (msg, args) => {
+    let member;
+    if (msg.mentions.members.size > 0) {
+      member = msg.mentions.members.first();
+    } else if (args[0]) {
+      // Try to fetch by ID
+      try {
+        member = await msg.guild.members.fetch(args[0]);
+      } catch {
+        return msg.reply('User not found. Please mention a user or provide a valid user ID.');
+      }
+    } else {
+      member = msg.member;
+    }
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Info').addFields(
+      { name: 'Username', value: member.user.username, inline: true },
+      { name: 'ID', value: member.id, inline: true },
+      { name: 'Joined', value: member.joinedAt.toDateString(), inline: true },
+      { name: 'Roles', value: member.roles.cache.map(r => r.name).join(', ') || 'None' }
+    ).setColor(0x9b59b6)] });
+  },
 };
 
 // Slash commands
@@ -569,12 +834,21 @@ const PAGE_SIZE = 8;
 
 function getAllCommandsByCategory() {
   return [
-    { category: '🔧 Setup & Configuration', commands: ['setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands'] },
-    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] },
-    { category: '🎫 Ticket System', commands: ['ticketsetup'] },
-    { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'ghostping', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab'] },
-    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'trace', 'man', 'top', 'sysinfo', 'passwd'] }
+    { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case'] },
+    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd'] },
+    { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner'] },
+    { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
+    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
   ];
+}
+
+function getTotalCommandCount() {
+  const categories = getAllCommandsByCategory();
+  let total = 0;
+  for (const cat of categories) {
+    total += cat.commands.length;
+  }
+  return total;
 }
 
 function getPaginatedCommands(page = 0) {
@@ -624,7 +898,7 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show all bot commands with descriptions and usage (paginated)')
-];
+],
 
 // Slash command handlers
 const slashHandlers = {
@@ -708,17 +982,241 @@ const slashHandlers = {
   help: async (interaction) => {
     let page = 0;
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const totalCommands = getTotalCommandCount();
+    
     const embed = new EmbedBuilder()
-      .setTitle('🤖 Bot Commands')
+      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
       .setColor(0x7289da);
+    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(true),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
     );
     await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
-  }
+  },
+
+  jump: async (interaction) => {
+    const messageId = interaction.options.getString('message_id');
+    if (!messageId || !/^[0-9]{17,20}$/.test(messageId)) {
+      return interaction.reply({ content: 'Please provide a valid message ID.', ephemeral: true });
+    }
+    try {
+      // Try to find the message in the current channel first
+      let message = null;
+      try {
+        message = await interaction.channel.messages.fetch(messageId);
+      } catch {}
+      // If not found, search all text channels in the guild
+      if (!message) {
+        for (const channel of interaction.guild.channels.cache.values()) {
+          if (channel.isTextBased && channel.isTextBased()) {
+            try {
+              message = await channel.messages.fetch(messageId);
+              if (message) break;
+            } catch {}
+          }
+        }
+      }
+      if (!message) return interaction.reply({ content: 'Message not found in this server or I lack access.', ephemeral: true });
+      const link = `https://discord.com/channels/${interaction.guild.id}/${message.channel.id}/${message.id}`;
+      return interaction.reply({ content: `Jump to message: <${link}>`, ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ content: 'Failed to fetch message.', ephemeral: true });
+    }
+  },
+
+  archive: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const channel = interaction.options.getChannel('channel') || interaction.channel;
+    let days = interaction.options.getInteger('days');
+    if (isNaN(days) || days < 1) days = null;
+    try {
+      let after = null;
+      if (days) {
+        after = Date.now() - days * 24 * 60 * 60 * 1000;
+      }
+      let messages = [];
+      let lastId = null;
+      let fetched;
+      do {
+        fetched = await channel.messages.fetch({ limit: 100, before: lastId });
+        const filtered = after ? fetched.filter(m => m.createdTimestamp >= after) : fetched;
+        messages.push(...filtered.values());
+        lastId = fetched.size > 0 ? fetched.last().id : null;
+      } while (fetched.size === 100 && messages.length < 1000);
+      if (messages.length === 0) return interaction.reply({ content: 'No messages found to archive.', ephemeral: true });
+      // Format messages
+      const log = messages.reverse().map(m => `[${new Date(m.createdTimestamp).toISOString()}] ${m.author.tag}: ${m.cleanContent}`).join(os.EOL);
+      const filename = `archive_${channel.id}_${Date.now()}.txt`;
+      fs.writeFileSync(filename, log);
+      // Zip the file
+      const zipname = filename.replace('.txt', '.zip');
+      const output = fs.createWriteStream(zipname);
+      const archive = archiver('zip', { zlib: { level: 9 } });
+      archive.pipe(output);
+      archive.file(filename, { name: path.basename(filename) });
+      await archive.finalize();
+      // DM the user
+      await interaction.user.send({ files: [zipname] });
+      // Log in DB
+      await supabase.from('message_archives').insert({
+        guild_id: interaction.guild.id,
+        channel_id: channel.id,
+        requested_by: interaction.user.id,
+        file_url: null
+      });
+      // Cleanup
+      fs.unlinkSync(filename);
+      fs.unlinkSync(zipname);
+      return interaction.reply({ content: 'Archive sent to your DMs!', ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ content: 'Failed to archive messages.', ephemeral: true });
+    }
+  },
+
+  mirror: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const source = interaction.options.getChannel('source');
+    const target = interaction.options.getChannel('target');
+    if (!source || !target || source.id === target.id) return interaction.reply({ content: 'Usage: /mirror #source #target', ephemeral: true });
+    try {
+      await supabase.from('channel_mirrors').upsert({
+        guild_id: interaction.guild.id,
+        source_channel_id: source.id,
+        target_channel_id: target.id,
+        enabled: true
+      });
+      return interaction.reply({ content: `Mirroring enabled: ${source} → ${target}`, ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ content: 'Failed to set up mirror.', ephemeral: true });
+    }
+  },
+
+  cooldown: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const command = interaction.options.getString('command')?.toLowerCase();
+    const seconds = interaction.options.getInteger('seconds');
+    if (!command) return interaction.reply({ content: 'Usage: /cooldown <command> <seconds>', ephemeral: true });
+    if (seconds !== null && seconds !== undefined && (isNaN(seconds) || seconds < 0)) return interaction.reply({ content: 'Cooldown must be a non-negative number.', ephemeral: true });
+    try {
+      if (seconds === null || seconds === undefined) {
+        // View cooldown
+        const { data } = await supabase.from('command_cooldowns').select('cooldown_seconds').eq('guild_id', interaction.guild.id).eq('command', command).single();
+        if (!data) return interaction.reply({ content: 'No cooldown set for this command.', ephemeral: true });
+        return interaction.reply({ content: `Cooldown for \`${command}\` is ${data.cooldown_seconds} seconds.`, ephemeral: true });
+      } else {
+        // Set cooldown
+        await supabase.from('command_cooldowns').upsert({
+          guild_id: interaction.guild.id,
+          command,
+          cooldown_seconds: seconds
+        });
+        return interaction.reply({ content: `Cooldown for \`${command}\` set to ${seconds} seconds.`, ephemeral: true });
+      }
+    } catch (e) {
+      return interaction.reply({ content: 'Failed to set/view cooldown.', ephemeral: true });
+    }
+  },
+
+  watchword: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'add') {
+      const word = interaction.options.getString('word');
+      const actions = interaction.options.getString('actions').split(',').map(a => a.trim().toLowerCase());
+      const valid = ['delete','warn','log'];
+      if (!actions.every(a => valid.includes(a))) return interaction.reply({ content: 'Actions: delete, warn, log', ephemeral: true });
+      await addWatchword(interaction.guild.id, word, actions, interaction.user.id);
+      return interaction.reply({ content: `Watchword "${word}" added with actions: ${actions.join(', ')}`, ephemeral: true });
+    } else if (sub === 'remove') {
+      const word = interaction.options.getString('word');
+      await removeWatchword(interaction.guild.id, word);
+      return interaction.reply({ content: `Watchword "${word}" removed.`, ephemeral: true });
+    } else if (sub === 'list') {
+      const list = await getWatchwords(interaction.guild.id);
+      if (!list.length) return interaction.reply({ content: 'No watchwords set.', ephemeral: true });
+      const desc = list.map(w => `• **${w.word}** — ${w.actions.join(', ')}`).join('\n');
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)], ephemeral: true });
+    }
+  },
+
+  cloak: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const user = interaction.options.getUser('user');
+    const nickname = interaction.options.getString('nickname');
+    const ok = await cloakUser(interaction.guild, user.id, nickname);
+    if (ok) return interaction.reply({ content: `User <@${user.id}> is now cloaked as "${nickname}".`, ephemeral: true });
+    return interaction.reply({ content: 'Failed to cloak user.', ephemeral: true });
+  },
+
+  blacklistword: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'add') {
+      const word = interaction.options.getString('word');
+      await addBlacklistedWord(interaction.guild.id, word, interaction.user.id);
+      return interaction.reply({ content: `Blacklisted word "${word}" added.`, ephemeral: true });
+    } else if (sub === 'remove') {
+      const word = interaction.options.getString('word');
+      await removeBlacklistedWord(interaction.guild.id, word);
+      return interaction.reply({ content: `Blacklisted word "${word}" removed.`, ephemeral: true });
+    } else if (sub === 'list') {
+      const list = await getBlacklistedWords(interaction.guild.id);
+      if (!list.length) return interaction.reply({ content: 'No blacklisted words set.', ephemeral: true });
+      const desc = list.map(w => `• **${w.word}**`).join('\n');
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)], ephemeral: true });
+    }
+  },
+
+  curse: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const user = interaction.options.getUser('user');
+    const suffix = interaction.options.getString('suffix') || '😈';
+    await addCursedUser(interaction.guild.id, user.id, suffix, interaction.user.id);
+    return interaction.reply({ content: `User <@${user.id}> is now cursed. All their messages will end with "${suffix}".`, ephemeral: true });
+  },
+
+  npcgen: async (interaction) => {
+    const npc = generateNPC();
+    const desc = `**Name:** ${npc.name}\n**Race:** ${npc.race}\n**Class:** ${npc.class}\n**Trait:** ${npc.trait}`;
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Random NPC').setDescription(desc).setColor(0x8e44ad)], ephemeral: true });
+  },
+
+  worldstate: async (interaction) => {
+    const state = interaction.options.getString('state');
+    if (!state) {
+      const current = await getWorldState(interaction.guild.id);
+      if (!current) return interaction.reply({ content: 'No world state set.', ephemeral: true });
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('World State').setDescription(current).setColor(0x16a085)], ephemeral: true });
+    }
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    await setWorldState(interaction.guild.id, state);
+    return interaction.reply({ content: 'World state updated.', ephemeral: true });
+  },
+
+  whois: async (interaction) => {
+    let member;
+    if (interaction.options.getMember('user')) {
+      member = interaction.options.getMember('user');
+    } else if (interaction.options.getString('user_id')) {
+      // Try to fetch by ID
+      try {
+        member = await interaction.guild.members.fetch(interaction.options.getString('user_id'));
+      } catch {
+        return interaction.reply({ content: 'User not found. Please mention a user or provide a valid user ID.', ephemeral: true });
+      }
+    } else {
+      member = interaction.member;
+    }
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('User Info').addFields(
+      { name: 'Username', value: member.user.username, inline: true },
+      { name: 'ID', value: member.id, inline: true },
+      { name: 'Joined', value: member.joinedAt.toDateString(), inline: true },
+      { name: 'Roles', value: member.roles.cache.map(r => r.name).join(', ') || 'None' }
+    ).setColor(0x9b59b6)] });
+  },
 };
 
 // Add button handler for pagination
@@ -727,11 +1225,14 @@ const buttonHandlers = {
     let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10) - 2;
     if (page < 0) page = 0;
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const totalCommands = getTotalCommandCount();
+    
     const embed = new EmbedBuilder()
-      .setTitle('🤖 Bot Commands')
+      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
       .setColor(0x7289da);
+    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
@@ -741,21 +1242,319 @@ const buttonHandlers = {
   help_next: async (interaction) => {
     let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10);
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
+    const totalCommands = getTotalCommandCount();
+    
     const embed = new EmbedBuilder()
-      .setTitle('🤖 Bot Commands')
+      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
       .setColor(0x7289da);
+    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
     );
     await interaction.update({ embeds: [embed], components: [row] });
+  },
+};
+
+// --- WATCHWORD SYSTEM ---
+
+// Helper: fetch all watchwords for a guild
+async function getWatchwords(guildId) {
+  const { data, error } = await supabase.from('watchwords').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  return data || [];
+}
+
+// Helper: add a watchword
+async function addWatchword(guildId, word, actions, addedBy) {
+  return await supabase.from('watchwords').upsert({
+    guild_id: guildId,
+    word: word.toLowerCase(),
+    actions,
+    added_by: addedBy
+  });
+}
+
+// Helper: remove a watchword
+async function removeWatchword(guildId, word) {
+  return await supabase.from('watchwords').delete().eq('guild_id', guildId).eq('word', word.toLowerCase());
+}
+
+// Message monitoring for watchwords
+async function monitorWatchwords(msg) {
+  if (!msg.guild || msg.author.bot) return;
+  const watchwords = await getWatchwords(msg.guild.id);
+  if (!watchwords.length) return;
+  const content = msg.content.toLowerCase();
+  for (const w of watchwords) {
+    if (content.includes(w.word)) {
+      // Perform actions
+      if (w.actions.includes('delete')) {
+        await msg.delete().catch(() => {});
+      }
+      if (w.actions.includes('warn')) {
+        await msg.reply({ content: `Watchword triggered: "${w.word}". Please avoid using this word.`, allowedMentions: { repliedUser: false } }).catch(() => {});
+      }
+      if (w.actions.includes('log')) {
+        // Log to modlog channel if set
+        const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', msg.guild.id).single();
+        if (config && config.log_channel) {
+          const channel = msg.guild.channels.cache.get(config.log_channel);
+          if (channel && channel.isTextBased()) {
+            await channel.send({ embeds: [new EmbedBuilder()
+              .setTitle('Watchword Triggered')
+              .setDescription(`User: <@${msg.author.id}>\nWord: **${w.word}**\nMessage: ${msg.content}`)
+              .setColor(0xe67e22)
+              .setTimestamp()
+            ] });
+          }
+        }
+      }
+      break; // Only trigger on first match per message
+    }
+  }
+}
+
+// --- BLACKLISTWORD SYSTEM ---
+
+// Helper: fetch all blacklisted words for a guild
+async function getBlacklistedWords(guildId) {
+  const { data, error } = await supabase.from('blacklisted_words').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  return data || [];
+}
+
+// Helper: add a blacklisted word
+async function addBlacklistedWord(guildId, word, addedBy) {
+  return await supabase.from('blacklisted_words').upsert({
+    guild_id: guildId,
+    word: word.toLowerCase(),
+    added_by: addedBy
+  });
+}
+
+// Helper: remove a blacklisted word
+async function removeBlacklistedWord(guildId, word) {
+  return await supabase.from('blacklisted_words').delete().eq('guild_id', guildId).eq('word', word.toLowerCase());
+}
+
+// Prefix command: &blacklistword add/remove/list <word>
+prefixCommands.blacklistword = async (msg, args) => {
+  if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+  const sub = args[0]?.toLowerCase();
+  if (!sub || !['add','remove','list'].includes(sub)) {
+    return msg.reply('Usage: &blacklistword add <word> | remove <word> | list');
+  }
+  if (sub === 'add') {
+    const word = args[1];
+    if (!word) return msg.reply('Usage: &blacklistword add <word>');
+    await addBlacklistedWord(msg.guild.id, word, msg.author.id);
+    return msg.reply(`Blacklisted word "${word}" added.`);
+  } else if (sub === 'remove') {
+    const word = args[1];
+    if (!word) return msg.reply('Usage: &blacklistword remove <word>');
+    await removeBlacklistedWord(msg.guild.id, word);
+    return msg.reply(`Blacklisted word "${word}" removed.`);
+  } else if (sub === 'list') {
+    const list = await getBlacklistedWords(msg.guild.id);
+    if (!list.length) return msg.reply('No blacklisted words set.');
+    const desc = list.map(w => `• **${w.word}**`).join('\n');
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)] });
   }
 };
 
+// Add slash command definition
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('blacklistword')
+    .setDescription('Manage blacklisted words (admin only)')
+    .addSubcommand(sub =>
+      sub.setName('add')
+        .setDescription('Add a blacklisted word')
+        .addStringOption(opt => opt.setName('word').setDescription('Word to blacklist').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('remove')
+        .setDescription('Remove a blacklisted word')
+        .addStringOption(opt => opt.setName('word').setDescription('Word to remove').setRequired(true))
+    )
+    .addSubcommand(sub =>
+      sub.setName('list')
+        .setDescription('List all blacklisted words'))
+);
+
+// Slash handler
+slashHandlers.blacklistword = async (interaction) => {
+  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  const sub = interaction.options.getSubcommand();
+  if (sub === 'add') {
+    const word = interaction.options.getString('word');
+    await addBlacklistedWord(interaction.guild.id, word, interaction.user.id);
+    return interaction.reply({ content: `Blacklisted word "${word}" added.`, ephemeral: true });
+  } else if (sub === 'remove') {
+    const word = interaction.options.getString('word');
+    await removeBlacklistedWord(interaction.guild.id, word);
+    return interaction.reply({ content: `Blacklisted word "${word}" removed.`, ephemeral: true });
+  } else if (sub === 'list') {
+    const list = await getBlacklistedWords(interaction.guild.id);
+    if (!list.length) return interaction.reply({ content: 'No blacklisted words set.', ephemeral: true });
+    const desc = list.map(w => `• **${w.word}**`).join('\n');
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)], ephemeral: true });
+  }
+};
+
+// Message monitoring for blacklisted words
+async function monitorBlacklistedWords(msg) {
+  if (!msg.guild || msg.author.bot) return;
+  const blacklisted = await getBlacklistedWords(msg.guild.id);
+  if (!blacklisted.length) return;
+  const content = msg.content.toLowerCase();
+  for (const w of blacklisted) {
+    if (content.includes(w.word)) {
+      await msg.delete().catch(() => {});
+      // Log to modlog channel if set
+      const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', msg.guild.id).single();
+      if (config && config.log_channel) {
+        const channel = msg.guild.channels.cache.get(config.log_channel);
+        if (channel && channel.isTextBased()) {
+          await channel.send({ embeds: [new EmbedBuilder()
+            .setTitle('Blacklisted Word Triggered')
+            .setDescription(`User: <@${msg.author.id}>\nWord: **${w.word}**\nMessage: ${msg.content}`)
+            .setColor(0xc0392b)
+            .setTimestamp()
+          ] });
+        }
+      }
+      break; // Only trigger on first match per message
+    }
+  }
+}
+
+module.exports.monitorBlacklistedWords = monitorBlacklistedWords;
+
+// --- CLOAK SYSTEM ---
+async function cloakUser(guild, userId, nickname) {
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return false;
+  // Store original nickname in memory (for demo; production should use DB)
+  global.cloakedUsers = global.cloakedUsers || {};
+  global.cloakedUsers[guild.id] = global.cloakedUsers[guild.id] || {};
+  if (!global.cloakedUsers[guild.id][userId]) {
+    global.cloakedUsers[guild.id][userId] = { nickname: member.nickname };
+  }
+  await member.setNickname(nickname).catch(() => {});
+  return true;
+}
+async function uncloakUser(guild, userId) {
+  const member = await guild.members.fetch(userId).catch(() => null);
+  if (!member) return false;
+  if (global.cloakedUsers && global.cloakedUsers[guild.id] && global.cloakedUsers[guild.id][userId]) {
+    await member.setNickname(global.cloakedUsers[guild.id][userId].nickname || null).catch(() => {});
+    delete global.cloakedUsers[guild.id][userId];
+    return true;
+  }
+  return false;
+}
+
+prefixCommands.cloak = async (msg, args) => {
+  if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+  const user = msg.mentions.users.first();
+  const nickname = args.slice(1).join(' ');
+  if (!user || !nickname) return msg.reply('Usage: &cloak @user <nickname>');
+  const ok = await cloakUser(msg.guild, user.id, nickname);
+  if (ok) return msg.reply(`User <@${user.id}> is now cloaked as "${nickname}".`);
+  return msg.reply('Failed to cloak user.');
+};
+
+// --- CURSE SYSTEM ---
+// DB helpers for curse
+async function getCursedUsers(guildId) {
+  const { data, error } = await supabase.from('cursed_users').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  return data || [];
+}
+async function addCursedUser(guildId, userId, suffix, addedBy) {
+  return await supabase.from('cursed_users').upsert({
+    guild_id: guildId,
+    user_id: userId,
+    suffix,
+    added_by: addedBy
+  });
+}
+async function removeCursedUser(guildId, userId) {
+  return await supabase.from('cursed_users').delete().eq('guild_id', guildId).eq('user_id', userId);
+}
+
+prefixCommands.curse = async (msg, args) => {
+  if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+  const user = msg.mentions.users.first();
+  const suffix = args.slice(1).join(' ') || '😈';
+  if (!user) return msg.reply('Usage: &curse @user [suffix]');
+  await addCursedUser(msg.guild.id, user.id, suffix, msg.author.id);
+  return msg.reply(`User <@${user.id}> is now cursed. All their messages will end with "${suffix}".`);
+};
+
+// Message monitoring for curse
+async function monitorCursedUsers(msg) {
+  if (!msg.guild || msg.author.bot) return;
+  const cursed = await getCursedUsers(msg.guild.id);
+  if (!cursed.length) return;
+  const entry = cursed.find(c => c.user_id === msg.author.id);
+  if (entry) {
+    // Edit the message (delete and resend as bot)
+    await msg.delete().catch(() => {});
+    await msg.channel.send({ content: msg.content + ' ' + entry.suffix });
+  }
+}
+
+module.exports.monitorCursedUsers = monitorCursedUsers;
+
+// --- NPCGEN SYSTEM ---
+function randomFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function generateNPC() {
+  const names = ['Arin', 'Borin', 'Ciri', 'Doran', 'Elira', 'Fenn', 'Garen', 'Hilda', 'Ilya', 'Joren'];
+  const races = ['Human', 'Elf', 'Dwarf', 'Orc', 'Tiefling', 'Dragonborn', 'Halfling', 'Gnome'];
+  const classes = ['Warrior', 'Mage', 'Rogue', 'Cleric', 'Ranger', 'Bard', 'Paladin', 'Monk'];
+  const traits = ['Brave', 'Cunning', 'Wise', 'Charismatic', 'Stoic', 'Impulsive', 'Loyal', 'Greedy'];
+  return {
+    name: randomFrom(names),
+    race: randomFrom(races),
+    class: randomFrom(classes),
+    trait: randomFrom(traits)
+  };
+}
+
+prefixCommands.npcgen = async (msg, args) => {
+  const npc = generateNPC();
+  const desc = `**Name:** ${npc.name}\n**Race:** ${npc.race}\n**Class:** ${npc.class}\n**Trait:** ${npc.trait}`;
+  return msg.reply({ embeds: [new EmbedBuilder().setTitle('Random NPC').setDescription(desc).setColor(0x8e44ad)] });
+};
+
+// --- WORLDSTATE SYSTEM ---
+async function getWorldState(guildId) {
+  const { data, error } = await supabase.from('worldstate').select('state').eq('guild_id', guildId).single();
+  if (error || !data) return null;
+  return data.state;
+}
+async function setWorldState(guildId, state) {
+  return await supabase.from('worldstate').upsert({ guild_id: guildId, state });
+}
+
+prefixCommands.worldstate = async (msg, args) => {
+  if (!args.length) {
+    const state = await getWorldState(msg.guild.id);
+    if (!state) return msg.reply('No world state set.');
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('World State').setDescription(state).setColor(0x16a085)] });
+  }
+  if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+  const state = args.join(' ');
+  await setWorldState(msg.guild.id, state);
+  return msg.reply('World state updated.');
+};
+
 module.exports = {
-  name: 'utility',
   prefixCommands,
   slashCommands,
   slashHandlers,
