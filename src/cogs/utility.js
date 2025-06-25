@@ -336,21 +336,21 @@ const prefixCommands = {
       if (!sniped) {
         return msg.reply('No recently deleted message found in this channel.');
       }
-      const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setTitle('Sniped Message')
         .setDescription(sniped.content)
         .addFields(
           { name: 'Author', value: sniped.author, inline: true },
           { name: 'Deleted At', value: `<t:${Math.floor(sniped.timestamp/1000)}:R>`, inline: true }
         )
-        .setColor(0x7289da)
+      .setColor(0x7289da)
         .setTimestamp(sniped.timestamp);
-      return msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [embed] });
     } else {
       return msg.reply('Usage: &sniper on/off or &sniper to snipe the last deleted message.');
     }
   },
-
+  
   revert: async (msg, args) => {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
