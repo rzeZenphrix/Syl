@@ -3,6 +3,12 @@ services:
     name: asylum-bot
     env: node
     plan: free
-    buildCommand: npm install
-    startCommand: node index.js
+    buildCommand: |
+      npm ci --only=production
+      npm audit fix --audit-level=moderate || true
+    startCommand: node start.js
     healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+    autoDeploy: true
