@@ -898,7 +898,7 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('Show all bot commands with descriptions and usage (paginated)')
-],
+];
 
 // Slash command handlers
 const slashHandlers = {
