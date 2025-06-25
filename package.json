@@ -23,7 +23,6 @@
   "dependencies": {
     "@discordjs/rest": "^2.5.1",
     "@supabase/supabase-js": "^2.50.0",
-    "archiver": "^6.0.1",
     "discord-api-types": "^0.38.12",
     "discord.js": "^14.20.0",
     "dotenv": "^16.5.0",

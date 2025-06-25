@@ -1,96 +1,96 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 
-// Dynamic command collection function
-function getAllAvailableCommands() {
-  // Import all cogs to get their commands
-  const utilityCog = require('./utility.js');
-  const moderationCog = require('./moderation.js');
-  const setupCog = require('./setup.js');
-  const welcomeCog = require('./welcome.js');
-  const ticketsCog = require('./tickets.js');
+// Available commands for disabling
+const AVAILABLE_COMMANDS = {
+  // Prefix commands
+  prefix: {
+    // Setup commands
+    setup: 'Configure server settings (owner only). Affects server configuration, not user permissions.',
+    config: 'Show server configuration. Only displays settings, does not change server or bot state.',
+    logchannel: 'Set log channel for moderation actions. Affects where the bot logs actions, does not affect server permissions.',
+    say: 'Make bot say something. Only affects bot output, does not affect server or user permissions.',
+    'reset-config': 'Reset server configuration (owner only). Restores default settings for the bot in this server.',
+    autorole: 'Set autorole for new members. Affects server role assignment for new users.',
+    prefix: 'Set custom command prefix (owner only). Only affects how the bot is triggered in this server.',
+    'disable-commands': 'Manage disabled commands (owner only). Only affects which bot commands are available in this server.',
+    
+    // Ticket System
+    ticketsetup: 'Setup ticket system for support. Only affects bot ticket features, not server permissions.',
+    
+    // Moderation commands
+    ban: 'Ban a user from the server (removes them from the server entirely). Usage: `;ban @user [reason]` (admin only)',
+    kick: 'Kick a user from the server (removes them, but they can rejoin if invited). Usage: `;kick @user [reason]` (admin only)',
+    warn: 'Warn a user. Only affects bot logging and warnings, does not affect server permissions. Usage: `;warn @user <reason>` (admin only)',
+    warnings: 'Show warnings for a member. Only displays bot-logged warnings.',
+    clearwarn: 'Clear warnings for a member. Only affects bot-logged warnings.',
+    purge: 'Bulk delete messages. Affects server channel messages. Usage: `;purge <1-100>` (admin only)',
+    nuke: 'Clone and delete the channel. Affects the server channel structure. Usage: `;nuke` (admin only)',
+    blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>` (admin only)',
+    unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user` (admin only)',
+    mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]` (admin only)',
+    unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user` (admin only)',
+    timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]` (admin only)',
+    
+    // Utility commands
+    ls: 'List all text channels in the server. Only displays information, does not affect server or bot state.',
+    ps: 'List all online members in the server. Only displays information.',
+    whoami: 'Show your user info. Only displays information.',
+    ping: 'Check the bot\'s latency. Only affects bot output.',
+    uptime: 'Show bot uptime. Only affects bot output.',
+    server: 'Show server info. Only displays information.',
+    roles: 'List all roles in the server. Only displays information.',
+    avatar: 'Show a user avatar. Only displays information.',
+    poll: 'Create a poll with reactions. Only affects bot output in the channel.',
+    help: 'Show help message. Only affects bot output.',
+    reset: 'Reset the command prefix to default (; and &)',
+    spy: 'Secretly logs all messages from a specific user for moderation. Only affects bot logging, does not affect the user\'s server permissions. Usage: `&spy @user` (admin only)',
+    ghostping: 'Sends and deletes a ping instantly for fun or to test mod reactions. Only affects bot output.',
+    sniper: 'Logs and shows deleted messages (message sniping). Only affects bot logging, does not restore deleted messages in the server. Usage: `&sniper on` to enable, `&sniper off` to disable (admin only)',
+    revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user` (admin only)',
+    modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Does not show server audit log. Usage: `&modview [action] [next|prev]` (admin only)',
+    shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user` (admin only)',
+    massban: 'Ban all users with a specific role from the server. Usage: `&massban @role` (admin only)',
+    lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock` (admin only)',
+    unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock` (admin only)',
+    passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
+    crontab: 'Schedule, list, or cancel commands to run after a delay. Only affects bot command scheduling. Usage: `&crontab <time> <command>` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel (admin only)',
+    top: 'Show top users by messages, infractions, or uptime. Only displays information.',
+    sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Only displays information.',
+    'feedback-channel': 'Set the channel where anonymous feedback is sent. Usage: `&feedback-channel #channel` (admin only)',
+    'modmail-channel': 'Set the channel where modmail threads are created. Usage: `&modmail-channel #channel` (admin only)',
+    'mod-role': 'Set the role to ping during panic mode. Usage: `&mod-role @role` (admin only)',
+    'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel` (admin only)'
+  },
   
-  const allCommands = {
-    prefix: {},
-    slash: {}
-  };
-  
-  // Collect prefix commands from all cogs
-  if (utilityCog.prefixCommands) {
-    Object.assign(allCommands.prefix, utilityCog.prefixCommands);
+  // Slash commands
+  slash: {
+    setup: 'Configure server settings and enable/disable commands',
+    logchannel: 'Set the log channel for moderation actions',
+    say: 'Make the bot say something as an embed',
+    'reset-config': 'Reset server configuration to defaults (owner only)',
+    autorole: 'Set the autorole for new members',
+    prefix: 'Set custom command prefix for this server (owner only)',
+    'disable-commands': 'Manage disabled commands for this server',
+    ticketsetup: 'Setup ticket system for support',
+    ping: 'Check the bot\'s latency',
+    uptime: 'Show bot uptime',
+    ban: 'Ban a user from the server',
+    kick: 'Kick a user from the server',
+    warn: 'Warn a user',
+    warnings: 'Show warnings for a member',
+    clearwarn: 'Clear warnings for a member',
+    purge: 'Bulk delete messages',
+    blacklist: 'Add user to blacklist',
+    unblacklist: 'Remove user from blacklist',
+    mute: 'Mute a user (with duration)',
+    unmute: 'Unmute a user',
+    timeout: 'Timeout a user (with duration)',
+    server: 'Show server info',
+    avatar: 'Show a user avatar',
+    poll: 'Create a poll with reactions'
   }
-  if (moderationCog.prefixCommands) {
-    Object.assign(allCommands.prefix, moderationCog.prefixCommands);
-  }
-  if (setupCog.prefixCommands) {
-    Object.assign(allCommands.prefix, setupCog.prefixCommands);
-  }
-  if (welcomeCog.prefixCommands) {
-    Object.assign(allCommands.prefix, welcomeCog.prefixCommands);
-  }
-  if (ticketsCog.prefixCommands) {
-    Object.assign(allCommands.prefix, ticketsCog.prefixCommands);
-  }
-  
-  // Collect slash commands from all cogs
-  if (utilityCog.slashCommands) {
-    utilityCog.slashCommands.forEach(cmd => {
-      allCommands.slash[cmd.name] = cmd.description || 'No description available';
-    });
-  }
-  if (moderationCog.slashCommands) {
-    moderationCog.slashCommands.forEach(cmd => {
-      allCommands.slash[cmd.name] = cmd.description || 'No description available';
-    });
-  }
-  if (setupCog.slashCommands) {
-    setupCog.slashCommands.forEach(cmd => {
-      allCommands.slash[cmd.name] = cmd.description || 'No description available';
-    });
-  }
-  if (welcomeCog.slashCommands) {
-    welcomeCog.slashCommands.forEach(cmd => {
-      allCommands.slash[cmd.name] = cmd.description || 'No description available';
-    });
-  }
-  if (ticketsCog.slashCommands) {
-    ticketsCog.slashCommands.forEach(cmd => {
-      allCommands.slash[cmd.name] = cmd.description || 'No description available';
-    });
-  }
-  
-  return allCommands;
-}
-
-// Function to get command descriptions
-function getCommandDescriptions() {
-  const utilityCog = require('./utility.js');
-  const moderationCog = require('./moderation.js');
-  const setupCog = require('./setup.js');
-  const welcomeCog = require('./welcome.js');
-  const ticketsCog = require('./tickets.js');
-  
-  const descriptions = {};
-  
-  // Collect descriptions from all cogs
-  if (utilityCog.commandDescriptions) {
-    Object.assign(descriptions, utilityCog.commandDescriptions);
-  }
-  if (moderationCog.commandDescriptions) {
-    Object.assign(descriptions, moderationCog.commandDescriptions);
-  }
-  if (setupCog.commandDescriptions) {
-    Object.assign(descriptions, setupCog.commandDescriptions);
-  }
-  if (welcomeCog.commandDescriptions) {
-    Object.assign(descriptions, welcomeCog.commandDescriptions);
-  }
-  if (ticketsCog.commandDescriptions) {
-    Object.assign(descriptions, ticketsCog.commandDescriptions);
-  }
-  
-  return descriptions;
-}
+};
 
 // Permission checking
 async function isAdmin(member) {
@@ -154,6 +154,16 @@ async function isOwnerOrCoOwner(member) {
   }
 }
 
+// Function to get accurate command count
+function getCommandCount() {
+  const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
+  const prefixCount = Object.keys(AVAILABLE_COMMANDS.prefix).length;
+  const slashCount = Object.keys(AVAILABLE_COMMANDS.slash).length;
+  const totalCount = Object.keys(allCommands).length;
+  
+  return { prefixCount, slashCount, totalCount };
+}
+
 // Prefix commands
 const prefixCommands = {
   setup: async (msg, args) => {
@@ -177,26 +187,20 @@ const prefixCommands = {
       disabledCommands = disabledString.split(',').map(cmd => cmd.trim()).filter(Boolean);
       
       // Validate commands
-      const allCommands = getAllAvailableCommands();
-      const invalidCommands = disabledCommands.filter(cmd => !allCommands.prefix[cmd] && !allCommands.slash[cmd]);
+      const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
+      const invalidCommands = disabledCommands.filter(cmd => !allCommands[cmd]);
       
       if (invalidCommands.length > 0) {
         const embed = new EmbedBuilder()
           .setTitle('Invalid Commands')
           .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
           .addFields(
-            { name: 'Available Commands', value: Object.keys(allCommands.prefix).slice(0, 20).join(', ') + (Object.keys(allCommands.prefix).length > 20 ? '...' : ''), inline: false },
-            { name: 'Usage', value: ';setup @adminrole @extrarole1 @extrarole2 --disable command1,command2,command3', inline: false }
+            { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
+            { name: 'Usage', value: 'Use `/disable-commands list` to see all available commands', inline: false }
           )
           .setColor(0xe74c3c);
         return msg.reply({ embeds: [embed] });
       }
-    }
-    
-    // Also check for old format (commands without --disable flag)
-    const oldFormatCommands = args.filter(arg => !arg.startsWith('<@&') && !arg.startsWith('@') && arg !== '--disable' && !disabledCommands.includes(arg));
-    if (oldFormatCommands.length > 0) {
-      disabledCommands = [...new Set([...disabledCommands, ...oldFormatCommands])];
     }
     
     try {
@@ -207,13 +211,15 @@ const prefixCommands = {
         disabled_commands: disabledCommands
       });
       
+      const { prefixCount, slashCount, totalCount } = getCommandCount();
+      
       const embed = new EmbedBuilder()
         .setTitle('Setup Complete')
-        .setDescription(`**Admin Role:** ${adminRole}\n**Extra Roles:** ${extraRoles.map(r => `<@&${r}>`).join(', ') || 'None'}`)
+        .setDescription(`**Admin Role:** <@&${adminRole.id}>\n**Extra Roles:** ${extraRoles.map(r => `<@&${r}>`).join(', ') || 'None'}`)
         .addFields(
           { name: 'Disabled Commands', value: disabledCommands.length > 0 ? disabledCommands.join(', ') : 'None', inline: false },
           { name: 'Total Disabled', value: `${disabledCommands.length} commands`, inline: true },
-          { name: 'Available Commands', value: `${Object.keys(getAllAvailableCommands().prefix).length + Object.keys(getAllAvailableCommands().slash).length} total`, inline: true }
+          { name: 'Available Commands', value: `${totalCount} total (${prefixCount} prefix, ${slashCount} slash)`, inline: true }
         )
         .setColor(0x2ecc71)
         .setTimestamp();
@@ -532,14 +538,14 @@ const prefixCommands = {
           .single();
         
         const disabledCommands = data?.disabled_commands || [];
-        const allCommands = getAllAvailableCommands();
+        const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
         
         const embed = new EmbedBuilder()
           .setTitle('Disabled Commands')
           .setDescription(disabledCommands.length > 0 ? disabledCommands.join(', ') : 'No commands are currently disabled')
           .addFields(
             { name: 'Total Disabled', value: `${disabledCommands.length} commands`, inline: true },
-            { name: 'Available Commands', value: `${Object.keys(allCommands.prefix).length + Object.keys(allCommands.slash).length} total`, inline: true },
+            { name: 'Available Commands', value: `${Object.keys(allCommands).length} total`, inline: true },
             { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
           )
           .setColor(0x3498db)
@@ -575,15 +581,15 @@ const prefixCommands = {
           }
           
           // Validate commands
-          const allCommands = getAllAvailableCommands();
-          const invalidCommands = commands.filter(cmd => !allCommands.prefix[cmd] && !allCommands.slash[cmd]);
+          const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
+          const invalidCommands = commands.filter(cmd => !allCommands[cmd]);
           
           if (invalidCommands.length > 0) {
             const embed = new EmbedBuilder()
               .setTitle('Invalid Commands')
               .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
               .addFields(
-                { name: 'Available Commands', value: Object.keys(allCommands.prefix).slice(0, 20).join(', ') + (Object.keys(allCommands.prefix).length > 20 ? '...' : ''), inline: false },
+                { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
                 { name: 'Usage', value: ';disable-commands add command1,command2,reset', inline: false }
               )
               .setColor(0xe74c3c);
@@ -609,8 +615,8 @@ const prefixCommands = {
           const embed = new EmbedBuilder()
             .setTitle('All Available Commands')
             .addFields(
-              { name: 'Prefix Commands', value: Object.keys(getAllAvailableCommands().prefix).join(', '), inline: false },
-              { name: 'Slash Commands', value: Object.keys(getAllAvailableCommands().slash).join(', '), inline: false }
+              { name: 'Prefix Commands', value: Object.keys(AVAILABLE_COMMANDS.prefix).join(', '), inline: false },
+              { name: 'Slash Commands', value: Object.keys(AVAILABLE_COMMANDS.slash).join(', '), inline: false }
             )
             .setColor(0x3498db)
             .setTimestamp();
@@ -848,49 +854,119 @@ const prefixCommands = {
     return prefixCommands['co-owners'](msg, ['remove', user.id]);
   },
 
-  // Prefix command: feedbackconfig
-  feedbackconfig: async (msg, args) => {
-    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
-    if (args.length === 0) {
-      return msg.reply('Usage: ;feedbackconfig <#channel|user1,user2,...|off>');
+  'feedback-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
-    const input = args[0];
-    let feedback_channel_id = null;
-    let feedback_dm_user_ids = null;
-    if (input === 'off') {
-      // Disable feedback
-      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: null }).eq('guild_id', msg.guild.id);
-      return msg.reply('Feedback destination disabled.');
-    } else if (input.startsWith('<#') && input.endsWith('>')) {
-      // Channel mention
-      feedback_channel_id = input.replace(/<#!?(\d+)>/, '$1');
-      await supabase.from('guild_configs').update({ feedback_channel_id, feedback_dm_user_ids: null }).eq('guild_id', msg.guild.id);
-      return msg.reply(`Feedback will be sent to <#${feedback_channel_id}>.`);
-    } else {
-      // Assume comma-separated user IDs or mentions
-      const userIds = input.split(',').map(u => u.replace(/<@!?(\d+)>/, '$1').trim()).filter(Boolean);
-      if (userIds.length === 0) return msg.reply('No valid user IDs provided.');
-      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: userIds }).eq('guild_id', msg.guild.id);
-      return msg.reply(`Feedback will be sent as DMs to: ${userIds.map(id => `<@${id}>`).join(', ')}`);
+    
+    const channel = msg.mentions.channels.first();
+    if (!channel) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a channel.\nUsage: `&feedback-channel #channel`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        feedback_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Feedback Channel Set')
+        .setDescription(`Anonymous feedback will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Feedback channel error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to set feedback channel.').setColor(0xe74c3c)] });
     }
   },
 
-  // Prefix command: modmailconfig
-  modmailconfig: async (msg, args) => {
-    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
-    if (args.length === 0) {
-      return msg.reply('Usage: ;modmailconfig <#channel|off>');
+  'modmail-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
-    const input = args[0];
-    if (input === 'off') {
-      await supabase.from('guild_configs').update({ modmail_channel_id: null }).eq('guild_id', msg.guild.id);
-      return msg.reply('Modmail disabled.');
-    } else if (input.startsWith('<#') && input.endsWith('>')) {
-      const modmail_channel_id = input.replace(/<#!?(\d+)>/, '$1');
-      await supabase.from('guild_configs').update({ modmail_channel_id }).eq('guild_id', msg.guild.id);
-      return msg.reply(`Modmail will be sent to <#${modmail_channel_id}>.`);
-    } else {
-      return msg.reply('Invalid input. Usage: ;modmailconfig <#channel|off>');
+    
+    const channel = msg.mentions.channels.first();
+    if (!channel) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a channel.\nUsage: `&modmail-channel #channel`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        modmail_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Modmail Channel Set')
+        .setDescription(`Modmail threads will now be created in ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Modmail channel error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to set modmail channel.').setColor(0xe74c3c)] });
+    }
+  },
+
+  'mod-role': async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
+    }
+    
+    const role = msg.mentions.roles.first();
+    if (!role) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a role.\nUsage: `&mod-role @role`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        mod_role_id: role.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Mod Role Set')
+        .setDescription(`${role} will be pinged during panic mode`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Mod role error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to set mod role.').setColor(0xe74c3c)] });
+    }
+  },
+
+  'report-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
+    }
+    
+    const channel = msg.mentions.channels.first();
+    if (!channel) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a channel.\nUsage: `&report-channel #channel`').setColor(0xe74c3c)] });
+    }
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        report_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Report Channel Set')
+        .setDescription(`User reports will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Report channel error:', e);
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to set report channel.').setColor(0xe74c3c)] });
     }
   }
 };
@@ -983,17 +1059,24 @@ const slashCommands = [
     .addUserOption(opt => opt.setName('user').setDescription('User to remove as co-owner').setRequired(true)),
 
   new SlashCommandBuilder()
-    .setName('feedbackconfig')
-    .setDescription('Configure where feedback is sent (admin only)')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send feedback to').setRequired(false))
-    .addStringOption(opt => opt.setName('dm_users').setDescription('Comma-separated user IDs to DM feedback to').setRequired(false))
-    .addStringOption(opt => opt.setName('off').setDescription('Disable feedback').setRequired(false)),
-
+    .setName('feedback-channel')
+    .setDescription('Set the channel where anonymous feedback is sent')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for feedback').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+  
   new SlashCommandBuilder()
-    .setName('modmailconfig')
-    .setDescription('Configure the modmail channel (admin only)')
-    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send modmail to').setRequired(false))
-    .addStringOption(opt => opt.setName('off').setDescription('Disable modmail').setRequired(false))
+    .setName('modmail-channel')
+    .setDescription('Set the channel where modmail threads are created')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for modmail').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('mod-role')
+    .setDescription('Set the role to ping during panic mode')
+    .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('report-channel')
+    .setDescription('Set the channel where user reports are sent')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reports').addChannelTypes(ChannelType.GuildText).setRequired(true))
 ];
 
 // Slash command handlers
@@ -1014,15 +1097,15 @@ const slashHandlers = {
     
     // Validate commands if provided
     if (disabledCommands.length > 0) {
-      const allCommands = getAllAvailableCommands();
-      const invalidCommands = disabledCommands.filter(cmd => !allCommands.prefix[cmd] && !allCommands.slash[cmd]);
+      const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
+      const invalidCommands = disabledCommands.filter(cmd => !allCommands[cmd]);
       
       if (invalidCommands.length > 0) {
         const embed = new EmbedBuilder()
           .setTitle('Invalid Commands')
           .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
           .addFields(
-            { name: 'Available Commands', value: Object.keys(allCommands.prefix).slice(0, 20).join(', ') + (Object.keys(allCommands.prefix).length > 20 ? '...' : ''), inline: false },
+            { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
             { name: 'Usage', value: 'Use `/disable-commands list` to see all available commands', inline: false }
           )
           .setColor(0xe74c3c);
@@ -1044,7 +1127,7 @@ const slashHandlers = {
         .addFields(
           { name: 'Disabled Commands', value: disabledCommands.length > 0 ? disabledCommands.join(', ') : 'None', inline: false },
           { name: 'Total Disabled', value: `${disabledCommands.length} commands`, inline: true },
-          { name: 'Available Commands', value: `${Object.keys(getAllAvailableCommands().prefix).length + Object.keys(getAllAvailableCommands().slash).length} total`, inline: true }
+          { name: 'Available Commands', value: `${Object.keys(AVAILABLE_COMMANDS.prefix).length + Object.keys(AVAILABLE_COMMANDS.slash).length} total`, inline: true }
         )
         .setColor(0x2ecc71)
         .setTimestamp();
@@ -1174,15 +1257,15 @@ const slashHandlers = {
           }
           
           // Validate commands
-          const allCommands = getAllAvailableCommands();
-          const invalidCommands = commands.filter(cmd => !allCommands.prefix[cmd] && !allCommands.slash[cmd]);
+          const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
+          const invalidCommands = commands.filter(cmd => !allCommands[cmd]);
           
           if (invalidCommands.length > 0) {
             const embed = new EmbedBuilder()
               .setTitle('Invalid Commands')
               .setDescription(`The following commands are not valid:\n**${invalidCommands.join(', ')}**`)
               .addFields(
-                { name: 'Available Commands', value: Object.keys(allCommands.prefix).slice(0, 20).join(', ') + (Object.keys(allCommands.prefix).length > 20 ? '...' : ''), inline: false },
+                { name: 'Available Commands', value: Object.keys(allCommands).slice(0, 20).join(', ') + (Object.keys(allCommands).length > 20 ? '...' : ''), inline: false },
                 { name: 'Usage', value: 'Use `/disable-commands add command1,command2,reset` to add commands', inline: false }
               )
               .setColor(0xe74c3c);
@@ -1208,8 +1291,8 @@ const slashHandlers = {
           const embed = new EmbedBuilder()
             .setTitle('All Available Commands')
             .addFields(
-              { name: 'Prefix Commands', value: Object.keys(getAllAvailableCommands().prefix).join(', '), inline: false },
-              { name: 'Slash Commands', value: Object.keys(getAllAvailableCommands().slash).join(', '), inline: false }
+              { name: 'Prefix Commands', value: Object.keys(AVAILABLE_COMMANDS.prefix).join(', '), inline: false },
+              { name: 'Slash Commands', value: Object.keys(AVAILABLE_COMMANDS.slash).join(', '), inline: false }
             )
             .setColor(0x3498db)
             .setTimestamp();
@@ -1494,57 +1577,63 @@ const slashHandlers = {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
+    
     try {
-      // Fetch current config
+      // Get main guild config
       const { data, error } = await supabase
         .from('guild_configs')
         .select('*')
         .eq('guild_id', interaction.guild.id)
         .single();
-      if (error && error.code !== 'PGRST116') throw error;
       
-      // Get dynamic command count
-      const allCommands = getAllAvailableCommands();
-      const totalCommands = Object.keys(allCommands.prefix).length + Object.keys(allCommands.slash).length;
-      
-      if (!data) {
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle('No Config').setDescription('No configuration found. Use /setup to configure the bot.').setColor(0xe74c3c)], ephemeral: true });
+      if (error && error.code !== 'PGRST116') {
+        throw error;
       }
-      const adminRole = data.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set';
-      const extraRoles = data.extra_role_ids?.length ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None';
-      const logChannel = data.log_channel ? `<#${data.log_channel}>` : 'Not set';
-      const autorole = data.autorole ? `<@&${data.autorole}>` : 'Not set';
-      const prefix = data.custom_prefix ? `**${data.custom_prefix}**` : '; or & (default)';
-      const disabled = data.disabled_commands?.length ? data.disabled_commands.join(', ') : 'None';
       
-      // Get co-owners info
-      const coOwners = [];
-      if (data.co_owner_1_id) coOwners.push(data.co_owner_1_id);
-      if (data.co_owner_2_id) coOwners.push(data.co_owner_2_id);
-      const coOwnersText = coOwners.length > 0 ? coOwners.map(id => `<@${id}>`).join(', ') : 'None';
+      // Get welcome config
+      const { data: welcome } = await supabase
+        .from('welcome_configs')
+        .select('*')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      // Get goodbye config
+      const { data: goodbye } = await supabase
+        .from('goodbye_configs')
+        .select('*')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      // Get ticket config
+      const { data: ticket } = await supabase
+        .from('ticket_configs')
+        .select('*')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      const { prefixCount, slashCount, totalCount } = getCommandCount();
       
       const embed = new EmbedBuilder()
-        .setTitle('Setup Configuration')
+        .setTitle('Server Configuration')
         .addFields(
-          { name: 'Admin Role', value: adminRole, inline: true },
-          { name: 'Extra Roles', value: extraRoles, inline: true },
-          { name: 'Log Channel', value: logChannel, inline: true },
-          { name: 'Autorole', value: autorole, inline: true },
-          { name: 'Custom Prefix', value: prefix, inline: true },
-          { name: 'Co-Owners', value: coOwnersText, inline: true },
-          { name: 'Disabled Commands', value: disabled, inline: false },
-          { name: 'Total Commands', value: `${totalCommands} commands available`, inline: true },
-          { name: 'Disabled Count', value: `${data.disabled_commands?.length || 0} commands disabled`, inline: true }
+          { name: 'Admin Role', value: data?.admin_role_id ? `<@&${data.admin_role_id}>` : 'Not set', inline: true },
+          { name: 'Extra Roles', value: data?.extra_role_ids?.length > 0 ? data.extra_role_ids.map(r => `<@&${r}>`).join(', ') : 'None', inline: true },
+          { name: 'Custom Prefix', value: data?.custom_prefix || 'Default (; and &)', inline: true },
+          { name: 'Log Channel', value: data?.log_channel ? `<#${data.log_channel}>` : 'Not set', inline: true },
+          { name: 'Autorole', value: data?.autorole_id ? `<@&${data.autorole_id}>` : 'Not set', inline: true },
+          { name: 'Disabled Commands', value: data?.disabled_commands?.length > 0 ? `${data.disabled_commands.length} commands` : 'None', inline: true },
+          { name: 'Feedback Channel', value: data?.feedback_channel_id ? `<#${data.feedback_channel_id}>` : 'Not set', inline: true },
+          { name: 'Modmail Channel', value: data?.modmail_channel_id ? `<#${data.modmail_channel_id}>` : 'Not set', inline: true },
+          { name: 'Report Channel', value: data?.report_channel_id ? `<#${data.report_channel_id}>` : 'Not set', inline: true },
+          { name: 'Mod Role', value: data?.mod_role_id ? `<@&${data.mod_role_id}>` : 'Not set', inline: true },
+          { name: 'Welcome Channel', value: welcome?.channel_id ? `<#${welcome.channel_id}>` : 'Not set', inline: true },
+          { name: 'Goodbye Channel', value: goodbye?.channel_id ? `<#${goodbye.channel_id}>` : 'Not set', inline: true },
+          { name: 'Ticket Channel', value: ticket?.channel_id ? `<#${ticket.channel_id}>` : 'Not set', inline: true },
+          { name: 'Total Commands', value: `${totalCount} (${prefixCount} prefix, ${slashCount} slash)`, inline: true },
+          { name: 'Available Setup Actions', value: '`/setup`, `/disable-commands`, `/logchannel`, `/autorole`, `/prefix`, `/reset-config`, `/ticketsetup`, `/feedback-channel`, `/modmail-channel`, `/mod-role`, `/report-channel`', inline: false }
         )
         .setColor(0x3498db)
         .setTimestamp();
-      
-      // List available setup actions
-      embed.addFields({ 
-        name: 'Available Setup Actions', 
-        value: '`/setup`, `/showsetup`, `/config`, `/disable-commands`, `/logchannel`, `/autorole`, `/prefix`, `/reset-config`, `/ticketsetup`, `/co-owners`, `/add-co-owner`, `/remove-co-owner`, `/feedbackconfig`, `/modmailconfig`', 
-        inline: false 
-      });
       
       return interaction.reply({ embeds: [embed], ephemeral: true });
     } catch (e) {
@@ -1783,39 +1872,107 @@ const slashHandlers = {
     }
   },
 
-  feedbackconfig: async (interaction) => {
-    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  'feedback-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
     const channel = interaction.options.getChannel('channel');
-    const dmUsers = interaction.options.getString('dm_users');
-    const off = interaction.options.getString('off');
-    if (off) {
-      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: null }).eq('guild_id', interaction.guild.id);
-      return interaction.reply({ content: 'Feedback destination disabled.', ephemeral: true });
-    } else if (channel) {
-      await supabase.from('guild_configs').update({ feedback_channel_id: channel.id, feedback_dm_user_ids: null }).eq('guild_id', interaction.guild.id);
-      return interaction.reply({ content: `Feedback will be sent to ${channel}.`, ephemeral: true });
-    } else if (dmUsers) {
-      const userIds = dmUsers.split(',').map(u => u.replace(/<@!?(\d+)>/, '$1').trim()).filter(Boolean);
-      if (userIds.length === 0) return interaction.reply({ content: 'No valid user IDs provided.', ephemeral: true });
-      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: userIds }).eq('guild_id', interaction.guild.id);
-      return interaction.reply({ content: `Feedback will be sent as DMs to: ${userIds.map(id => `<@${id}>`).join(', ')}`, ephemeral: true });
-    } else {
-      return interaction.reply({ content: 'Usage: /feedbackconfig channel:#channel or dm_users:user1,user2 or off:true', ephemeral: true });
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        feedback_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Feedback Channel Set')
+        .setDescription(`Anonymous feedback will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Feedback channel error:', e);
+      return interaction.reply({ content: 'Failed to set feedback channel.', ephemeral: true });
     }
   },
 
-  modmailconfig: async (interaction) => {
-    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  'modmail-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
     const channel = interaction.options.getChannel('channel');
-    const off = interaction.options.getString('off');
-    if (off) {
-      await supabase.from('guild_configs').update({ modmail_channel_id: null }).eq('guild_id', interaction.guild.id);
-      return interaction.reply({ content: 'Modmail disabled.', ephemeral: true });
-    } else if (channel) {
-      await supabase.from('guild_configs').update({ modmail_channel_id: channel.id }).eq('guild_id', interaction.guild.id);
-      return interaction.reply({ content: `Modmail will be sent to ${channel}.`, ephemeral: true });
-    } else {
-      return interaction.reply({ content: 'Usage: /modmailconfig channel:#channel or off:true', ephemeral: true });
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        modmail_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Modmail Channel Set')
+        .setDescription(`Modmail threads will now be created in ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Modmail channel error:', e);
+      return interaction.reply({ content: 'Failed to set modmail channel.', ephemeral: true });
+    }
+  },
+
+  'mod-role': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const role = interaction.options.getRole('role');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        mod_role_id: role.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Mod Role Set')
+        .setDescription(`${role} will be pinged during panic mode`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Mod role error:', e);
+      return interaction.reply({ content: 'Failed to set mod role.', ephemeral: true });
+    }
+  },
+
+  'report-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const channel = interaction.options.getChannel('channel');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        report_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Report Channel Set')
+        .setDescription(`User reports will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Report channel error:', e);
+      return interaction.reply({ content: 'Failed to set report channel.', ephemeral: true });
     }
   }
 };

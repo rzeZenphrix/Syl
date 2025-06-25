@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const os = require('os');
 const fs = require('fs');
@@ -76,7 +76,11 @@ const commandDescriptions = {
   whois: 'Show another user\'s info. Usage: `;whois [@user]`',
   'co-owners': 'Manage co-owners for bot setup and management. Usage: `&co-owners add/remove/list @user` (owner only)',
   'add-co-owner': 'Add a co-owner to help with bot management. Usage: `&add-co-owner @user` (owner only)',
-  'remove-co-owner': 'Remove a co-owner. Usage: `&remove-co-owner @user` (owner only)'
+  'remove-co-owner': 'Remove a co-owner. Usage: `&remove-co-owner @user` (owner only)',
+  'feedback-channel': 'Set the channel where anonymous feedback is sent. Usage: `&feedback-channel #channel` (admin only)',
+  'modmail-channel': 'Set the channel where modmail threads are created. Usage: `&modmail-channel #channel` (admin only)',
+  'mod-role': 'Set the role to ping during panic mode. Usage: `&mod-role @role` (admin only)',
+  'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel` (admin only)'
 };
 
 // Translation function with language detection
@@ -827,6 +831,70 @@ const prefixCommands = {
       { name: 'Roles', value: member.roles.cache.map(r => r.name).join(', ') || 'None' }
     ).setColor(0x9b59b6)] });
   },
+
+  'feedback-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const channel = msg.mentions.channels.first() || msg.channel;
+    if (!channel) return msg.reply('Please mention a channel.');
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        feedback_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      return msg.reply(`Feedback channel set to ${channel.name}.`);
+    } catch (e) {
+      console.error('Failed to set feedback channel:', e);
+      return msg.reply('Failed to set feedback channel.');
+    }
+  },
+
+  'modmail-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const channel = msg.mentions.channels.first() || msg.channel;
+    if (!channel) return msg.reply('Please mention a channel.');
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        modmail_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      return msg.reply(`Modmail channel set to ${channel.name}.`);
+    } catch (e) {
+      console.error('Failed to set modmail channel:', e);
+      return msg.reply('Failed to set modmail channel.');
+    }
+  },
+
+  'mod-role': async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const role = msg.mentions.roles.first();
+    if (!role) return msg.reply('Please mention a role.');
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        mod_role_id: role.id
+      }, { onConflict: ['guild_id'] });
+      return msg.reply(`Mod role set to ${role.name}.`);
+    } catch (e) {
+      console.error('Failed to set mod role:', e);
+      return msg.reply('Failed to set mod role.');
+    }
+  },
+
+  'report-channel': async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const channel = msg.mentions.channels.first() || msg.channel;
+    if (!channel) return msg.reply('Please mention a channel.');
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        report_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      return msg.reply(`Report channel set to ${channel.name}.`);
+    } catch (e) {
+      console.error('Failed to set report channel:', e);
+      return msg.reply('Failed to set report channel.');
+    }
+  }
 };
 
 // Slash commands
@@ -836,19 +904,10 @@ function getAllCommandsByCategory() {
   return [
     { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case'] },
     { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd'] },
-    { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner'] },
+    { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
     { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
     { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
   ];
-}
-
-function getTotalCommandCount() {
-  const categories = getAllCommandsByCategory();
-  let total = 0;
-  for (const cat of categories) {
-    total += cat.commands.length;
-  }
-  return total;
 }
 
 function getPaginatedCommands(page = 0) {
@@ -897,7 +956,27 @@ const slashCommands = [
 
   new SlashCommandBuilder()
     .setName('help')
-    .setDescription('Show all bot commands with descriptions and usage (paginated)')
+    .setDescription('Show all bot commands with descriptions and usage (paginated)'),
+
+  new SlashCommandBuilder()
+    .setName('feedback-channel')
+    .setDescription('Set the channel where anonymous feedback is sent')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for feedback').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('modmail-channel')
+    .setDescription('Set the channel where modmail threads are created')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for modmail').addChannelTypes(ChannelType.GuildText).setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('mod-role')
+    .setDescription('Set the role to ping during panic mode')
+    .addRoleOption(opt => opt.setName('role').setDescription('Role to ping').setRequired(true)),
+  
+  new SlashCommandBuilder()
+    .setName('report-channel')
+    .setDescription('Set the channel where user reports are sent')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reports').addChannelTypes(ChannelType.GuildText).setRequired(true))
 ];
 
 // Slash command handlers
@@ -982,14 +1061,11 @@ const slashHandlers = {
   help: async (interaction) => {
     let page = 0;
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
-    const totalCommands = getTotalCommandCount();
-    
     const embed = new EmbedBuilder()
-      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
+      .setTitle('🤖 Bot Commands')
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
       .setColor(0x7289da);
-    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(true),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(totalPages <= 1)
@@ -1217,6 +1293,110 @@ const slashHandlers = {
       { name: 'Roles', value: member.roles.cache.map(r => r.name).join(', ') || 'None' }
     ).setColor(0x9b59b6)] });
   },
+
+  'feedback-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const channel = interaction.options.getChannel('channel');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        feedback_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Feedback Channel Set')
+        .setDescription(`Anonymous feedback will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Feedback channel error:', e);
+      return interaction.reply({ content: 'Failed to set feedback channel.', ephemeral: true });
+    }
+  },
+
+  'modmail-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const channel = interaction.options.getChannel('channel');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        modmail_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Modmail Channel Set')
+        .setDescription(`Modmail threads will now be created in ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Modmail channel error:', e);
+      return interaction.reply({ content: 'Failed to set modmail channel.', ephemeral: true });
+    }
+  },
+
+  'mod-role': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const role = interaction.options.getRole('role');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        mod_role_id: role.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Mod Role Set')
+        .setDescription(`${role} will be pinged during panic mode`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Mod role error:', e);
+      return interaction.reply({ content: 'Failed to set mod role.', ephemeral: true });
+    }
+  },
+
+  'report-channel': async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    
+    const channel = interaction.options.getChannel('channel');
+    
+    try {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        report_channel_id: channel.id
+      }, { onConflict: ['guild_id'] });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('Report Channel Set')
+        .setDescription(`User reports will now be sent to ${channel}`)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (e) {
+      console.error('Report channel error:', e);
+      return interaction.reply({ content: 'Failed to set report channel.', ephemeral: true });
+    }
+  }
 };
 
 // Add button handler for pagination
@@ -1225,14 +1405,11 @@ const buttonHandlers = {
     let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10) - 2;
     if (page < 0) page = 0;
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
-    const totalCommands = getTotalCommandCount();
-    
     const embed = new EmbedBuilder()
-      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
+      .setTitle('🤖 Bot Commands')
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
       .setColor(0x7289da);
-    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
@@ -1242,14 +1419,11 @@ const buttonHandlers = {
   help_next: async (interaction) => {
     let page = parseInt(interaction.message.embeds[0].footer.text.match(/Page (\d+)/)[1], 10);
     const { cmdsOnPage, totalPages } = getPaginatedCommands(page);
-    const totalCommands = getTotalCommandCount();
-    
     const embed = new EmbedBuilder()
-      .setTitle(`🤖 Bot Commands (${totalCommands} total)`)
+      .setTitle('🤖 Bot Commands')
       .setDescription(cmdsOnPage.map(cmd => `• **${cmd.name}** — ${cmd.desc}`).join('\n'))
-      .setFooter({ text: `Page ${page + 1} of ${totalPages} • ${totalCommands} commands available` })
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
       .setColor(0x7289da);
-    
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
       new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= totalPages)
@@ -1554,9 +1728,74 @@ prefixCommands.worldstate = async (msg, args) => {
   return msg.reply('World state updated.');
 };
 
+// Function to get accurate command count
+function getCommandCount() {
+  const allCommands = { ...prefixCommands, ...slashHandlers };
+  const prefixCount = Object.keys(prefixCommands).length;
+  const slashCount = Object.keys(slashHandlers).length;
+  const totalCount = Object.keys(allCommands).length;
+  
+  return { prefixCount, slashCount, totalCount };
+}
+
+// Update the help command to show accurate command count
+help: async (msg, args) => {
+  const { prefixCount, slashCount, totalCount } = getCommandCount();
+  
+  if (args.length === 0) {
+    const categories = getAllCommandsByCategory();
+    const embed = new EmbedBuilder()
+      .setTitle('🤖 Asylum Bot Help')
+      .setDescription(`Welcome to Asylum Bot! I have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
+      .addFields(
+        categories.map(cat => ({
+          name: cat.category,
+          value: `${cat.commands.length} commands available`,
+          inline: true
+        }))
+      )
+      .addFields(
+        { name: 'Quick Start', value: 'Use `/setup @adminrole` to configure the bot for your server.', inline: false },
+        { name: 'Support', value: 'For support, contact the bot owner or use `/feedback` to submit feedback.', inline: false }
+      )
+      .setColor(0x3498db)
+      .setTimestamp();
+    
+    return msg.reply({ embeds: [embed] });
+  }
+  
+  const category = args[0].toLowerCase();
+  const categories = getAllCommandsByCategory();
+  const selectedCategory = categories.find(cat => cat.category.toLowerCase().includes(category) || cat.category.toLowerCase().replace(/[^\w]/g, '').includes(category));
+  
+  if (!selectedCategory) {
+    const embed = new EmbedBuilder()
+      .setTitle('Category Not Found')
+      .setDescription(`Available categories:\n${categories.map(cat => `• ${cat.category}`).join('\n')}`)
+      .setColor(0xe74c3c);
+    return msg.reply({ embeds: [embed] });
+  }
+  
+  const commandList = selectedCategory.commands.map(cmd => {
+    const description = commandDescriptions[cmd] || 'No description available';
+    return `**${cmd}** - ${description}`;
+  }).join('\n');
+  
+  const embed = new EmbedBuilder()
+    .setTitle(`${selectedCategory.category} Commands`)
+    .setDescription(commandList)
+    .setFooter({ text: `${selectedCategory.commands.length} commands in this category` })
+    .setColor(0x3498db)
+    .setTimestamp();
+  
+  return msg.reply({ embeds: [embed] });
+},
+
 module.exports = {
   prefixCommands,
   slashCommands,
   slashHandlers,
-  buttonHandlers
+  buttonHandlers,
+  getAllCommandsByCategory,
+  getCommandCount
 }; 
