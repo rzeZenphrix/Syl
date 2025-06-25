@@ -846,6 +846,52 @@ const prefixCommands = {
     
     // Call the co-owners command with remove action
     return prefixCommands['co-owners'](msg, ['remove', user.id]);
+  },
+
+  // Prefix command: feedbackconfig
+  feedbackconfig: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    if (args.length === 0) {
+      return msg.reply('Usage: ;feedbackconfig <#channel|user1,user2,...|off>');
+    }
+    const input = args[0];
+    let feedback_channel_id = null;
+    let feedback_dm_user_ids = null;
+    if (input === 'off') {
+      // Disable feedback
+      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: null }).eq('guild_id', msg.guild.id);
+      return msg.reply('Feedback destination disabled.');
+    } else if (input.startsWith('<#') && input.endsWith('>')) {
+      // Channel mention
+      feedback_channel_id = input.replace(/<#!?(\d+)>/, '$1');
+      await supabase.from('guild_configs').update({ feedback_channel_id, feedback_dm_user_ids: null }).eq('guild_id', msg.guild.id);
+      return msg.reply(`Feedback will be sent to <#${feedback_channel_id}>.`);
+    } else {
+      // Assume comma-separated user IDs or mentions
+      const userIds = input.split(',').map(u => u.replace(/<@!?(\d+)>/, '$1').trim()).filter(Boolean);
+      if (userIds.length === 0) return msg.reply('No valid user IDs provided.');
+      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: userIds }).eq('guild_id', msg.guild.id);
+      return msg.reply(`Feedback will be sent as DMs to: ${userIds.map(id => `<@${id}>`).join(', ')}`);
+    }
+  },
+
+  // Prefix command: modmailconfig
+  modmailconfig: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    if (args.length === 0) {
+      return msg.reply('Usage: ;modmailconfig <#channel|off>');
+    }
+    const input = args[0];
+    if (input === 'off') {
+      await supabase.from('guild_configs').update({ modmail_channel_id: null }).eq('guild_id', msg.guild.id);
+      return msg.reply('Modmail disabled.');
+    } else if (input.startsWith('<#') && input.endsWith('>')) {
+      const modmail_channel_id = input.replace(/<#!?(\d+)>/, '$1');
+      await supabase.from('guild_configs').update({ modmail_channel_id }).eq('guild_id', msg.guild.id);
+      return msg.reply(`Modmail will be sent to <#${modmail_channel_id}>.`);
+    } else {
+      return msg.reply('Invalid input. Usage: ;modmailconfig <#channel|off>');
+    }
   }
 };
 
@@ -934,7 +980,20 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('remove-co-owner')
     .setDescription('Remove a co-owner')
-    .addUserOption(opt => opt.setName('user').setDescription('User to remove as co-owner').setRequired(true))
+    .addUserOption(opt => opt.setName('user').setDescription('User to remove as co-owner').setRequired(true)),
+
+  new SlashCommandBuilder()
+    .setName('feedbackconfig')
+    .setDescription('Configure where feedback is sent (admin only)')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send feedback to').setRequired(false))
+    .addStringOption(opt => opt.setName('dm_users').setDescription('Comma-separated user IDs to DM feedback to').setRequired(false))
+    .addStringOption(opt => opt.setName('off').setDescription('Disable feedback').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('modmailconfig')
+    .setDescription('Configure the modmail channel (admin only)')
+    .addChannelOption(opt => opt.setName('channel').setDescription('Channel to send modmail to').setRequired(false))
+    .addStringOption(opt => opt.setName('off').setDescription('Disable modmail').setRequired(false))
 ];
 
 // Slash command handlers
@@ -1483,7 +1542,7 @@ const slashHandlers = {
       // List available setup actions
       embed.addFields({ 
         name: 'Available Setup Actions', 
-        value: '`/setup`, `/showsetup`, `/config`, `/disable-commands`, `/logchannel`, `/autorole`, `/prefix`, `/reset-config`, `/ticketsetup`, `/co-owners`, `/add-co-owner`, `/remove-co-owner`', 
+        value: '`/setup`, `/showsetup`, `/config`, `/disable-commands`, `/logchannel`, `/autorole`, `/prefix`, `/reset-config`, `/ticketsetup`, `/co-owners`, `/add-co-owner`, `/remove-co-owner`, `/feedbackconfig`, `/modmailconfig`', 
         inline: false 
       });
       
@@ -1721,6 +1780,42 @@ const slashHandlers = {
     } catch (e) {
       console.error('Remove co-owner error:', e);
       return interaction.reply({ content: 'Failed to remove co-owner.', ephemeral: true });
+    }
+  },
+
+  feedbackconfig: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const channel = interaction.options.getChannel('channel');
+    const dmUsers = interaction.options.getString('dm_users');
+    const off = interaction.options.getString('off');
+    if (off) {
+      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: null }).eq('guild_id', interaction.guild.id);
+      return interaction.reply({ content: 'Feedback destination disabled.', ephemeral: true });
+    } else if (channel) {
+      await supabase.from('guild_configs').update({ feedback_channel_id: channel.id, feedback_dm_user_ids: null }).eq('guild_id', interaction.guild.id);
+      return interaction.reply({ content: `Feedback will be sent to ${channel}.`, ephemeral: true });
+    } else if (dmUsers) {
+      const userIds = dmUsers.split(',').map(u => u.replace(/<@!?(\d+)>/, '$1').trim()).filter(Boolean);
+      if (userIds.length === 0) return interaction.reply({ content: 'No valid user IDs provided.', ephemeral: true });
+      await supabase.from('guild_configs').update({ feedback_channel_id: null, feedback_dm_user_ids: userIds }).eq('guild_id', interaction.guild.id);
+      return interaction.reply({ content: `Feedback will be sent as DMs to: ${userIds.map(id => `<@${id}>`).join(', ')}`, ephemeral: true });
+    } else {
+      return interaction.reply({ content: 'Usage: /feedbackconfig channel:#channel or dm_users:user1,user2 or off:true', ephemeral: true });
+    }
+  },
+
+  modmailconfig: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const channel = interaction.options.getChannel('channel');
+    const off = interaction.options.getString('off');
+    if (off) {
+      await supabase.from('guild_configs').update({ modmail_channel_id: null }).eq('guild_id', interaction.guild.id);
+      return interaction.reply({ content: 'Modmail disabled.', ephemeral: true });
+    } else if (channel) {
+      await supabase.from('guild_configs').update({ modmail_channel_id: channel.id }).eq('guild_id', interaction.guild.id);
+      return interaction.reply({ content: `Modmail will be sent to ${channel}.`, ephemeral: true });
+    } else {
+      return interaction.reply({ content: 'Usage: /modmailconfig channel:#channel or off:true', ephemeral: true });
     }
   }
 };
