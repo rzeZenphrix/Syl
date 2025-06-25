@@ -1977,6 +1977,9 @@ const slashHandlers = {
   }
 };
 
+const buttonHandlers = {};
+const modalHandlers = {};
+
 module.exports = {
   name: 'setup',
   prefixCommands,

@@ -1432,6 +1432,8 @@ const buttonHandlers = {
   },
 };
 
+const modalHandlers = {};
+
 // --- WATCHWORD SYSTEM ---
 
 // Helper: fetch all watchwords for a guild

@@ -1635,6 +1635,9 @@ const slashHandlers = {
   }
 };
 
+const buttonHandlers = {};
+const modalHandlers = {};
+
 module.exports = {
   name: 'moderation',
   prefixCommands,
