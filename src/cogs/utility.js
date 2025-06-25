@@ -1792,10 +1792,10 @@ help: async (msg, args) => {
 },
 
 module.exports = {
+  name: 'utility',
   prefixCommands,
-  slashCommands,
   slashHandlers,
+  slashCommands,
   buttonHandlers,
-  getAllCommandsByCategory,
-  getCommandCount
+  modalHandlers
 }; 

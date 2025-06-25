@@ -1980,6 +1980,8 @@ const slashHandlers = {
 module.exports = {
   name: 'setup',
   prefixCommands,
+  slashHandlers,
   slashCommands,
-  slashHandlers
+  buttonHandlers,
+  modalHandlers
 }; 

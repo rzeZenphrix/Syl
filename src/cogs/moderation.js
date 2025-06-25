@@ -1638,6 +1638,8 @@ const slashHandlers = {
 module.exports = {
   name: 'moderation',
   prefixCommands,
+  slashHandlers,
   slashCommands,
-  slashHandlers
+  buttonHandlers,
+  modalHandlers
 }; 
