@@ -1235,8 +1235,8 @@ const slashHandlers = {
     const action = interaction.options.getString('action');
     const commands = interaction.options.getString('commands')?.split(',').map(cmd => cmd.trim()).filter(Boolean) || [];
     
-    if (!['add', 'remove', 'list', 'clear'].includes(action)) {
-      return interaction.reply({ content: 'Invalid action. Valid actions: add, remove, list, clear', ephemeral: true });
+    if (!['add', 'remove', 'list', 'clear', 'enabled', 'current'].includes(action)) {
+      return interaction.reply({ content: 'Invalid action. Valid actions: add, remove, list, clear, enabled, current', ephemeral: true });
     }
     
     try {
@@ -1249,17 +1249,15 @@ const slashHandlers = {
       if (error) throw error;
       
       let currentDisabled = data?.disabled_commands || [];
+      const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
       
       switch (action) {
         case 'add':
           if (commands.length === 0) {
             return interaction.reply({ content: 'Please provide commands to add', ephemeral: true });
           }
-          
           // Validate commands
-          const allCommands = { ...AVAILABLE_COMMANDS.prefix, ...AVAILABLE_COMMANDS.slash };
           const invalidCommands = commands.filter(cmd => !allCommands[cmd]);
-          
           if (invalidCommands.length > 0) {
             const embed = new EmbedBuilder()
               .setTitle('Invalid Commands')
@@ -1271,22 +1269,17 @@ const slashHandlers = {
               .setColor(0xe74c3c);
             return interaction.reply({ embeds: [embed], ephemeral: true });
           }
-          
           currentDisabled = [...new Set([...currentDisabled, ...commands])];
           break;
-          
         case 'remove':
           if (commands.length === 0) {
             return interaction.reply({ content: 'Please provide commands to remove', ephemeral: true });
           }
-          
           currentDisabled = currentDisabled.filter(cmd => !commands.includes(cmd));
           break;
-          
         case 'clear':
           currentDisabled = [];
           break;
-          
         case 'list':
           const embed = new EmbedBuilder()
             .setTitle('All Available Commands')
@@ -1297,14 +1290,37 @@ const slashHandlers = {
             .setColor(0x3498db)
             .setTimestamp();
           return interaction.reply({ embeds: [embed], ephemeral: true });
+        case 'enabled':
+          // Show enabled commands (all minus disabled)
+          const enabledCommands = Object.keys(allCommands).filter(cmd => !currentDisabled.includes(cmd));
+          const enabledEmbed = new EmbedBuilder()
+            .setTitle('Enabled Commands')
+            .setDescription(enabledCommands.length > 0 ? enabledCommands.join(', ') : 'No commands are currently enabled')
+            .addFields(
+              { name: 'Total Enabled', value: `${enabledCommands.length} commands`, inline: true },
+              { name: 'Total Disabled', value: `${currentDisabled.length} commands`, inline: true }
+            )
+            .setColor(0x2ecc71)
+            .setTimestamp();
+          return interaction.reply({ embeds: [enabledEmbed], ephemeral: true });
+        case 'current':
+          // Show current disabled commands
+          const disabledEmbed = new EmbedBuilder()
+            .setTitle('Disabled Commands')
+            .setDescription(currentDisabled.length > 0 ? currentDisabled.join(', ') : 'No commands are currently disabled')
+            .addFields(
+              { name: 'Total Disabled', value: `${currentDisabled.length} commands`, inline: true },
+              { name: 'Total Enabled', value: `${Object.keys(allCommands).length - currentDisabled.length} commands`, inline: true }
+            )
+            .setColor(0xe67e22)
+            .setTimestamp();
+          return interaction.reply({ embeds: [disabledEmbed], ephemeral: true });
       }
-      
       // Save updated disabled commands
       await supabase.from('guild_configs').upsert({
         guild_id: interaction.guild.id,
         disabled_commands: currentDisabled
       }, { onConflict: ['guild_id'] });
-      
       const updatedEmbed = new EmbedBuilder()
         .setTitle('Commands Updated')
         .setDescription(`**Action:** ${action}`)
@@ -1314,7 +1330,6 @@ const slashHandlers = {
         )
         .setColor(0x2ecc71)
         .setTimestamp();
-      
       return interaction.reply({ embeds: [updatedEmbed], ephemeral: true });
     } catch (e) {
       console.error('Disable-commands error:', e);

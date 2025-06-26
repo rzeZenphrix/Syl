@@ -337,6 +337,63 @@ const rest = new REST({ version: '10' }).setToken(token);
   }
 });
 
+// --- VC and Chat Uptime Tracking ---
+const userVoiceStates = new Map(); // Map<guildId-userId, joinTimestamp>
+
+client.on('voiceStateUpdate', async (oldState, newState) => {
+  const userId = newState.id;
+  const guildId = newState.guild.id;
+  const key = `${guildId}-${userId}`;
+
+  // User joins a VC
+  if (!oldState.channelId && newState.channelId) {
+    userVoiceStates.set(key, Date.now());
+  }
+  // User leaves a VC
+  else if (oldState.channelId && !newState.channelId) {
+    const joinTime = userVoiceStates.get(key);
+    if (joinTime) {
+      const duration = Math.floor((Date.now() - joinTime) / 1000); // seconds
+      userVoiceStates.delete(key);
+      // Update user_stats
+      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+      if (!data) {
+        await supabase.from('user_stats').insert({
+          guild_id: guildId,
+          user_id: userId,
+          vc_seconds: duration
+        });
+      } else {
+        await supabase.from('user_stats').update({
+          vc_seconds: (data.vc_seconds || 0) + duration
+        }).eq('guild_id', guildId).eq('user_id', userId);
+      }
+    }
+  }
+  // User switches VC
+  else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+    const joinTime = userVoiceStates.get(key);
+    if (joinTime) {
+      const duration = Math.floor((Date.now() - joinTime) / 1000);
+      // Update user_stats for the time spent in the previous VC
+      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+      if (!data) {
+        await supabase.from('user_stats').insert({
+          guild_id: guildId,
+          user_id: userId,
+          vc_seconds: duration
+        });
+      } else {
+        await supabase.from('user_stats').update({
+          vc_seconds: (data.vc_seconds || 0) + duration
+        }).eq('guild_id', guildId).eq('user_id', userId);
+      }
+    }
+    // Reset join time for new VC
+    userVoiceStates.set(key, Date.now());
+  }
+});
+
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot || !msg.guild) return;
   // Blacklist checks
@@ -346,8 +403,8 @@ client.on('messageCreate', async (msg) => {
   if (await isChannelBlacklisted(msg.guild.id, msg.channel.id)) {
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('Commands are disabled in this channel.').setColor(0xe74c3c)] });
   }
-  // Increment message count in user_stats
-  const { data, error } = await supabase.from('user_stats').select('message_count').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
+  // Increment message count and chat uptime in user_stats
+  const { data, error } = await supabase.from('user_stats').select('message_count, chat_seconds').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
   if (error && error.code !== 'PGRST116') {
     console.error('Error fetching user_stats:', error);
     return;
@@ -356,11 +413,13 @@ client.on('messageCreate', async (msg) => {
     await supabase.from('user_stats').insert({
       guild_id: msg.guild.id,
       user_id: msg.author.id,
-      message_count: 1
+      message_count: 1,
+      chat_seconds: 30 // Assume 30s active per message
     });
   } else {
     await supabase.from('user_stats').update({
-      message_count: (data.message_count || 0) + 1
+      message_count: (data.message_count || 0) + 1,
+      chat_seconds: (data.chat_seconds || 0) + 30 // Add 30s per message
     }).eq('guild_id', msg.guild.id).eq('user_id', msg.author.id);
   }
   

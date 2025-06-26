@@ -109,6 +109,26 @@ CREATE TABLE IF NOT EXISTS goodbye_configs (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create user_stats table for leaderboards
+CREATE TABLE IF NOT EXISTS user_stats (
+  guild_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  message_count INTEGER DEFAULT 0,
+  vc_seconds BIGINT DEFAULT 0, -- Total seconds spent in voice channels
+  chat_seconds BIGINT DEFAULT 0, -- Total seconds spent active in chat (approximate)
+  PRIMARY KEY (guild_id, user_id)
+);
+
+-- Create watchwords table for watchword system
+CREATE TABLE IF NOT EXISTS watchwords (
+  guild_id BIGINT NOT NULL,
+  word TEXT NOT NULL,
+  actions TEXT[] DEFAULT ARRAY['delete','warn','log'],
+  added_by BIGINT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  PRIMARY KEY (guild_id, word)
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_warnings_guild_user ON warnings(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_modlogs_guild_user ON modlogs(guild_id, user_id);
@@ -116,6 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_mutes_guild_user ON mutes(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_blacklist_guild_user ON blacklist(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_ticket_types_guild ON ticket_types(guild_id);
 CREATE INDEX IF NOT EXISTS idx_tickets_guild ON tickets(guild_id);
+CREATE INDEX IF NOT EXISTS idx_user_stats_guild_user ON user_stats(guild_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_watchwords_guild_word ON watchwords(guild_id, word);
 
 -- Drop existing policies if they exist (to avoid conflicts)
 DROP POLICY IF EXISTS "Service role can do everything" ON guild_configs;
@@ -127,6 +149,7 @@ DROP POLICY IF EXISTS "Service role can do everything" ON ticket_types;
 DROP POLICY IF EXISTS "Service role can do everything" ON tickets;
 DROP POLICY IF EXISTS "Service role can do everything" ON welcome_configs;
 DROP POLICY IF EXISTS "Service role can do everything" ON goodbye_configs;
+DROP POLICY IF EXISTS "Service role can do everything" ON watchwords;
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE guild_configs ENABLE ROW LEVEL SECURITY;
@@ -138,6 +161,7 @@ ALTER TABLE ticket_types ENABLE ROW LEVEL SECURITY;
 ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE welcome_configs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goodbye_configs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE watchwords ENABLE ROW LEVEL SECURITY;
 
 -- Create more permissive policies for service role access
 -- These policies allow the service role to perform all operations
@@ -150,6 +174,7 @@ CREATE POLICY "Enable all access for service role" ON ticket_types FOR ALL USING
 CREATE POLICY "Enable all access for service role" ON tickets FOR ALL USING (auth.role() = 'service_role');
 CREATE POLICY "Enable all access for service role" ON welcome_configs FOR ALL USING (auth.role() = 'service_role');
 CREATE POLICY "Enable all access for service role" ON goodbye_configs FOR ALL USING (auth.role() = 'service_role');
+CREATE POLICY "Enable all access for service role" ON watchwords FOR ALL USING (auth.role() = 'service_role');
 
 -- Alternative: If the above doesn't work, create policies that allow all operations
 -- Uncomment these if the service_role policies don't work
@@ -177,4 +202,9 @@ COMMENT ON TABLE blacklist IS 'Stores blacklisted users per guild';
 COMMENT ON TABLE ticket_types IS 'Stores ticket category definitions';
 COMMENT ON TABLE tickets IS 'Stores active and closed tickets';
 COMMENT ON TABLE welcome_configs IS 'Stores welcome message configuration';
-COMMENT ON TABLE goodbye_configs IS 'Stores goodbye message configuration'; 
+COMMENT ON TABLE goodbye_configs IS 'Stores goodbye message configuration';
+COMMENT ON TABLE user_stats IS 'Stores leaderboard statistics for messages, voice channel uptime, and chat uptime';
+COMMENT ON TABLE watchwords IS 'Stores watchword definitions and actions'; 
+
+-- Enable RLS and allow service_role
+GRANT ALL PRIVILEGES ON TABLE watchwords TO service_role; 

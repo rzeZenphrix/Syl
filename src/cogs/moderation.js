@@ -541,18 +541,15 @@ const prefixCommands = {
   report: async (msg, args) => {
     const user = msg.mentions.users.first();
     if (!user) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a user to report.\nUsage: `/report @user <reason>`').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a user to report. Usage: `;report @user <reason>`').setColor(0xe74c3c)] });
     }
-    
     if (user.id === msg.author.id) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('You cannot report yourself.').setColor(0xe74c3c)] });
     }
-    
     const reason = args.slice(1).join(' ');
     if (!reason) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide a reason for the report.\nUsage: `/report @user <reason>`').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide a reason for the report. Usage: `;report @user <reason>`').setColor(0xe74c3c)] });
     }
-    
     try {
       // Save report to database
       const { data, error } = await supabase
@@ -565,23 +562,19 @@ const prefixCommands = {
         })
         .select()
         .single();
-      
       if (error) throw error;
-      
       // Get report channel from config
       const { data: config } = await supabase
         .from('guild_configs')
         .select('report_channel_id')
         .eq('guild_id', msg.guild.id)
         .single();
-      
       const reportEmbed = new EmbedBuilder()
         .setTitle('🚨 New Report')
         .setDescription(`**Reported User:** ${user} (${user.id})\n**Reporter:** ${msg.author} (${msg.author.id})\n**Reason:** ${reason}`)
         .setColor(0xe74c3c)
         .setTimestamp()
         .setFooter({ text: `Report ID: ${data.id}` });
-      
       // Send to report channel if configured
       if (config?.report_channel_id) {
         const reportChannel = msg.guild.channels.cache.get(config.report_channel_id);
@@ -589,14 +582,12 @@ const prefixCommands = {
           await reportChannel.send({ embeds: [reportEmbed] });
         }
       }
-      
       // Confirm to reporter
       const confirmEmbed = new EmbedBuilder()
         .setTitle('Report Submitted')
         .setDescription(`Your report against ${user} has been submitted.\n**Reason:** ${reason}`)
         .setColor(0x2ecc71)
         .setTimestamp();
-      
       return msg.reply({ embeds: [confirmEmbed] });
     } catch (e) {
       console.error('Report error:', e);
@@ -606,11 +597,9 @@ const prefixCommands = {
 
   modmail: async (msg, args) => {
     if (args.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide your message.\nUsage: `&modmail your message to moderators`').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide your message.\nUsage: `/modmail <message>`').setColor(0xe74c3c)] });
     }
-    
     const message = args.join(' ');
-    
     try {
       // Get configured modmail channel
       const { data: config } = await supabase
@@ -618,16 +607,21 @@ const prefixCommands = {
         .select('modmail_channel_id')
         .eq('guild_id', msg.guild.id)
         .single();
-      
       let targetChannel = msg.channel; // Default to current channel
-      
       if (config?.modmail_channel_id) {
         const configuredChannel = msg.guild.channels.cache.get(config.modmail_channel_id);
         if (configuredChannel) {
           targetChannel = configuredChannel;
         }
       }
-      
+      // Log to modmail_threads table (one open per user per guild)
+      await supabase.from('modmail_threads').upsert({
+        guild_id: msg.guild.id,
+        user_id: msg.author.id,
+        channel_id: targetChannel.id,
+        status: 'open',
+        created_at: new Date().toISOString()
+      }, { onConflict: ['guild_id', 'user_id'] });
       const embed = new EmbedBuilder()
         .setTitle('Modmail Message')
         .setDescription(message)
@@ -638,9 +632,9 @@ const prefixCommands = {
         )
         .setColor(0x3498db)
         .setTimestamp();
-      
       await targetChannel.send({ embeds: [embed] });
-      
+      // DM user confirmation
+      await msg.author.send({ embeds: [new EmbedBuilder().setTitle('Modmail Sent').setDescription('Your message has been sent to the moderators.').setColor(0x2ecc71)] }).catch(() => {});
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Message Sent').setDescription('Your message has been sent to the moderators.').setColor(0x2ecc71)] });
     } catch (e) {
       console.error('Modmail error:', e);
@@ -652,7 +646,44 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use panic mode.').setColor(0xe74c3c)] });
     }
-    
+    const arg = args[0]?.toLowerCase();
+    if (arg === 'off') {
+      // Turn off panic mode
+      try {
+        const { data: panic } = await supabase
+          .from('panic_mode')
+          .select('*')
+          .eq('guild_id', msg.guild.id)
+          .eq('is_active', true)
+          .single();
+        if (!panic) {
+          return msg.reply({ embeds: [new EmbedBuilder().setTitle('Panic Mode').setDescription('Panic mode is not active.').setColor(0x2ecc71)] });
+        }
+        // Unlock all channels
+        const channels = msg.guild.channels.cache.filter(ch => ch.type === 0);
+        for (const [id, channel] of channels) {
+          try {
+            await channel.permissionOverwrites.edit(msg.guild.roles.everyone, {
+              SendMessages: null,
+              AddReactions: null,
+              CreatePublicThreads: null,
+              CreatePrivateThreads: null,
+              SendMessagesInThreads: null
+            });
+          } catch (e) {
+            console.error(`Failed to unlock channel ${channel.name}:`, e);
+          }
+        }
+        await supabase
+          .from('panic_mode')
+          .update({ is_active: false, deactivated_at: new Date().toISOString() })
+          .eq('guild_id', msg.guild.id);
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Panic Mode Disabled').setDescription('All channels have been unlocked.').setColor(0x2ecc71)] });
+      } catch (e) {
+        console.error('Panic off error:', e);
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to disable panic mode.').setColor(0xe74c3c)] });
+      }
+    }
     const reason = args.join(' ') || 'Emergency lockdown activated';
     
     try {
@@ -759,11 +790,9 @@ const prefixCommands = {
 
   feedback: async (msg, args) => {
     if (args.length === 0) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide feedback.\nUsage: `&feedback your feedback message`').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide feedback.\nUsage: `/feedback <message>`').setColor(0xe74c3c)] });
     }
-    
     const feedback = args.join(' ');
-    
     try {
       // Get configured feedback channel
       const { data: config } = await supabase
@@ -771,16 +800,20 @@ const prefixCommands = {
         .select('feedback_channel_id')
         .eq('guild_id', msg.guild.id)
         .single();
-      
       let targetChannel = msg.channel; // Default to current channel
-      
       if (config?.feedback_channel_id) {
         const configuredChannel = msg.guild.channels.cache.get(config.feedback_channel_id);
         if (configuredChannel) {
           targetChannel = configuredChannel;
         }
       }
-      
+      // Log feedback to DB
+      await supabase.from('feedback').insert({
+        guild_id: msg.guild.id,
+        user_id: msg.author.id,
+        message: feedback,
+        is_anonymous: true
+      });
       const embed = new EmbedBuilder()
         .setTitle('Anonymous Feedback')
         .setDescription(feedback)
@@ -791,9 +824,9 @@ const prefixCommands = {
         )
         .setColor(0x9b59b6)
         .setTimestamp();
-      
       await targetChannel.send({ embeds: [embed] });
-      
+      // DM user confirmation
+      await msg.author.send({ embeds: [new EmbedBuilder().setTitle('Feedback Submitted').setDescription('Your anonymous feedback has been submitted successfully.').setColor(0x2ecc71)] }).catch(() => {});
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Feedback Submitted').setDescription('Your anonymous feedback has been submitted successfully.').setColor(0x2ecc71)] });
     } catch (e) {
       console.error('Feedback error:', e);
@@ -1342,11 +1375,15 @@ const slashHandlers = {
   report: async (interaction) => {
     const user = interaction.options.getUser('user');
     const reason = interaction.options.getString('reason');
-    
+    if (!user) {
+      return interaction.reply({ content: 'Please specify a user to report.', ephemeral: true });
+    }
     if (user.id === interaction.user.id) {
       return interaction.reply({ content: 'You cannot report yourself.', ephemeral: true });
     }
-    
+    if (!reason) {
+      return interaction.reply({ content: 'Please provide a reason for the report.', ephemeral: true });
+    }
     try {
       const { data, error } = await supabase
         .from('reports')
@@ -1358,35 +1395,29 @@ const slashHandlers = {
         })
         .select()
         .single();
-      
       if (error) throw error;
-      
       const { data: config } = await supabase
         .from('guild_configs')
         .select('report_channel_id')
         .eq('guild_id', interaction.guild.id)
         .single();
-      
       const reportEmbed = new EmbedBuilder()
         .setTitle('🚨 New Report')
         .setDescription(`**Reported User:** ${user} (${user.id})\n**Reporter:** ${interaction.user} (${interaction.user.id})\n**Reason:** ${reason}`)
         .setColor(0xe74c3c)
         .setTimestamp()
         .setFooter({ text: `Report ID: ${data.id}` });
-      
       if (config?.report_channel_id) {
         const reportChannel = interaction.guild.channels.cache.get(config.report_channel_id);
         if (reportChannel) {
           await reportChannel.send({ embeds: [reportEmbed] });
         }
       }
-      
       const confirmEmbed = new EmbedBuilder()
         .setTitle('Report Submitted')
         .setDescription(`Your report against ${user} has been submitted.`)
         .setColor(0x2ecc71)
         .setTimestamp();
-      
       return interaction.reply({ embeds: [confirmEmbed], ephemeral: true });
     } catch (e) {
       console.error('Report error:', e);
@@ -1395,12 +1426,10 @@ const slashHandlers = {
   },
 
   modmail: async (interaction) => {
-    if (args.length === 0) {
-      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide your message.\nUsage: `&modmail your message to moderators`').setColor(0xe74c3c)] });
+    const message = interaction.options.getString('message');
+    if (!message) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide your message. Usage: `/modmail <message>`').setColor(0xe74c3c)] });
     }
-    
-    const message = args.join(' ');
-    
     try {
       // Get configured modmail channel
       const { data: config } = await supabase
@@ -1408,16 +1437,21 @@ const slashHandlers = {
         .select('modmail_channel_id')
         .eq('guild_id', interaction.guild.id)
         .single();
-      
       let targetChannel = interaction.channel; // Default to current channel
-      
       if (config?.modmail_channel_id) {
         const configuredChannel = interaction.guild.channels.cache.get(config.modmail_channel_id);
         if (configuredChannel) {
           targetChannel = configuredChannel;
         }
       }
-      
+      // Log to modmail_threads table (one open per user per guild)
+      await supabase.from('modmail_threads').upsert({
+        guild_id: interaction.guild.id,
+        user_id: interaction.user.id,
+        channel_id: targetChannel.id,
+        status: 'open',
+        created_at: new Date().toISOString()
+      }, { onConflict: ['guild_id', 'user_id'] });
       const embed = new EmbedBuilder()
         .setTitle('Modmail Message')
         .setDescription(message)
@@ -1428,9 +1462,9 @@ const slashHandlers = {
         )
         .setColor(0x3498db)
         .setTimestamp();
-      
       await targetChannel.send({ embeds: [embed] });
-      
+      // DM user confirmation
+      await interaction.user.send({ embeds: [new EmbedBuilder().setTitle('Modmail Sent').setDescription('Your message has been sent to the moderators.').setColor(0x2ecc71)] }).catch(() => {});
       return interaction.reply({ content: 'Your message has been sent to the moderators.', ephemeral: true });
     } catch (e) {
       console.error('Modmail error:', e);
@@ -1442,10 +1476,48 @@ const slashHandlers = {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'Only admins can use panic mode.', ephemeral: true });
     }
-    
+    const arg = interaction.options.getString('reason')?.toLowerCase();
+    if (arg === 'off') {
+      // Turn off panic mode
+      try {
+        const { data: panic } = await supabase
+          .from('panic_mode')
+          .select('*')
+          .eq('guild_id', interaction.guild.id)
+          .eq('is_active', true)
+          .single();
+        if (!panic) {
+          return interaction.reply({ content: 'Panic mode is not active.', ephemeral: true });
+        }
+        // Unlock all channels
+        const channels = interaction.guild.channels.cache.filter(ch => ch.type === 0);
+        for (const [id, channel] of channels) {
+          try {
+            await channel.permissionOverwrites.edit(interaction.guild.roles.everyone, {
+              SendMessages: null,
+              AddReactions: null,
+              CreatePublicThreads: null,
+              CreatePrivateThreads: null,
+              SendMessagesInThreads: null
+            });
+          } catch (e) {
+            console.error(`Failed to unlock channel ${channel.name}:`, e);
+          }
+        }
+        await supabase
+          .from('panic_mode')
+          .update({ is_active: false, deactivated_at: new Date().toISOString() })
+          .eq('guild_id', interaction.guild.id);
+        return interaction.reply({ content: 'Panic mode disabled. All channels have been unlocked.', ephemeral: true });
+      } catch (e) {
+        console.error('Panic off error:', e);
+        return interaction.reply({ content: 'Failed to disable panic mode.', ephemeral: true });
+      }
+    }
     const reason = interaction.options.getString('reason') || 'Emergency lockdown activated';
     
     try {
+      // Check if panic mode is already active
       const { data: existingPanic } = await supabase
         .from('panic_mode')
         .select('*')
@@ -1457,7 +1529,8 @@ const slashHandlers = {
         return interaction.reply({ content: 'Panic mode is already active. Use `/panic off` to disable it.', ephemeral: true });
       }
       
-      const channels = interaction.guild.channels.cache.filter(ch => ch.type === 0);
+      // Lock all channels
+      const channels = interaction.guild.channels.cache.filter(ch => ch.type === 0); // Text channels only
       const lockedChannels = [];
       
       for (const [id, channel] of channels) {
@@ -1475,6 +1548,7 @@ const slashHandlers = {
         }
       }
       
+      // Save panic mode to database
       await supabase
         .from('panic_mode')
         .upsert({
@@ -1484,6 +1558,7 @@ const slashHandlers = {
           reason: reason
         }, { onConflict: ['guild_id'] });
       
+      // Get configuration for notifications
       const { data: config } = await supabase
         .from('guild_configs')
         .select('mod_role_id, admin_role_id, extra_role_ids')
@@ -1544,12 +1619,10 @@ const slashHandlers = {
   },
 
   feedback: async (interaction) => {
-    if (args.length === 0) {
-      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide feedback.\nUsage: `&feedback your feedback message`').setColor(0xe74c3c)] });
+    const feedback = interaction.options.getString('message');
+    if (!feedback) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please provide feedback. Usage: `/feedback <message>`').setColor(0xe74c3c)] });
     }
-    
-    const feedback = args.join(' ');
-    
     try {
       // Get configured feedback channel
       const { data: config } = await supabase
@@ -1557,16 +1630,20 @@ const slashHandlers = {
         .select('feedback_channel_id')
         .eq('guild_id', interaction.guild.id)
         .single();
-      
       let targetChannel = interaction.channel; // Default to current channel
-      
       if (config?.feedback_channel_id) {
         const configuredChannel = interaction.guild.channels.cache.get(config.feedback_channel_id);
         if (configuredChannel) {
           targetChannel = configuredChannel;
         }
       }
-      
+      // Log feedback to DB
+      await supabase.from('feedback').insert({
+        guild_id: interaction.guild.id,
+        user_id: interaction.user.id,
+        message: feedback,
+        is_anonymous: true
+      });
       const embed = new EmbedBuilder()
         .setTitle('Anonymous Feedback')
         .setDescription(feedback)
@@ -1577,9 +1654,9 @@ const slashHandlers = {
         )
         .setColor(0x9b59b6)
         .setTimestamp();
-      
       await targetChannel.send({ embeds: [embed] });
-      
+      // DM user confirmation
+      await interaction.user.send({ embeds: [new EmbedBuilder().setTitle('Feedback Submitted').setDescription('Your anonymous feedback has been submitted successfully.').setColor(0x2ecc71)] }).catch(() => {});
       return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Feedback Submitted').setDescription('Your anonymous feedback has been submitted successfully.').setColor(0x2ecc71)] });
     } catch (e) {
       console.error('Feedback error:', e);

@@ -492,17 +492,85 @@ const prefixCommands = {
     const type = args[0] || 'messages';
     let field = 'message_count';
     let title = 'Top Users by Message Count';
-    if (type === 'infractions') { field = 'infractions'; title = 'Top Users by Infractions'; }
-    if (type === 'uptime') { field = 'uptime_seconds'; title = 'Top Users by Uptime'; }
+    let suffix = '';
+    if (type === 'infractions') {
+      // Aggregate infractions from warnings, mutes, and modlogs (timeouts)
+      // Get all users in this guild with at least one infraction
+      const [warnings, mutes, modlogs] = await Promise.all([
+        supabase.from('warnings').select('user_id').eq('guild_id', msg.guild.id),
+        supabase.from('mutes').select('user_id').eq('guild_id', msg.guild.id),
+        supabase.from('modlogs').select('user_id, action').eq('guild_id', msg.guild.id)
+      ]);
+      const infractionCounts = {};
+      // Count warnings
+      if (warnings.data) for (const w of warnings.data) {
+        infractionCounts[w.user_id] = (infractionCounts[w.user_id] || { total: 0, warnings: 0, mutes: 0, timeouts: 0 });
+        infractionCounts[w.user_id].total++;
+        infractionCounts[w.user_id].warnings++;
+      }
+      // Count mutes
+      if (mutes.data) for (const m of mutes.data) {
+        infractionCounts[m.user_id] = (infractionCounts[m.user_id] || { total: 0, warnings: 0, mutes: 0, timeouts: 0 });
+        infractionCounts[m.user_id].total++;
+        infractionCounts[m.user_id].mutes++;
+      }
+      // Count timeouts from modlogs
+      if (modlogs.data) for (const log of modlogs.data) {
+        if (log.action === 'timeout') {
+          infractionCounts[log.user_id] = (infractionCounts[log.user_id] || { total: 0, warnings: 0, mutes: 0, timeouts: 0 });
+          infractionCounts[log.user_id].total++;
+          infractionCounts[log.user_id].timeouts++;
+        }
+      }
+      // Sort by total infractions
+      const sorted = Object.entries(infractionCounts)
+        .sort((a, b) => b[1].total - a[1].total)
+        .slice(0, 10);
+      if (sorted.length === 0) return msg.reply('No infractions found.');
+      const lines = sorted.map(([userId, counts], i) =>
+        `${i+1}. <@${userId}> — **${counts.total}** (Warns: ${counts.warnings||0}, Mutes: ${counts.mutes||0}, Timeouts: ${counts.timeouts||0})`
+      ).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Top Users by Infractions').setDescription(lines).setColor(0xe67e22)] });
+    }
+    if (type === 'vc' || type === 'vc_uptime') {
+      field = 'vc_seconds';
+      title = 'Top Users by VC Uptime';
+      suffix = 's';
+    }
+    if (type === 'chat' || type === 'chat_uptime') {
+      field = 'chat_seconds';
+      title = 'Top Users by Chat Uptime';
+      suffix = 's';
+    }
+    if (type === 'uptime') {
+      // Show combined VC + chat uptime
+      const { data, error } = await supabase
+        .from('user_stats')
+        .select('user_id, vc_seconds, chat_seconds')
+        .eq('guild_id', msg.guild.id);
+      if (error) return msg.reply('Failed to fetch stats.');
+      if (!data || data.length === 0) return msg.reply('No stats found.');
+      const sorted = data.map(u => ({
+        user_id: u.user_id,
+        total: (u.vc_seconds || 0) + (u.chat_seconds || 0),
+        vc: u.vc_seconds || 0,
+        chat: u.chat_seconds || 0
+      })).sort((a, b) => b.total - a.total).slice(0, 10);
+      const lines = sorted.map((u, i) =>
+        `${i+1}. <@${u.user_id}> — **${u.total}s** (VC: ${u.vc}s, Chat: ${u.chat}s)`
+      ).join('\n');
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Top Users by Total Uptime').setDescription(lines).setColor(0x2ecc71)] });
+    }
+    // Default: messages, vc, or chat
     const { data, error } = await supabase
       .from('user_stats')
       .select('user_id, ' + field)
       .eq('guild_id', msg.guild.id)
       .order(field, { ascending: false })
-      .limit(5);
+      .limit(10);
     if (error) return msg.reply('Failed to fetch stats.');
     if (!data || data.length === 0) return msg.reply('No stats found.');
-    const lines = data.map((u, i) => `${i+1}. <@${u.user_id}> (${u[field]}${type === 'uptime' ? 's' : ''})`).join('\n');
+    const lines = data.map((u, i) => `${i+1}. <@${u.user_id}> (${u[field]||0}${suffix})`).join('\n');
     return msg.reply({ embeds: [new EmbedBuilder().setTitle(title).setDescription(lines).setColor(0x2ecc71)] });
   },
 
@@ -762,24 +830,53 @@ const prefixCommands = {
   blacklistword: async (msg, args) => {
     if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
     const sub = args[0]?.toLowerCase();
-    if (!sub || !['add','remove','list'].includes(sub)) {
-      return msg.reply('Usage: &blacklistword add <word> | remove <word> | list');
+    if (!sub || !['add','remove','list','show','warn','delete','log'].includes(sub)) {
+      return msg.reply('Usage: &blacklistword add/remove/list/show/warn/delete/log <word> [actions]');
     }
     if (sub === 'add') {
+      if (!args[1]) return msg.reply('Usage: &blacklistword add <word> [actions]');
       const word = args[1];
-      if (!word) return msg.reply('Usage: &blacklistword add <word>');
-      await addBlacklistedWord(msg.guild.id, word, msg.author.id);
-      return msg.reply(`Blacklisted word "${word}" added.`);
+      const actions = args.slice(2).length ? args.slice(2) : ['delete','warn','log'];
+      await addBlacklistedWord(msg.guild.id, word, msg.author.id, actions);
+      return msg.reply(`Blacklisted word "${word}" added with actions: ${actions.join(', ')}`);
     } else if (sub === 'remove') {
+      if (!args[1]) return msg.reply('Usage: &blacklistword remove <word>');
       const word = args[1];
-      if (!word) return msg.reply('Usage: &blacklistword remove <word>');
       await removeBlacklistedWord(msg.guild.id, word);
       return msg.reply(`Blacklisted word "${word}" removed.`);
     } else if (sub === 'list') {
       const list = await getBlacklistedWords(msg.guild.id);
       if (!list.length) return msg.reply('No blacklisted words set.');
-      const desc = list.map(w => `• **${w.word}**`).join('\n');
+      const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)] });
+    } else if (sub === 'show') {
+      if (!args[1]) return msg.reply('Usage: &blacklistword show <word>');
+      const word = args[1];
+      const w = await getBlacklistedWord(msg.guild.id, word);
+      if (!w) return msg.reply('That word is not blacklisted.');
+      const embed = new EmbedBuilder()
+        .setTitle(`Blacklisted Word: ${w.word}`)
+        .addFields(
+          { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+          { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+          { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+        )
+        .setColor(0xc0392b);
+      return msg.reply({ embeds: [embed] });
+    } else if (['warn','delete','log'].includes(sub)) {
+      if (!args[1]) return msg.reply(`Usage: &blacklistword ${sub} <word> [on|off]`);
+      const word = args[1];
+      const w = await getBlacklistedWord(msg.guild.id, word);
+      if (!w) return msg.reply('That word is not blacklisted.');
+      let actions = w.actions || ['delete','warn','log'];
+      const toggle = args[2]?.toLowerCase();
+      if (toggle === 'off') {
+        actions = actions.filter(a => a !== sub);
+      } else {
+        if (!actions.includes(sub)) actions.push(sub);
+      }
+      await updateBlacklistedWordActions(msg.guild.id, word, actions);
+      return msg.reply(`Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`);
     }
   },
 
@@ -894,6 +991,32 @@ const prefixCommands = {
       console.error('Failed to set report channel:', e);
       return msg.reply('Failed to set report channel.');
     }
+  },
+
+  say: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
+    }
+    if (!args.length) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';say <embed|plain> <message>').setColor(0xe74c3c)] });
+    }
+    let style = 'embed';
+    if (['embed','plain'].includes(args[0].toLowerCase())) {
+      style = args.shift().toLowerCase();
+    }
+    const message = args.join(' ');
+    if (!message) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';say <embed|plain> <message>').setColor(0xe74c3c)] });
+    }
+    if (style === 'plain') {
+      return msg.channel.send(message);
+    } else {
+      const embed = new EmbedBuilder()
+        .setDescription(message)
+        .setColor(0x7289da)
+        .setTimestamp();
+      return msg.channel.send({ embeds: [embed] });
+    }
   }
 };
 
@@ -977,6 +1100,12 @@ const slashCommands = [
     .setName('report-channel')
     .setDescription('Set the channel where user reports are sent')
     .addChannelOption(opt => opt.setName('channel').setDescription('Channel for reports').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addStringOption(opt => opt.setName('message').setDescription('Message to say').setRequired(true))
+    .addStringOption(opt => opt.setName('style').setDescription('Message style').addChoices(
+      { name: 'Embed', value: 'embed' },
+      { name: 'Plain', value: 'plain' }
+    ).setRequired(false))
+    .addStringOption(opt => opt.setName('color').setDescription('Hex color (embed only)').setRequired(false)),
 ];
 
 // Slash command handlers
@@ -1230,19 +1359,44 @@ const slashHandlers = {
   blacklistword: async (interaction) => {
     if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
     const sub = interaction.options.getSubcommand();
+    const word = interaction.options.getString('word')?.toLowerCase();
     if (sub === 'add') {
-      const word = interaction.options.getString('word');
-      await addBlacklistedWord(interaction.guild.id, word, interaction.user.id);
-      return interaction.reply({ content: `Blacklisted word "${word}" added.`, ephemeral: true });
+      const actionsStr = interaction.options.getString('actions');
+      const actions = actionsStr ? actionsStr.split(',').map(a => a.trim().toLowerCase()) : ['delete','warn','log'];
+      await addBlacklistedWord(interaction.guild.id, word, interaction.user.id, actions);
+      return interaction.reply({ content: `Blacklisted word "${word}" added with actions: ${actions.join(', ')}`, ephemeral: true });
     } else if (sub === 'remove') {
-      const word = interaction.options.getString('word');
       await removeBlacklistedWord(interaction.guild.id, word);
       return interaction.reply({ content: `Blacklisted word "${word}" removed.`, ephemeral: true });
     } else if (sub === 'list') {
       const list = await getBlacklistedWords(interaction.guild.id);
       if (!list.length) return interaction.reply({ content: 'No blacklisted words set.', ephemeral: true });
-      const desc = list.map(w => `• **${w.word}**`).join('\n');
+      const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
       return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)], ephemeral: true });
+    } else if (sub === 'show') {
+      const w = await getBlacklistedWord(interaction.guild.id, word);
+      if (!w) return interaction.reply({ content: 'That word is not blacklisted.', ephemeral: true });
+      const embed = new EmbedBuilder()
+        .setTitle(`Blacklisted Word: ${w.word}`)
+        .addFields(
+          { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+          { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+          { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+        )
+        .setColor(0xc0392b);
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    } else if (['warn','delete','log'].includes(sub)) {
+      const toggle = interaction.options.getString('toggle');
+      const w = await getBlacklistedWord(interaction.guild.id, word);
+      if (!w) return interaction.reply({ content: 'That word is not blacklisted.', ephemeral: true });
+      let actions = w.actions || ['delete','warn','log'];
+      if (toggle === 'off') {
+        actions = actions.filter(a => a !== sub);
+      } else {
+        if (!actions.includes(sub)) actions.push(sub);
+      }
+      await updateBlacklistedWordActions(interaction.guild.id, word, actions);
+      return interaction.reply({ content: `Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`, ephemeral: true });
     }
   },
 
@@ -1396,6 +1550,27 @@ const slashHandlers = {
       console.error('Report channel error:', e);
       return interaction.reply({ content: 'Failed to set report channel.', ephemeral: true });
     }
+  },
+
+  say: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    const message = interaction.options.getString('message');
+    const style = interaction.options.getString('style') || 'embed';
+    let color = interaction.options.getString('color') || '7289da';
+    if (color.startsWith('#')) color = color.slice(1);
+    let colorInt = parseInt(color, 16);
+    if (isNaN(colorInt)) colorInt = 0x7289da;
+    if (style === 'plain') {
+      await interaction.reply({ content: message });
+    } else {
+      const embed = new EmbedBuilder()
+        .setDescription(message)
+        .setColor(colorInt)
+        .setTimestamp();
+      await interaction.reply({ embeds: [embed] });
+    }
   }
 };
 
@@ -1449,7 +1624,8 @@ async function addWatchword(guildId, word, actions, addedBy) {
     guild_id: guildId,
     word: word.toLowerCase(),
     actions,
-    added_by: addedBy
+    added_by: addedBy,
+    created_at: new Date().toISOString()
   });
 }
 
@@ -1458,23 +1634,183 @@ async function removeWatchword(guildId, word) {
   return await supabase.from('watchwords').delete().eq('guild_id', guildId).eq('word', word.toLowerCase());
 }
 
-// Message monitoring for watchwords
+// Helper: update actions for a watchword
+async function updateWatchwordActions(guildId, word, actions) {
+  return await supabase.from('watchwords').update({ actions }).eq('guild_id', guildId).eq('word', word.toLowerCase());
+}
+
+// Helper: get a single watchword
+async function getWatchword(guildId, word) {
+  const { data, error } = await supabase.from('watchwords').select('*').eq('guild_id', guildId).eq('word', word.toLowerCase()).single();
+  if (error) return null;
+  return data;
+}
+
+// Prefix command: &watchword add/remove/list/show/warn/delete/log <word> [actions]
+prefixCommands.watchword = async (msg, args) => {
+  if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+  const sub = args[0]?.toLowerCase();
+  const word = args[1]?.toLowerCase();
+  if (!sub || !['add','remove','list','show','warn','delete','log'].includes(sub)) {
+    return msg.reply('Usage: &watchword add/remove/list/show/warn/delete/log <word> [actions]');
+  }
+  if (sub === 'add') {
+    if (!word) return msg.reply('Usage: &watchword add <word> [actions]');
+    const actions = args.slice(2).length ? args.slice(2) : ['delete','warn','log'];
+    await addWatchword(msg.guild.id, word, actions, msg.author.id);
+    return msg.reply(`Watchword "${word}" added with actions: ${actions.join(', ')}`);
+  } else if (sub === 'remove') {
+    if (!word) return msg.reply('Usage: &watchword remove <word>');
+    await removeWatchword(msg.guild.id, word);
+    return msg.reply(`Watchword "${word}" removed.`);
+  } else if (sub === 'list') {
+    const list = await getWatchwords(msg.guild.id);
+    if (!list.length) return msg.reply('No watchwords set.');
+    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)] });
+  } else if (sub === 'show') {
+    if (!word) return msg.reply('Usage: &watchword show <word>');
+    const w = await getWatchword(msg.guild.id, word);
+    if (!w) return msg.reply('That word is not a watchword.');
+    const embed = new EmbedBuilder()
+      .setTitle(`Watchword: ${w.word}`)
+      .addFields(
+        { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+        { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+        { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+      )
+      .setColor(0xe67e22);
+    return msg.reply({ embeds: [embed] });
+  } else if (['warn','delete','log'].includes(sub)) {
+    if (!word) return msg.reply(`Usage: &watchword ${sub} <word> [on|off]`);
+    const w = await getWatchword(msg.guild.id, word);
+    if (!w) return msg.reply('That word is not a watchword.');
+    let actions = w.actions || ['delete','warn','log'];
+    const toggle = args[2]?.toLowerCase();
+    if (toggle === 'off') {
+      actions = actions.filter(a => a !== sub);
+    } else {
+      if (!actions.includes(sub)) actions.push(sub);
+    }
+    await updateWatchwordActions(msg.guild.id, word, actions);
+    return msg.reply(`Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`);
+  }
+};
+
+// Slash command: /watchword add/remove/list/show/warn/delete/log
+if (slashCommands && Array.isArray(slashCommands)) {
+  const { SlashCommandBuilder } = require('discord.js');
+  slashCommands.push(
+    new SlashCommandBuilder()
+      .setName('watchword')
+      .setDescription('Manage watchwords (admin only)')
+      .addSubcommand(sub =>
+        sub.setName('add')
+          .setDescription('Add a watchword')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to watch').setRequired(true))
+          .addStringOption(opt => opt.setName('actions').setDescription('Comma-separated actions (delete,warn,log)').setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName('remove')
+          .setDescription('Remove a watchword')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to remove').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('list')
+          .setDescription('List all watchwords'))
+      .addSubcommand(sub =>
+        sub.setName('show')
+          .setDescription('Show details for a watchword')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to show').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('warn')
+          .setDescription('Toggle warn action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('delete')
+          .setDescription('Toggle delete action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('log')
+          .setDescription('Toggle log action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+  );
+}
+slashHandlers.watchword = async (interaction) => {
+  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  const sub = interaction.options.getSubcommand();
+  const word = interaction.options.getString('word')?.toLowerCase();
+  if (sub === 'add') {
+    const actionsStr = interaction.options.getString('actions');
+    const actions = actionsStr ? actionsStr.split(',').map(a => a.trim().toLowerCase()) : ['delete','warn','log'];
+    await addWatchword(interaction.guild.id, word, actions, interaction.user.id);
+    return interaction.reply({ content: `Watchword "${word}" added with actions: ${actions.join(', ')}`, ephemeral: true });
+  } else if (sub === 'remove') {
+    await removeWatchword(interaction.guild.id, word);
+    return interaction.reply({ content: `Watchword "${word}" removed.`, ephemeral: true });
+  } else if (sub === 'list') {
+    const list = await getWatchwords(interaction.guild.id);
+    if (!list.length) return interaction.reply({ content: 'No watchwords set.', ephemeral: true });
+    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
+    return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)], ephemeral: true });
+  } else if (sub === 'show') {
+    const w = await getWatchword(interaction.guild.id, word);
+    if (!w) return interaction.reply({ content: 'That word is not a watchword.', ephemeral: true });
+    const embed = new EmbedBuilder()
+      .setTitle(`Watchword: ${w.word}`)
+      .addFields(
+        { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+        { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+        { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+      )
+      .setColor(0xe67e22);
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  } else if (['warn','delete','log'].includes(sub)) {
+    const toggle = interaction.options.getString('toggle');
+    const w = await getWatchword(interaction.guild.id, word);
+    if (!w) return interaction.reply({ content: 'That word is not a watchword.', ephemeral: true });
+    let actions = w.actions || ['delete','warn','log'];
+    if (toggle === 'off') {
+      actions = actions.filter(a => a !== sub);
+    } else {
+      if (!actions.includes(sub)) actions.push(sub);
+    }
+    await updateWatchwordActions(interaction.guild.id, word, actions);
+    return interaction.reply({ content: `Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`, ephemeral: true });
+  }
+};
+
+// --- Watchword monitoring with cooldown ---
+const watchwordCooldowns = new Map(); // Map<guildId-userId, timestamp>
 async function monitorWatchwords(msg) {
   if (!msg.guild || msg.author.bot) return;
   const watchwords = await getWatchwords(msg.guild.id);
   if (!watchwords.length) return;
   const content = msg.content.toLowerCase();
+  const cooldownKey = `${msg.guild.id}-${msg.author.id}`;
+  const now = Date.now();
+  // 60s cooldown per user
+  if (watchwordCooldowns.has(cooldownKey) && now - watchwordCooldowns.get(cooldownKey) < 60000) {
+    return;
+  }
   for (const w of watchwords) {
-    if (content.includes(w.word)) {
-      // Perform actions
+    // Use regex for word boundary match
+    const regex = new RegExp(`\\b${w.word.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(msg.content)) {
       if (w.actions.includes('delete')) {
         await msg.delete().catch(() => {});
       }
       if (w.actions.includes('warn')) {
-        await msg.reply({ content: `Watchword triggered: "${w.word}". Please avoid using this word.`, allowedMentions: { repliedUser: false } }).catch(() => {});
+        await msg.channel.send({ content: `<@${msg.author.id}>, your message contained a watchword: "${w.word}". Please avoid using this word.`, allowedMentions: { users: [] } }).catch(() => {});
       }
       if (w.actions.includes('log')) {
-        // Log to modlog channel if set
         const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', msg.guild.id).single();
         if (config && config.log_channel) {
           const channel = msg.guild.channels.cache.get(config.log_channel);
@@ -1488,10 +1824,12 @@ async function monitorWatchwords(msg) {
           }
         }
       }
+      watchwordCooldowns.set(cooldownKey, now);
       break; // Only trigger on first match per message
     }
   }
 }
+module.exports.monitorWatchwords = monitorWatchwords;
 
 // --- BLACKLISTWORD SYSTEM ---
 
@@ -1503,11 +1841,13 @@ async function getBlacklistedWords(guildId) {
 }
 
 // Helper: add a blacklisted word
-async function addBlacklistedWord(guildId, word, addedBy) {
+async function addBlacklistedWord(guildId, word, addedBy, actions = ['delete','warn','log']) {
   return await supabase.from('blacklisted_words').upsert({
     guild_id: guildId,
     word: word.toLowerCase(),
-    added_by: addedBy
+    actions,
+    added_by: addedBy,
+    created_at: new Date().toISOString()
   });
 }
 
@@ -1516,80 +1856,190 @@ async function removeBlacklistedWord(guildId, word) {
   return await supabase.from('blacklisted_words').delete().eq('guild_id', guildId).eq('word', word.toLowerCase());
 }
 
-// Prefix command: &blacklistword add/remove/list <word>
+// Helper: update actions for a blacklisted word
+async function updateBlacklistedWordActions(guildId, word, actions) {
+  return await supabase.from('blacklisted_words').update({ actions }).eq('guild_id', guildId).eq('word', word.toLowerCase());
+}
+
+// Helper: get a single blacklisted word
+async function getBlacklistedWord(guildId, word) {
+  const { data, error } = await supabase.from('blacklisted_words').select('*').eq('guild_id', guildId).eq('word', word.toLowerCase()).single();
+  if (error) return null;
+  return data;
+}
+
+// Prefix command: &blacklistword add/remove/list/show/warn/delete/log <word> [actions]
 prefixCommands.blacklistword = async (msg, args) => {
   if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
   const sub = args[0]?.toLowerCase();
-  if (!sub || !['add','remove','list'].includes(sub)) {
-    return msg.reply('Usage: &blacklistword add <word> | remove <word> | list');
+  const word = args[1]?.toLowerCase();
+  if (!sub || !['add','remove','list','show','warn','delete','log'].includes(sub)) {
+    return msg.reply('Usage: &blacklistword add/remove/list/show/warn/delete/log <word> [actions]');
   }
   if (sub === 'add') {
-    const word = args[1];
-    if (!word) return msg.reply('Usage: &blacklistword add <word>');
-    await addBlacklistedWord(msg.guild.id, word, msg.author.id);
-    return msg.reply(`Blacklisted word "${word}" added.`);
+    if (!word) return msg.reply('Usage: &blacklistword add <word> [actions]');
+    const actions = args.slice(2).length ? args.slice(2) : ['delete','warn','log'];
+    await addBlacklistedWord(msg.guild.id, word, msg.author.id, actions);
+    return msg.reply(`Blacklisted word "${word}" added with actions: ${actions.join(', ')}`);
   } else if (sub === 'remove') {
-    const word = args[1];
     if (!word) return msg.reply('Usage: &blacklistword remove <word>');
     await removeBlacklistedWord(msg.guild.id, word);
     return msg.reply(`Blacklisted word "${word}" removed.`);
   } else if (sub === 'list') {
     const list = await getBlacklistedWords(msg.guild.id);
     if (!list.length) return msg.reply('No blacklisted words set.');
-    const desc = list.map(w => `• **${w.word}**`).join('\n');
+    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)] });
+  } else if (sub === 'show') {
+    if (!word) return msg.reply('Usage: &blacklistword show <word>');
+    const w = await getBlacklistedWord(msg.guild.id, word);
+    if (!w) return msg.reply('That word is not blacklisted.');
+    const embed = new EmbedBuilder()
+      .setTitle(`Blacklisted Word: ${w.word}`)
+      .addFields(
+        { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+        { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+        { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+      )
+      .setColor(0xc0392b);
+    return msg.reply({ embeds: [embed] });
+  } else if (['warn','delete','log'].includes(sub)) {
+    if (!word) return msg.reply(`Usage: &blacklistword ${sub} <word> [on|off]`);
+    const w = await getBlacklistedWord(msg.guild.id, word);
+    if (!w) return msg.reply('That word is not blacklisted.');
+    let actions = w.actions || ['delete','warn','log'];
+    const toggle = args[2]?.toLowerCase();
+    if (toggle === 'off') {
+      actions = actions.filter(a => a !== sub);
+    } else {
+      if (!actions.includes(sub)) actions.push(sub);
+    }
+    await updateBlacklistedWordActions(msg.guild.id, word, actions);
+    return msg.reply(`Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`);
   }
 };
 
-// Add slash command definition
-slashCommands.push(
-  new SlashCommandBuilder()
-    .setName('blacklistword')
-    .setDescription('Manage blacklisted words (admin only)')
-    .addSubcommand(sub =>
-      sub.setName('add')
-        .setDescription('Add a blacklisted word')
-        .addStringOption(opt => opt.setName('word').setDescription('Word to blacklist').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('remove')
-        .setDescription('Remove a blacklisted word')
-        .addStringOption(opt => opt.setName('word').setDescription('Word to remove').setRequired(true))
-    )
-    .addSubcommand(sub =>
-      sub.setName('list')
-        .setDescription('List all blacklisted words'))
-);
-
-// Slash handler
+// Slash command: /blacklistword add/remove/list/show/warn/delete/log
+if (slashCommands && Array.isArray(slashCommands)) {
+  const { SlashCommandBuilder } = require('discord.js');
+  slashCommands.push(
+    new SlashCommandBuilder()
+      .setName('blacklistword')
+      .setDescription('Manage blacklisted words (admin only)')
+      .addSubcommand(sub =>
+        sub.setName('add')
+          .setDescription('Add a blacklisted word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to blacklist').setRequired(true))
+          .addStringOption(opt => opt.setName('actions').setDescription('Comma-separated actions (delete,warn,log)').setRequired(false))
+      )
+      .addSubcommand(sub =>
+        sub.setName('remove')
+          .setDescription('Remove a blacklisted word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to remove').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('list')
+          .setDescription('List all blacklisted words'))
+      .addSubcommand(sub =>
+        sub.setName('show')
+          .setDescription('Show details for a blacklisted word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word to show').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('warn')
+          .setDescription('Toggle warn action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('delete')
+          .setDescription('Toggle delete action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+      .addSubcommand(sub =>
+        sub.setName('log')
+          .setDescription('Toggle log action for a word')
+          .addStringOption(opt => opt.setName('word').setDescription('Word').setRequired(true))
+          .addStringOption(opt => opt.setName('toggle').setDescription('on|off').setRequired(true))
+      )
+  );
+}
 slashHandlers.blacklistword = async (interaction) => {
   if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
   const sub = interaction.options.getSubcommand();
+  const word = interaction.options.getString('word')?.toLowerCase();
   if (sub === 'add') {
-    const word = interaction.options.getString('word');
-    await addBlacklistedWord(interaction.guild.id, word, interaction.user.id);
-    return interaction.reply({ content: `Blacklisted word "${word}" added.`, ephemeral: true });
+    const actionsStr = interaction.options.getString('actions');
+    const actions = actionsStr ? actionsStr.split(',').map(a => a.trim().toLowerCase()) : ['delete','warn','log'];
+    await addBlacklistedWord(interaction.guild.id, word, interaction.user.id, actions);
+    return interaction.reply({ content: `Blacklisted word "${word}" added with actions: ${actions.join(', ')}`, ephemeral: true });
   } else if (sub === 'remove') {
-    const word = interaction.options.getString('word');
     await removeBlacklistedWord(interaction.guild.id, word);
     return interaction.reply({ content: `Blacklisted word "${word}" removed.`, ephemeral: true });
   } else if (sub === 'list') {
     const list = await getBlacklistedWords(interaction.guild.id);
     if (!list.length) return interaction.reply({ content: 'No blacklisted words set.', ephemeral: true });
-    const desc = list.map(w => `• **${w.word}**`).join('\n');
+    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted Words').setDescription(desc).setColor(0xc0392b)], ephemeral: true });
+  } else if (sub === 'show') {
+    const w = await getBlacklistedWord(interaction.guild.id, word);
+    if (!w) return interaction.reply({ content: 'That word is not blacklisted.', ephemeral: true });
+    const embed = new EmbedBuilder()
+      .setTitle(`Blacklisted Word: ${w.word}`)
+      .addFields(
+        { name: 'Actions', value: w.actions?.join(', ') || 'delete,warn,log', inline: true },
+        { name: 'Added By', value: w.added_by || 'Unknown', inline: true },
+        { name: 'Created At', value: w.created_at ? new Date(w.created_at).toLocaleString() : 'Unknown', inline: true }
+      )
+      .setColor(0xc0392b);
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  } else if (['warn','delete','log'].includes(sub)) {
+    const toggle = interaction.options.getString('toggle');
+    const w = await getBlacklistedWord(interaction.guild.id, word);
+    if (!w) return interaction.reply({ content: 'That word is not blacklisted.', ephemeral: true });
+    let actions = w.actions || ['delete','warn','log'];
+    if (toggle === 'off') {
+      actions = actions.filter(a => a !== sub);
+    } else {
+      if (!actions.includes(sub)) actions.push(sub);
+    }
+    await updateBlacklistedWordActions(interaction.guild.id, word, actions);
+    return interaction.reply({ content: `Action "${sub}" for "${word}" is now ${toggle === 'off' ? 'disabled' : 'enabled'}.`, ephemeral: true });
   }
 };
 
-// Message monitoring for blacklisted words
+// --- Blacklisted word warning cooldowns ---
+const blacklistedWordCooldowns = new Map(); // Map<guildId-userId, timestamp>
+
 async function monitorBlacklistedWords(msg) {
   if (!msg.guild || msg.author.bot) return;
   const blacklisted = await getBlacklistedWords(msg.guild.id);
   if (!blacklisted.length) return;
   const content = msg.content.toLowerCase();
+  const cooldownKey = `${msg.guild.id}-${msg.author.id}`;
+  const now = Date.now();
+  // 60s cooldown per user
+  if (blacklistedWordCooldowns.has(cooldownKey) && now - blacklistedWordCooldowns.get(cooldownKey) < 60000) {
+    await msg.delete().catch(() => {});
+    return;
+  }
+  // Fetch custom warning message if set
+  let customWarning = null;
+  try {
+    const { data: config } = await supabase.from('guild_configs').select('blacklist_warning_message').eq('guild_id', msg.guild.id).single();
+    if (config && config.blacklist_warning_message) customWarning = config.blacklist_warning_message;
+  } catch {}
   for (const w of blacklisted) {
-    if (content.includes(w.word)) {
+    // Use regex for word boundary match
+    const regex = new RegExp(`\\b${w.word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (regex.test(msg.content)) {
       await msg.delete().catch(() => {});
+      // Warn user (reply, but don't ping)
+      const warnMsg = customWarning
+        ? customWarning.replace('{user}', `<@${msg.author.id}>`).replace('{word}', w.word)
+        : `<@${msg.author.id}>, your message was removed for using a blacklisted word: "${w.word}". Continued use may result in further action.`;
+      await msg.channel.send({ content: warnMsg, allowedMentions: { users: [] } }).catch(() => {});
       // Log to modlog channel if set
       const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', msg.guild.id).single();
       if (config && config.log_channel) {
@@ -1603,6 +2053,13 @@ async function monitorBlacklistedWords(msg) {
           ] });
         }
       }
+      // Add warning to DB
+      if (typeof addWarning === 'function') {
+        await addWarning(msg.guild.id, msg.author.id, `Blacklisted word: ${w.word}`, 'BOT');
+      } else if (global.addWarning) {
+        await global.addWarning(msg.guild.id, msg.author.id, `Blacklisted word: ${w.word}`, 'BOT');
+      }
+      blacklistedWordCooldowns.set(cooldownKey, now);
       break; // Only trigger on first match per message
     }
   }
