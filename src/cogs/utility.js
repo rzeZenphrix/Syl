@@ -2549,32 +2549,41 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message template').setRequired(false))
 );
 slashHandlers['starboard-set'] = async (interaction) => {
-  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
-  const name = interaction.options.getString('name');
-  const emoji = interaction.options.getString('emoji');
-  const threshold = interaction.options.getInteger('threshold');
-  const channel = interaction.options.getChannel('channel');
-  const allowBots = interaction.options.getBoolean('allow_bots') ?? false;
-  const allowSelfstar = interaction.options.getBoolean('allow_selfstar') ?? false;
-  const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
-  const blacklistChannels = interaction.options.getString('blacklist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
-  const customMessage = interaction.options.getString('custom_message') || null;
-  await upsertStarboard({
-    guild_id: interaction.guild.id,
-    name,
-    emoji,
-    threshold,
-    channel_id: channel.id,
-    allow_bots: allowBots,
-    allow_selfstar: allowSelfstar,
-    blacklist_roles: blacklistRoles,
-    blacklist_channels: blacklistChannels,
-    custom_message: customMessage,
-    created_by: interaction.user.id,
-    created_at: new Date().toISOString()
-  });
-  await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>`);
-  return interaction.reply({ content: `Starboard **${name}** configured!`, ephemeral: true });
+  try {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const name = interaction.options.getString('name');
+    const emoji = interaction.options.getString('emoji');
+    const threshold = interaction.options.getInteger('threshold');
+    const channel = interaction.options.getChannel('channel');
+    const allowBots = interaction.options.getBoolean('allow_bots') ?? false;
+    const allowSelfstar = interaction.options.getBoolean('allow_selfstar') ?? false;
+    const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const blacklistChannels = interaction.options.getString('blacklist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const customMessage = interaction.options.getString('custom_message') || null;
+    await upsertStarboard({
+      guild_id: interaction.guild.id,
+      name,
+      emoji,
+      threshold,
+      channel_id: channel.id,
+      allow_bots: allowBots,
+      allow_selfstar: allowSelfstar,
+      blacklist_roles: blacklistRoles,
+      blacklist_channels: blacklistChannels,
+      custom_message: customMessage,
+      created_by: interaction.user.id,
+      created_at: new Date().toISOString()
+    });
+    await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>`);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: `Starboard **${name}** configured!`, ephemeral: true });
+    }
+  } catch (e) {
+    console.error('[Starboard] Error in starboard-set:', e);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: 'Failed to configure starboard.', ephemeral: true });
+    }
+  }
 };
 // /starboard-remove
 slashCommands.push(
@@ -2584,11 +2593,20 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('name').setDescription('Starboard name').setRequired(true))
 );
 slashHandlers['starboard-remove'] = async (interaction) => {
-  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
-  const name = interaction.options.getString('name');
-  await removeStarboard(interaction.guild.id, name);
-  await logToModLog(interaction.guild, 'Starboard Removed', `Name: **${name}**`);
-  return interaction.reply({ content: `Starboard **${name}** removed.`, ephemeral: true });
+  try {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const name = interaction.options.getString('name');
+    await removeStarboard(interaction.guild.id, name);
+    await logToModLog(interaction.guild, 'Starboard Removed', `Name: **${name}**`);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: `Starboard **${name}** removed.`, ephemeral: true });
+    }
+  } catch (e) {
+    console.error('[Starboard] Error in starboard-remove:', e);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: 'Failed to remove starboard.', ephemeral: true });
+    }
+  }
 };
 // /starboard-list
 slashCommands.push(
@@ -2597,10 +2615,24 @@ slashCommands.push(
     .setDescription('List all starboards')
 );
 slashHandlers['starboard-list'] = async (interaction) => {
-  const starboards = await getStarboards(interaction.guild.id);
-  if (!starboards.length) return interaction.reply({ content: 'No starboards configured.', ephemeral: true });
-  const desc = starboards.map(sb => `• **${sb.name}** — Emoji: ${sb.emoji}, Threshold: ${sb.threshold}, Channel: <#${sb.channel_id}>`).join('\n');
-  return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Starboards').setDescription(desc).setColor(0xf1c40f)], ephemeral: true });
+  try {
+    const starboards = await getStarboards(interaction.guild.id);
+    if (!starboards.length) {
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: 'No starboards configured.', ephemeral: true });
+      }
+      return;
+    }
+    const desc = starboards.map(sb => `• **${sb.name}** — Emoji: ${sb.emoji}, Threshold: ${sb.threshold}, Channel: <#${sb.channel_id}>`).join('\n');
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Starboards').setDescription(desc).setColor(0xf1c40f)], ephemeral: true });
+    }
+  } catch (e) {
+    console.error('[Starboard] Error in starboard-list:', e);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: 'Failed to list starboards.', ephemeral: true });
+    }
+  }
 };
 // /starboard-info
 slashCommands.push(
@@ -2610,23 +2642,37 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('name').setDescription('Starboard name').setRequired(true))
 );
 slashHandlers['starboard-info'] = async (interaction) => {
-  const name = interaction.options.getString('name');
-  const sb = await getStarboard(interaction.guild.id, name);
-  if (!sb) return interaction.reply({ content: 'Starboard not found.', ephemeral: true });
-  const embed = new EmbedBuilder()
-    .setTitle(`Starboard: ${sb.name}`)
-    .addFields(
-      { name: 'Emoji', value: sb.emoji, inline: true },
-      { name: 'Threshold', value: sb.threshold.toString(), inline: true },
-      { name: 'Channel', value: `<#${sb.channel_id}>`, inline: true },
-      { name: 'Allow Bots', value: sb.allow_bots ? 'Yes' : 'No', inline: true },
-      { name: 'Allow Self-Star', value: sb.allow_selfstar ? 'Yes' : 'No', inline: true },
-      { name: 'Blacklist Roles', value: sb.blacklist_roles?.join(', ') || 'None', inline: true },
-      { name: 'Blacklist Channels', value: sb.blacklist_channels?.join(', ') || 'None', inline: true },
-      { name: 'Custom Message', value: sb.custom_message || 'Default', inline: false }
-    )
-    .setColor(0xf1c40f);
-  return interaction.reply({ embeds: [embed], ephemeral: true });
+  try {
+    const name = interaction.options.getString('name');
+    const sb = await getStarboard(interaction.guild.id, name);
+    if (!sb) {
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: 'Starboard not found.', ephemeral: true });
+      }
+      return;
+    }
+    const embed = new EmbedBuilder()
+      .setTitle(`Starboard: ${sb.name}`)
+      .addFields(
+        { name: 'Emoji', value: sb.emoji, inline: true },
+        { name: 'Threshold', value: sb.threshold.toString(), inline: true },
+        { name: 'Channel', value: `<#${sb.channel_id}>`, inline: true },
+        { name: 'Allow Bots', value: sb.allow_bots ? 'Yes' : 'No', inline: true },
+        { name: 'Allow Self-Star', value: sb.allow_selfstar ? 'Yes' : 'No', inline: true },
+        { name: 'Blacklist Roles', value: sb.blacklist_roles?.join(', ') || 'None', inline: true },
+        { name: 'Blacklist Channels', value: sb.blacklist_channels?.join(', ') || 'None', inline: true },
+        { name: 'Custom Message', value: sb.custom_message || 'Default', inline: false }
+      )
+      .setColor(0xf1c40f);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+  } catch (e) {
+    console.error('[Starboard] Error in starboard-info:', e);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: 'Failed to show starboard info.', ephemeral: true });
+    }
+  }
 };
 
 // --- Starboard Reaction Handler ---
@@ -2655,24 +2701,29 @@ async function handleStarboardReaction(reaction, user, added) {
     if (count < sb.threshold) continue;
     // Post to starboard
     const channel = reaction.message.guild.channels.cache.get(sb.channel_id);
+    console.log('[Starboard] Attempting to post:', {
+      channelId: sb.channel_id,
+      channelFound: !!channel,
+      isTextBased: channel?.isTextBased?.(),
+      content: sb.custom_message ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content) : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`,
+      embed: new EmbedBuilder()
+        .setDescription(sb.custom_message ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content) : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`)
+        .setColor(0xf1c40f)
+        .setFooter({ text: `Message ID: ${reaction.message.id}` })
+        .setTimestamp(reaction.message.createdAt)
+    });
     if (!channel || !channel.isTextBased()) continue;
     // Check if already posted (by message ID in starboard)
     const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
-    const content = sb.custom_message
-      ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content)
-      : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`;
-    const embed = new EmbedBuilder()
-      .setDescription(content)
-      .setColor(0xf1c40f)
-      .setFooter({ text: `Message ID: ${reaction.message.id}` })
-      .setTimestamp(reaction.message.createdAt);
-    if (reaction.message.attachments.size > 0) {
-      embed.setImage(reaction.message.attachments.first().url);
-    }
     if (existing) {
-      await existing.edit({ embeds: [embed] });
+      await existing.edit({ embeds: [existing.embeds[0].addFields({ name: 'Stars', value: `⭐ ${count}`, inline: true })] });
     } else {
-      await channel.send({ embeds: [embed] });
+      await channel.send({ embeds: [new EmbedBuilder()
+        .setDescription(sb.custom_message ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content) : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`)
+        .setColor(0xf1c40f)
+        .setFooter({ text: `Message ID: ${reaction.message.id}` })
+        .setTimestamp(reaction.message.createdAt)
+      ] });
       await logToModLog(reaction.message.guild, 'Starboard Post', `Message by <@${reaction.message.author?.id}> starred in <#${reaction.message.channel.id}> with ${count} ${reaction.emoji}`);
     }
   }
@@ -2700,15 +2751,29 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('starboard').setDescription('Starboard name (optional)').setRequired(false))
 );
 slashHandlers['starboard-leaderboard'] = async (interaction) => {
-  const starboard = interaction.options.getString('starboard');
-  const leaderboard = await getStarboardLeaderboard(interaction.guild.id, starboard);
-  if (!leaderboard.length) return interaction.reply({ content: 'No starboard posts yet.', ephemeral: true });
-  const desc = leaderboard.map((entry, i) => `**${i+1}.** <@${entry.author_id}> — ${entry.count} ⭐ [Jump](https://discord.com/channels/${interaction.guild.id}/${entry.channel_id}/${entry.message_id})`).join('\n');
-  const embed = new EmbedBuilder()
-    .setTitle(starboard ? `Starboard Leaderboard: ${starboard}` : 'Global Starboard Leaderboard')
-    .setDescription(desc)
-    .setColor(0xf1c40f);
-  return interaction.reply({ embeds: [embed], ephemeral: true });
+  try {
+    const starboard = interaction.options.getString('starboard');
+    const leaderboard = await getStarboardLeaderboard(interaction.guild.id, starboard);
+    if (!leaderboard.length) {
+      if (!interaction.replied && !interaction.deferred) {
+        return interaction.reply({ content: 'No starboard posts yet.', ephemeral: true });
+      }
+      return;
+    }
+    const desc = leaderboard.map((entry, i) => `**${i+1}.** <@${entry.author_id}> — ${entry.count} ⭐ [Jump](https://discord.com/channels/${interaction.guild.id}/${entry.channel_id}/${entry.message_id})`).join('\n');
+    const embed = new EmbedBuilder()
+      .setTitle(starboard ? `Starboard Leaderboard: ${starboard}` : 'Global Starboard Leaderboard')
+      .setDescription(desc)
+      .setColor(0xf1c40f);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+  } catch (e) {
+    console.error('[Starboard] Error in starboard-leaderboard:', e);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: 'Failed to show starboard leaderboard.', ephemeral: true });
+    }
+  }
 };
 
 // --- Enhanced Starboard Reaction Handler ---
@@ -2758,6 +2823,23 @@ async function handleStarboardReaction(reaction, user, added) {
     }
     // Post to starboard
     const channel = reaction.message.guild.channels.cache.get(sb.channel_id);
+    console.log('[Starboard] Attempting to post:', {
+      channelId: sb.channel_id,
+      channelFound: !!channel,
+      isTextBased: channel?.isTextBased?.(),
+      content: sb.custom_message ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content) : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`,
+      embed: new EmbedBuilder()
+        .setAuthor({ name: reaction.message.author?.tag || 'Unknown', iconURL: reaction.message.author?.displayAvatarURL?.() })
+        .setDescription(`${reaction.message.content?.slice(0, 200) || '[No content]'}...${reaction.message.content?.length > 200 ? '…' : ''}`)
+        .addFields(
+          { name: 'Channel', value: `<#${reaction.message.channel.id}>`, inline: true },
+          { name: 'Stars', value: `⭐ ${count}`, inline: true },
+          { name: 'Timestamp', value: `<t:${Math.floor(reaction.message.createdTimestamp/1000)}:R>`, inline: true }
+        )
+        .setColor(0xf1c40f)
+        .setFooter({ text: `Message ID: ${reaction.message.id}${count >= (sb.top_star_threshold || 100) ? ' 🎖️ Top Star' : ''}` })
+        .setTimestamp(reaction.message.createdAt)
+    });
     if (!channel || !channel.isTextBased()) continue;
     // Check if already posted (by message ID in starboard)
     const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
