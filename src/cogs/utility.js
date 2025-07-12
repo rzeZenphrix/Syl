@@ -2840,7 +2840,14 @@ async function handleStarboardReaction(reaction, user, added) {
         .setFooter({ text: `Message ID: ${reaction.message.id}${count >= (sb.top_star_threshold || 100) ? ' 🎖️ Top Star' : ''}` })
         .setTimestamp(reaction.message.createdAt)
     });
-    if (!channel || !channel.isTextBased()) continue;
+    if (!channel || !channel.isTextBased()) {
+      console.log('[Starboard] Skipping post:', {
+        channelId: sb.channel_id,
+        channelFound: !!channel,
+        isTextBased: channel?.isTextBased?.()
+      });
+      continue;
+    }
     // Check if already posted (by message ID in starboard)
     const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
     // Build embed
