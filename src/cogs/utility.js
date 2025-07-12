@@ -1099,10 +1099,49 @@ const prefixCommands = {
 
   steal: async (msg, args) => {
     if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
-    const user = msg.mentions.users.first();
-    if (!user) return msg.reply('Please mention a user to steal their avatar.');
-    const avatarUrl = user.displayAvatarURL({ size: 1024 });
-    return msg.reply({ content: `Avatar stolen: ${avatarUrl}` });
+    if (args.length < 1) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';steal <emoji> [new_name]\nExample: `;steal <:party:123456789012345678> party`').setColor(0xe74c3c)] });
+    }
+    const emojiArg = args[0];
+    const newName = args[1] || 'stolen_emoji';
+    // Reject user mentions
+    if (/^<@!?\d+>$/.test(emojiArg)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Usage').setDescription('Please provide a custom emoji from another server, not a user mention.').setColor(0xe74c3c)] });
+    }
+    // Extract emoji ID from the emoji string
+    const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
+    if (!emojiMatch) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Emoji').setDescription('Please provide a valid custom emoji from another server.').setColor(0xe74c3c)] });
+    }
+    const [, emojiName, emojiId] = emojiMatch;
+    const isAnimated = emojiArg.startsWith('<a:');
+    const extension = isAnimated ? 'gif' : 'png';
+    const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
+    try {
+      // Create the emoji in the current server
+      const createdEmoji = await msg.guild.emojis.create({
+        attachment: emojiUrl,
+        name: newName
+      });
+      const embed = new EmbedBuilder()
+        .setTitle('🎭 Emoji Stolen Successfully!')
+        .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
+        .setThumbnail(emojiUrl)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Steal emoji error:', e);
+      let errorMessage = 'Failed to steal emoji.';
+      if (e.code === 30008) {
+        errorMessage = 'Server has reached the maximum number of emojis.';
+      } else if (e.code === 50035) {
+        errorMessage = 'Invalid emoji name. Use only letters, numbers, and underscores.';
+      } else if (e.code === 50013) {
+        errorMessage = 'Bot lacks permission to manage emojis.';
+      }
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
+    }
   },
 };
 
@@ -1894,7 +1933,7 @@ slashHandlers.watchword = async (interaction) => {
   } else if (sub === 'list') {
     const list = await getWatchwords(interaction.guild.id);
     if (!list.length) return interaction.reply({ content: 'No watchwords set.', ephemeral: true });
-    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
+    const desc = list.map(w => `• **${w.word}** — ${w.actions.join(', ')}`).join('\n');
     return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)], ephemeral: true });
   } else if (sub === 'show') {
     const w = await getWatchword(interaction.guild.id, word);

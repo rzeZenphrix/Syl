@@ -28,6 +28,7 @@ const {
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
 const CogManager = require('./src/cogManager');
+const { logEvent } = require('./src/logger');
 
 // Environment variables
 const token = process.env.DISCORD_TOKEN;
@@ -577,7 +578,6 @@ client.on('guildMemberAdd', async (member) => {
     const accountAgeDays = accountAgeMs / (1000 * 60 * 60 * 24);
     if (accountAgeDays < 3) {
       // Log to mod-log
-      const { logEvent } = require('./src/logger');
       await logEvent(member.guild, 'RAID WARNING', `New account joined: <@${member.id}> (created <t:${Math.floor(member.user.createdAt.getTime()/1000)}:R>)`, 0xe67e22);
     }
     // Check for raid protection
@@ -839,7 +839,6 @@ client.on('webhookUpdate', async (channel) => {
           // Delete the webhook
           await webhook.delete('Unauthorized webhook creation detected by anti-nuke');
           // Log the event
-          const { logEvent } = require('./src/logger');
           await logEvent(channel.guild, 'ANTI-NUKE', `Unauthorized webhook created by <@${creatorId}> in <#${channel.id}>. Webhook deleted.`, 0xe74c3c);
         }
       }
