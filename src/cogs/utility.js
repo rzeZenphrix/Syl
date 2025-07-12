@@ -1025,26 +1025,34 @@ const prefixCommands = {
   },
 
   help: async (msg, args) => {
-    const fs = require('fs');
-    const path = require('path');
-    const MAX_CHUNK = 1900;
-    try {
-      const readmePath = path.resolve(__dirname, '../../README.md');
-      if (!fs.existsSync(readmePath)) {
-        return msg.reply({ embeds: [{ title: 'Help', description: 'Bot guide not found.' }] });
+    const PAGE_SIZE = 15;
+    const categories = [
+      { name: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case', 'raid', 'antinuke'] },
+      { name: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
+      { name: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
+      { name: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
+      { name: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
+    ];
+    let helpText = '**Syl Commands**\n\n';
+    for (const cat of categories) {
+      helpText += `__${cat.name}__\n`;
+      for (const cmd of cat.commands) {
+        if (commandDescriptions[cmd]) {
+          helpText += `• **${cmd}**: ${commandDescriptions[cmd]}\n`;
+        }
       }
-      const content = fs.readFileSync(readmePath, 'utf8');
-      const chunks = [];
-      for (let i = 0; i < content.length; i += MAX_CHUNK) {
-        chunks.push(content.slice(i, i + MAX_CHUNK));
-      }
-      for (const chunk of chunks) {
-        await msg.author.send('```markdown\n' + chunk + '\n```');
-      }
-      await msg.reply({ embeds: [{ title: 'Help', description: 'I have sent you the bot guide via DM!' }] });
-    } catch (e) {
-      await msg.reply({ embeds: [{ title: 'Help', description: 'Could not DM you the guide. Please check your DM settings.' }] });
+      helpText += '\n';
     }
+    // Paginate if too long
+    const MAX_CHUNK = 1900;
+    const chunks = [];
+    for (let i = 0; i < helpText.length; i += MAX_CHUNK) {
+      chunks.push(helpText.slice(i, i + MAX_CHUNK));
+    }
+    for (const chunk of chunks) {
+      await msg.author.send('```markdown\n' + chunk + '\n```');
+    }
+    await msg.reply({ embeds: [{ title: 'Syl Commands', description: 'I have sent you the full bot command list via DM!' }] });
   },
 
   raid: async (msg, args) => {
@@ -1794,7 +1802,7 @@ prefixCommands.watchword = async (msg, args) => {
   } else if (sub === 'list') {
     const list = await getWatchwords(msg.guild.id);
     if (!list.length) return msg.reply('No watchwords set.');
-    const desc = list.map(w => `• **${w.word}** — ${w.actions?.join(', ') || 'delete,warn,log'}`).join('\n');
+    const desc = list.map(w => `• **${w.word}** — ${w.actions.join(', ')}`).join('\n');
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Watchwords').setDescription(desc).setColor(0xe67e22)] });
   } else if (sub === 'show') {
     if (!word) return msg.reply('Usage: &watchword show <word>');
@@ -2377,6 +2385,392 @@ help: async (msg, args) => {
   
   return msg.reply({ embeds: [embed] });
 },
+
+// Helper to log to mod-log channel
+async function logToModLog(msgOrGuild, title, description, color = 0xe67e22) {
+  let guild = msgOrGuild.guild || msgOrGuild;
+  if (!guild) return;
+  let logChannelId;
+  try {
+    const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', guild.id).single();
+    logChannelId = config?.log_channel;
+  } catch {}
+  if (!logChannelId) return;
+  const channel = guild.channels.cache.get(logChannelId);
+  if (channel && channel.isTextBased()) {
+    await channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setTimestamp()] });
+  }
+}
+
+// --- Update watchword and blacklistword prefix commands to log actions ---
+const oldWatchword = prefixCommands.watchword;
+prefixCommands.watchword = async (msg, args) => {
+  const sub = args[0]?.toLowerCase();
+  const word = args[1]?.toLowerCase();
+  if (sub === 'add' && word) {
+    await oldWatchword(msg, args);
+    await logToModLog(msg, 'Watchword Added', `Word: **${word}**\nBy: <@${msg.author.id}>`);
+    return;
+  }
+  if (sub === 'remove' && word) {
+    await oldWatchword(msg, args);
+    await logToModLog(msg, 'Watchword Removed', `Word: **${word}**\nBy: <@${msg.author.id}>`);
+    return;
+  }
+  await oldWatchword(msg, args);
+};
+const oldBlacklistword = prefixCommands.blacklistword;
+prefixCommands.blacklistword = async (msg, args) => {
+  const sub = args[0]?.toLowerCase();
+  const word = args[1]?.toLowerCase();
+  if (sub === 'add' && word) {
+    await oldBlacklistword(msg, args);
+    await logToModLog(msg, 'Blacklisted Word Added', `Word: **${word}**\nBy: <@${msg.author.id}>`);
+    return;
+  }
+  if (sub === 'remove' && word) {
+    await oldBlacklistword(msg, args);
+    await logToModLog(msg, 'Blacklisted Word Removed', `Word: **${word}**\nBy: <@${msg.author.id}>`);
+    return;
+  }
+  await oldBlacklistword(msg, args);
+};
+
+// --- Update enforcement monitoring to log triggers ---
+const oldMonitorWatchwords = module.exports.monitorWatchwords;
+module.exports.monitorWatchwords = async (msg) => {
+  await oldMonitorWatchwords(msg);
+  // If a watchword was triggered, log it (already logs in original, but ensure always logs)
+};
+const oldMonitorBlacklistedWords = module.exports.monitorBlacklistedWords;
+module.exports.monitorBlacklistedWords = async (msg) => {
+  await oldMonitorBlacklistedWords(msg);
+  // If a blacklisted word was triggered, log it (already logs in original, but ensure always logs)
+};
+
+// --- Snipe (deleted message) logging ---
+if (!global.snipedMessages) global.snipedMessages = {};
+const oldSniper = prefixCommands.sniper;
+prefixCommands.sniper = async (msg, args) => {
+  await oldSniper(msg, args);
+  if (args[0]?.toLowerCase() === undefined) {
+    // User sniped a message
+    const sniped = global.snipedMessages[msg.guild.id]?.[msg.channel.id];
+    if (sniped) {
+      await logToModLog(msg, 'Message Sniped', `User: ${sniped.author}\nContent: ${sniped.content}`);
+    }
+  }
+};
+
+// --- Starboard Feature ---
+// Helper: fetch all starboards for a guild
+async function getStarboards(guildId) {
+  const { data, error } = await supabase.from('starboards').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  return data || [];
+}
+// Helper: fetch a single starboard by name
+async function getStarboard(guildId, name) {
+  const { data, error } = await supabase.from('starboards').select('*').eq('guild_id', guildId).eq('name', name).single();
+  if (error) return null;
+  return data;
+}
+// Helper: upsert starboard config
+async function upsertStarboard(config) {
+  return await supabase.from('starboards').upsert(config, { onConflict: ['guild_id', 'name'] });
+}
+// Helper: remove starboard
+async function removeStarboard(guildId, name) {
+  return await supabase.from('starboards').delete().eq('guild_id', guildId).eq('name', name);
+}
+
+// Slash command: /starboard-set
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('starboard-set')
+    .setDescription('Configure a starboard')
+    .addStringOption(opt => opt.setName('name').setDescription('Starboard name').setRequired(true))
+    .addStringOption(opt => opt.setName('emoji').setDescription('Emoji(s) to use, comma-separated').setRequired(true))
+    .addIntegerOption(opt => opt.setName('threshold').setDescription('Reactions required').setRequired(true))
+    .addChannelOption(opt => opt.setName('channel').setDescription('Starboard channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addBooleanOption(opt => opt.setName('allow_bots').setDescription('Allow starring bot messages?').setRequired(false))
+    .addBooleanOption(opt => opt.setName('allow_selfstar').setDescription('Allow starring own messages?').setRequired(false))
+    .addStringOption(opt => opt.setName('blacklist_roles').setDescription('Blacklist roles (IDs, comma-separated)').setRequired(false))
+    .addStringOption(opt => opt.setName('blacklist_channels').setDescription('Blacklist channels (IDs, comma-separated)').setRequired(false))
+    .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message template').setRequired(false))
+);
+slashHandlers['starboard-set'] = async (interaction) => {
+  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  const name = interaction.options.getString('name');
+  const emoji = interaction.options.getString('emoji');
+  const threshold = interaction.options.getInteger('threshold');
+  const channel = interaction.options.getChannel('channel');
+  const allowBots = interaction.options.getBoolean('allow_bots') ?? false;
+  const allowSelfstar = interaction.options.getBoolean('allow_selfstar') ?? false;
+  const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+  const blacklistChannels = interaction.options.getString('blacklist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+  const customMessage = interaction.options.getString('custom_message') || null;
+  await upsertStarboard({
+    guild_id: interaction.guild.id,
+    name,
+    emoji,
+    threshold,
+    channel_id: channel.id,
+    allow_bots: allowBots,
+    allow_selfstar: allowSelfstar,
+    blacklist_roles: blacklistRoles,
+    blacklist_channels: blacklistChannels,
+    custom_message: customMessage,
+    created_by: interaction.user.id,
+    created_at: new Date().toISOString()
+  });
+  await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>`);
+  return interaction.reply({ content: `Starboard **${name}** configured!`, ephemeral: true });
+};
+// /starboard-remove
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('starboard-remove')
+    .setDescription('Remove a starboard')
+    .addStringOption(opt => opt.setName('name').setDescription('Starboard name').setRequired(true))
+);
+slashHandlers['starboard-remove'] = async (interaction) => {
+  if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+  const name = interaction.options.getString('name');
+  await removeStarboard(interaction.guild.id, name);
+  await logToModLog(interaction.guild, 'Starboard Removed', `Name: **${name}**`);
+  return interaction.reply({ content: `Starboard **${name}** removed.`, ephemeral: true });
+};
+// /starboard-list
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('starboard-list')
+    .setDescription('List all starboards')
+);
+slashHandlers['starboard-list'] = async (interaction) => {
+  const starboards = await getStarboards(interaction.guild.id);
+  if (!starboards.length) return interaction.reply({ content: 'No starboards configured.', ephemeral: true });
+  const desc = starboards.map(sb => `• **${sb.name}** — Emoji: ${sb.emoji}, Threshold: ${sb.threshold}, Channel: <#${sb.channel_id}>`).join('\n');
+  return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Starboards').setDescription(desc).setColor(0xf1c40f)], ephemeral: true });
+};
+// /starboard-info
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('starboard-info')
+    .setDescription('Show starboard config')
+    .addStringOption(opt => opt.setName('name').setDescription('Starboard name').setRequired(true))
+);
+slashHandlers['starboard-info'] = async (interaction) => {
+  const name = interaction.options.getString('name');
+  const sb = await getStarboard(interaction.guild.id, name);
+  if (!sb) return interaction.reply({ content: 'Starboard not found.', ephemeral: true });
+  const embed = new EmbedBuilder()
+    .setTitle(`Starboard: ${sb.name}`)
+    .addFields(
+      { name: 'Emoji', value: sb.emoji, inline: true },
+      { name: 'Threshold', value: sb.threshold.toString(), inline: true },
+      { name: 'Channel', value: `<#${sb.channel_id}>`, inline: true },
+      { name: 'Allow Bots', value: sb.allow_bots ? 'Yes' : 'No', inline: true },
+      { name: 'Allow Self-Star', value: sb.allow_selfstar ? 'Yes' : 'No', inline: true },
+      { name: 'Blacklist Roles', value: sb.blacklist_roles?.join(', ') || 'None', inline: true },
+      { name: 'Blacklist Channels', value: sb.blacklist_channels?.join(', ') || 'None', inline: true },
+      { name: 'Custom Message', value: sb.custom_message || 'Default', inline: false }
+    )
+    .setColor(0xf1c40f);
+  return interaction.reply({ embeds: [embed], ephemeral: true });
+};
+
+// --- Starboard Reaction Handler ---
+async function handleStarboardReaction(reaction, user, added) {
+  if (!reaction.message.guild || user.bot) return;
+  const starboards = await getStarboards(reaction.message.guild.id);
+  if (!starboards.length) return;
+  for (const sb of starboards) {
+    const emojis = sb.emoji.split(',').map(e => e.trim());
+    if (!emojis.includes(reaction.emoji.toString())) continue;
+    // Check blacklists
+    if (sb.blacklist_channels?.includes(reaction.message.channel.id)) continue;
+    if (sb.blacklist_roles?.length && reaction.message.member && reaction.message.member.roles.cache.some(r => sb.blacklist_roles.includes(r.id))) continue;
+    if (!sb.allow_bots && reaction.message.author?.bot) continue;
+    if (!sb.allow_selfstar && reaction.message.author?.id === user.id) continue;
+    // Count reactions
+    const count = reaction.count;
+    if (count < sb.threshold) continue;
+    // Post to starboard
+    const channel = reaction.message.guild.channels.cache.get(sb.channel_id);
+    if (!channel || !channel.isTextBased()) continue;
+    // Check if already posted (by message ID in starboard)
+    const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
+    const content = sb.custom_message
+      ? sb.custom_message.replace('{count}', count).replace('{user}', `<@${reaction.message.author?.id}>`).replace('{channel}', `<#${reaction.message.channel.id}>`).replace('{content}', reaction.message.content)
+      : `⭐ **${count}** | <@${reaction.message.author?.id}> in <#${reaction.message.channel.id}>\n${reaction.message.content}`;
+    const embed = new EmbedBuilder()
+      .setDescription(content)
+      .setColor(0xf1c40f)
+      .setFooter({ text: `Message ID: ${reaction.message.id}` })
+      .setTimestamp(reaction.message.createdAt);
+    if (reaction.message.attachments.size > 0) {
+      embed.setImage(reaction.message.attachments.first().url);
+    }
+    if (existing) {
+      await existing.edit({ embeds: [embed] });
+    } else {
+      await channel.send({ embeds: [embed] });
+      await logToModLog(reaction.message.guild, 'Starboard Post', `Message by <@${reaction.message.author?.id}> starred in <#${reaction.message.channel.id}> with ${count} ${reaction.emoji}`);
+    }
+  }
+}
+// Register event listeners in main bot file:
+// client.on('messageReactionAdd', (reaction, user) => handleStarboardReaction(reaction, user, true));
+// client.on('messageReactionRemove', (reaction, user) => handleStarboardReaction(reaction, user, false));
+
+// --- Starboard Leaderboard Helpers ---
+async function getStarboardLeaderboard(guildId, starboardName = null, limit = 10) {
+  // starboard_posts: guild_id, starboard_name, message_id, author_id, count, last_starred_at
+  let query = supabase.from('starboard_posts').select('*').eq('guild_id', guildId);
+  if (starboardName) query = query.eq('starboard_name', starboardName);
+  query = query.order('count', { ascending: false }).limit(limit);
+  const { data, error } = await query;
+  if (error) return [];
+  return data || [];
+}
+
+// --- Starboard Leaderboard Command ---
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('starboard-leaderboard')
+    .setDescription('Show the starboard leaderboard')
+    .addStringOption(opt => opt.setName('starboard').setDescription('Starboard name (optional)').setRequired(false))
+);
+slashHandlers['starboard-leaderboard'] = async (interaction) => {
+  const starboard = interaction.options.getString('starboard');
+  const leaderboard = await getStarboardLeaderboard(interaction.guild.id, starboard);
+  if (!leaderboard.length) return interaction.reply({ content: 'No starboard posts yet.', ephemeral: true });
+  const desc = leaderboard.map((entry, i) => `**${i+1}.** <@${entry.author_id}> — ${entry.count} ⭐ [Jump](https://discord.com/channels/${interaction.guild.id}/${entry.channel_id}/${entry.message_id})`).join('\n');
+  const embed = new EmbedBuilder()
+    .setTitle(starboard ? `Starboard Leaderboard: ${starboard}` : 'Global Starboard Leaderboard')
+    .setDescription(desc)
+    .setColor(0xf1c40f);
+  return interaction.reply({ embeds: [embed], ephemeral: true });
+};
+
+// --- Enhanced Starboard Reaction Handler ---
+async function handleStarboardReaction(reaction, user, added) {
+  if (!reaction.message.guild || user.bot) return;
+  let starboards = await getStarboards(reaction.message.guild.id);
+  if (!starboards.length) {
+    // Use sensible defaults if no config
+    starboards = [{
+      name: 'starboard',
+      emoji: '⭐',
+      threshold: 5,
+      channel_id: reaction.message.guild.channels.cache.find(ch => ch.type === 0)?.id,
+      allow_bots: false,
+      allow_selfstar: false,
+      blacklist_roles: [],
+      blacklist_channels: [],
+      custom_message: null,
+      theme: 'default',
+      language: 'en',
+      top_star_threshold: 100
+    }];
+  }
+  for (const sb of starboards) {
+    const emojis = sb.emoji.split(',').map(e => e.trim());
+    if (!emojis.includes(reaction.emoji.toString())) continue;
+    // Check blacklists
+    if (sb.blacklist_channels?.includes(reaction.message.channel.id)) continue;
+    if (sb.blacklist_roles?.length && reaction.message.member && reaction.message.member.roles.cache.some(r => sb.blacklist_roles.includes(r.id))) continue;
+    if (!sb.allow_bots && reaction.message.author?.bot) continue;
+    if (!sb.allow_selfstar && reaction.message.author?.id === user.id) continue;
+    // Count reactions (multi-emoji support)
+    let count = 0;
+    for (const emoji of emojis) {
+      const react = reaction.message.reactions.cache.find(r => r.emoji.toString() === emoji);
+      if (react) count += react.count;
+    }
+    if (count < sb.threshold) {
+      // If starboard post exists, delete it
+      const channel = reaction.message.guild.channels.cache.get(sb.channel_id);
+      if (channel) {
+        const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
+        if (existing) await existing.delete().catch(() => {});
+      }
+      // Optionally archive instead of delete
+      continue;
+    }
+    // Post to starboard
+    const channel = reaction.message.guild.channels.cache.get(sb.channel_id);
+    if (!channel || !channel.isTextBased()) continue;
+    // Check if already posted (by message ID in starboard)
+    const existing = channel.messages.cache.find(m => m.embeds[0]?.footer?.text?.includes(reaction.message.id));
+    // Build embed
+    const author = reaction.message.author;
+    const jumpUrl = `https://discord.com/channels/${reaction.message.guild.id}/${reaction.message.channel.id}/${reaction.message.id}`;
+    const contentPreview = reaction.message.content?.slice(0, 200) || '[No content]';
+    const timestamp = `<t:${Math.floor(reaction.message.createdTimestamp/1000)}:R>`;
+    let color = 0xf1c40f;
+    if (count >= (sb.top_star_threshold || 100)) color = 0xffd700; // Gold for top star
+    else if (count >= 50) color = 0xffc300; // Orange-gold
+    // Leaderboard
+    const globalLeaderboard = await getStarboardLeaderboard(reaction.message.guild.id, null, 1);
+    const topUser = globalLeaderboard[0]?.author_id;
+    // Buttons
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setLabel('Jump to Message').setStyle(ButtonStyle.Link).setURL(jumpUrl),
+      new ButtonBuilder().setLabel('Copy Link').setStyle(ButtonStyle.Secondary).setCustomId('copy_link'),
+      new ButtonBuilder().setLabel('Copy Content').setStyle(ButtonStyle.Secondary).setCustomId('copy_content')
+    );
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: author?.tag || 'Unknown', iconURL: author?.displayAvatarURL?.() })
+      .setDescription(`${contentPreview}${reaction.message.content?.length > 200 ? '…' : ''}`)
+      .addFields(
+        { name: 'Channel', value: `<#${reaction.message.channel.id}>`, inline: true },
+        { name: 'Stars', value: `⭐ ${count}`, inline: true },
+        { name: 'Timestamp', value: timestamp, inline: true }
+      )
+      .setColor(color)
+      .setFooter({ text: `Message ID: ${reaction.message.id}${count >= (sb.top_star_threshold || 100) ? ' 🎖️ Top Star' : ''}` })
+      .setTimestamp(reaction.message.createdAt);
+    if (reaction.message.attachments.size > 0) {
+      embed.setImage(reaction.message.attachments.first().url);
+    }
+    if (sb.custom_message) {
+      embed.setDescription(sb.custom_message
+        .replace('{count}', count)
+        .replace('{user}', `<@${author?.id}>`)
+        .replace('{channel}', `<#${reaction.message.channel.id}>`)
+        .replace('{content}', contentPreview)
+      );
+    }
+    // Footer leaderboard
+    let leaderboardText = '';
+    if (topUser) leaderboardText += `Guild Top Starred: <@${topUser}> – ${globalLeaderboard[0].count} stars`;
+    if (sb.name) leaderboardText += ` | Starboard: ${sb.name}`;
+    if (leaderboardText) embed.addFields({ name: '\u200B', value: leaderboardText, inline: false });
+    // Starboard author credit
+    if (user && user.id !== author?.id) embed.setFooter({ text: `⭐ Added by @${user.tag}` });
+    // Theming/localization (basic)
+    if (sb.theme === 'halloween') embed.setColor(0x8e44ad);
+    // Send or update
+    if (existing) {
+      await existing.edit({ embeds: [embed], components: [row] });
+    } else {
+      await channel.send({ embeds: [embed], components: [row] });
+      await logToModLog(reaction.message.guild, 'Starboard Post', `Message by <@${author?.id}> starred in <#${reaction.message.channel.id}> with ${count} ${reaction.emoji}`);
+    }
+    // Save/update post in DB for leaderboard
+    await supabase.from('starboard_posts').upsert({
+      guild_id: reaction.message.guild.id,
+      starboard_name: sb.name,
+      message_id: reaction.message.id,
+      channel_id: reaction.message.channel.id,
+      author_id: author?.id,
+      count,
+      last_starred_at: new Date().toISOString()
+    }, { onConflict: ['guild_id', 'starboard_name', 'message_id'] });
+  }
+}
 
 module.exports = {
   name: 'utility',

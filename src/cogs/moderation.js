@@ -164,30 +164,33 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
-    
-    const user = msg.mentions.users.first();
-    if (!user) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';ban @user [reason]').setColor(0xe74c3c)] });
-    
-    if (user.id === msg.client.user.id) {
+    let user = msg.mentions.users.first();
+    let userId = user ? user.id : args[0];
+    if (!user && userId && /^\d{17,20}$/.test(userId)) {
+      // Try to fetch user by ID (may not be in guild)
+      try {
+        user = await msg.client.users.fetch(userId);
+      } catch {}
+    }
+    if (!userId || !/^\d{17,20}$/.test(userId)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';ban @user|user_id [reason]').setColor(0xe74c3c)] });
+    }
+    if (userId === msg.client.user.id) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Protected').setDescription('Cannot ban the bot.').setColor(0xe74c3c)] });
     }
-    
-    const reason = args.slice(1).join(' ') || 'No reason provided';
-    
+    const reason = args.slice(user ? 1 : 1).join(' ') || 'No reason provided';
     try {
-      await msg.guild.members.ban(user, { reason });
-      await addModlog(msg.guild.id, user.id, 'ban', msg.author.id, reason);
-      
+      await msg.guild.members.ban(userId, { reason });
+      await addModlog(msg.guild.id, userId, 'ban', msg.author.id, reason);
       const embed = new EmbedBuilder()
         .setTitle('User Banned')
-        .setDescription(`${user.tag} has been banned.\n**Reason:** ${reason}`)
+        .setDescription(`${user ? user.tag : userId} has been banned.\n**Reason:** ${reason}`)
         .setColor(0xe74c3c)
         .setTimestamp();
-      
       return msg.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Ban error:', e.message || JSON.stringify(e));
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to ban user.').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to ban user. Make sure the ID is valid and the bot has ban permissions.').setColor(0xe74c3c)] });
     }
   },
   
@@ -1313,28 +1316,28 @@ const slashHandlers = {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
-    
-    const user = interaction.options.getUser('user');
+    let user = interaction.options.getUser('user');
+    let userId = user ? user.id : null;
     const reason = interaction.options.getString('reason') || 'No reason provided';
-    
-    if (user.id === interaction.client.user.id) {
+    if (!userId) {
+      // Try to parse as ID from a string option (if added in the future)
+      return interaction.reply({ content: 'Please specify a user to ban.', ephemeral: true });
+    }
+    if (userId === interaction.client.user.id) {
       return interaction.reply({ content: 'Cannot ban the bot.', ephemeral: true });
     }
-    
     try {
-      await interaction.guild.members.ban(user, { reason });
-      await addModlog(interaction.guild.id, user.id, 'ban', interaction.user.id, reason);
-      
+      await interaction.guild.members.ban(userId, { reason });
+      await addModlog(interaction.guild.id, userId, 'ban', interaction.user.id, reason);
       const embed = new EmbedBuilder()
         .setTitle('User Banned')
-        .setDescription(`${user.tag} has been banned.\n**Reason:** ${reason}`)
+        .setDescription(`${user ? user.tag : userId} has been banned.\n**Reason:** ${reason}`)
         .setColor(0xe74c3c)
         .setTimestamp();
-      
       return interaction.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Ban error:', e.message || JSON.stringify(e));
-      return interaction.reply({ content: 'Failed to ban user.', ephemeral: true });
+      return interaction.reply({ content: 'Failed to ban user. Make sure the ID is valid and the bot has ban permissions.', ephemeral: true });
     }
   },
   
