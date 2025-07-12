@@ -2631,8 +2631,16 @@ slashHandlers['starboard-info'] = async (interaction) => {
 
 // --- Starboard Reaction Handler ---
 async function handleStarboardReaction(reaction, user, added) {
-  if (!reaction.message.guild || user.bot) return;
+  // Debug logging
+  console.log('[Starboard] Reaction handler called:', {
+    guildId: reaction.message.guild?.id,
+    messageId: reaction.message.id,
+    emoji: reaction.emoji.toString(),
+    user: user?.id,
+    added,
+  });
   const starboards = await getStarboards(reaction.message.guild.id);
+  console.log('[Starboard] Starboards fetched:', starboards);
   if (!starboards.length) return;
   for (const sb of starboards) {
     const emojis = sb.emoji.split(',').map(e => e.trim());
