@@ -2439,7 +2439,7 @@ help: async (msg, args) => {
     .setTimestamp();
   
   return msg.reply({ embeds: [embed] });
-},
+}
 
 // --- Update watchword and blacklistword prefix commands to log actions ---
 const oldWatchword = prefixCommands.watchword;
