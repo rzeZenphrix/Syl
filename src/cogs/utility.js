@@ -5,6 +5,22 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
+// --- LOG TO MODLOG (moved to top to avoid ReferenceError) ---
+async function logToModLog(msgOrGuild, title, description, color = 0xe67e22) {
+  let guild = msgOrGuild.guild || msgOrGuild;
+  if (!guild) return;
+  let logChannelId;
+  try {
+    const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', guild.id).single();
+    logChannelId = config?.log_channel;
+  } catch {}
+  if (!logChannelId) return;
+  const channel = guild.channels.cache.get(logChannelId);
+  if (channel && channel.isTextBased()) {
+    await channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setTimestamp()] });
+  }
+}
+
 const commandDescriptions = {
   // Setup & Configuration
   setup: 'Configure server settings and admin roles. Usage: `;setup @adminrole [@extrarole1 ...]` (owner only)',
@@ -2424,22 +2440,6 @@ help: async (msg, args) => {
   
   return msg.reply({ embeds: [embed] });
 },
-
-// Helper to log to mod-log channel
-async function logToModLog(msgOrGuild, title, description, color = 0xe67e22) {
-  let guild = msgOrGuild.guild || msgOrGuild;
-  if (!guild) return;
-  let logChannelId;
-  try {
-    const { data: config } = await supabase.from('guild_configs').select('log_channel').eq('guild_id', guild.id).single();
-    logChannelId = config?.log_channel;
-  } catch {}
-  if (!logChannelId) return;
-  const channel = guild.channels.cache.get(logChannelId);
-  if (channel && channel.isTextBased()) {
-    await channel.send({ embeds: [new EmbedBuilder().setTitle(title).setDescription(description).setColor(color).setTimestamp()] });
-  }
-}
 
 // --- Update watchword and blacklistword prefix commands to log actions ---
 const oldWatchword = prefixCommands.watchword;
