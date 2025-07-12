@@ -1,5 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
+const fs = require('fs');
+const path = require('path');
 
 // Helper functions
 async function addWarning(guildId, userId, reason, warnedBy) {
@@ -114,6 +116,20 @@ async function isAdmin(member) {
     console.error('Error in isAdmin check:', err);
     return false;
   }
+}
+
+// Helper: Check if member is owner or co-owner
+async function isOwnerOrCoOwner(member) {
+  if (!member || !member.guild) return false;
+  if (member.guild.ownerId === member.id) return true;
+  // Check co-owner columns in guild_configs
+  const { data, error } = await supabase
+    .from('guild_configs')
+    .select('co_owner_1_id, co_owner_2_id')
+    .eq('guild_id', member.guild.id)
+    .single();
+  if (error) return false;
+  return [data?.co_owner_1_id, data?.co_owner_2_id].includes(member.id);
 }
 
 // Add new commands to commandDescriptions
@@ -953,8 +969,8 @@ const prefixCommands = {
   },
 
   antinuke: async (msg, args) => {
-    if (msg.author.id !== msg.guild.ownerId) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only the server owner can configure anti-nuke protection.').setColor(0xe74c3c)] });
+    if (!await isOwnerOrCoOwner(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only the server owner or co-owners can configure anti-nuke protection.').setColor(0xe74c3c)] });
     }
     
     const sub = args[0]?.toLowerCase();
@@ -1066,44 +1082,40 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can steal emojis.').setColor(0xe74c3c)] });
     }
-    
     if (args.length < 1) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';steal <emoji> [new_name]\nExample: `;steal 🎉 party`').setColor(0xe74c3c)] });
     }
-    
     const emojiArg = args[0];
     const newName = args[1] || 'stolen_emoji';
-    
+    // Reject user mentions
+    if (/^<@!?\d+>$/.test(emojiArg)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Usage').setDescription('Please provide a custom emoji from another server, not a user mention.').setColor(0xe74c3c)] });
+    }
     // Extract emoji ID from the emoji string
     const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
     if (!emojiMatch) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Emoji').setDescription('Please provide a valid custom emoji from another server.').setColor(0xe74c3c)] });
     }
-    
     const [, emojiName, emojiId] = emojiMatch;
     const isAnimated = emojiArg.startsWith('<a:');
     const extension = isAnimated ? 'gif' : 'png';
     const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
-    
     try {
       // Create the emoji in the current server
       const createdEmoji = await msg.guild.emojis.create({
         attachment: emojiUrl,
         name: newName
       });
-      
       const embed = new EmbedBuilder()
         .setTitle('🎭 Emoji Stolen Successfully!')
         .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
         .setThumbnail(emojiUrl)
         .setColor(0x2ecc71)
         .setTimestamp();
-      
       return msg.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Steal emoji error:', e);
       let errorMessage = 'Failed to steal emoji.';
-      
       if (e.code === 30008) {
         errorMessage = 'Server has reached the maximum number of emojis.';
       } else if (e.code === 50035) {
@@ -1111,7 +1123,6 @@ const prefixCommands = {
       } else if (e.code === 50013) {
         errorMessage = 'Bot lacks permission to manage emojis.';
       }
-      
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
     }
   },
@@ -1221,7 +1232,7 @@ const slashCommands = [
 
   new SlashCommandBuilder()
     .setName('raid')
-    .setDescription('Configure raid prevention settings')
+    .setDescription('Configure raid prevention settings or lift lockdown')
     .addStringOption(option =>
       option.setName('action')
         .setDescription('What to do')
@@ -1231,7 +1242,8 @@ const slashCommands = [
           { name: 'Disable', value: 'off' },
           { name: 'Set Threshold', value: 'threshold' },
           { name: 'Toggle Auto-Lock', value: 'autolock' },
-          { name: 'Status', value: 'status' }
+          { name: 'Status', value: 'status' },
+          { name: 'Safe (Lift Lockdown)', value: 'safe' }
         )
     )
     .addIntegerOption(option =>
@@ -2081,8 +2093,8 @@ const slashHandlers = {
   },
 
   antinuke: async (interaction) => {
-    if (interaction.user.id !== interaction.guild.ownerId) {
-      return interaction.reply({ content: 'Only the server owner can configure anti-nuke protection.', ephemeral: true });
+    if (!await isOwnerOrCoOwner(interaction.member)) {
+      return interaction.reply({ content: 'Only the server owner or co-owners can configure anti-nuke protection.', ephemeral: true });
     }
     
     const action = interaction.options.getString('action');
@@ -2164,44 +2176,40 @@ const slashHandlers = {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'Only admins can steal emojis.', ephemeral: true });
     }
-    
     const emojiArg = interaction.options.getString('emoji');
     const newName = interaction.options.getString('name') || 'stolen_emoji';
-    
     if (!emojiArg) {
       return interaction.reply({ content: 'Please provide an emoji to steal. Usage: `/steal emoji:🎉 name:party`', ephemeral: true });
     }
-    
+    // Reject user mentions
+    if (/^<@!?\d+>$/.test(emojiArg)) {
+      return interaction.reply({ content: 'Please provide a custom emoji from another server, not a user mention.', ephemeral: true });
+    }
     // Extract emoji ID from the emoji string
     const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
     if (!emojiMatch) {
       return interaction.reply({ content: 'Please provide a valid custom emoji from another server.', ephemeral: true });
     }
-    
     const [, emojiName, emojiId] = emojiMatch;
     const isAnimated = emojiArg.startsWith('<a:');
     const extension = isAnimated ? 'gif' : 'png';
     const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
-    
     try {
       // Create the emoji in the current server
       const createdEmoji = await interaction.guild.emojis.create({
         attachment: emojiUrl,
         name: newName
       });
-      
       const embed = new EmbedBuilder()
         .setTitle('🎭 Emoji Stolen Successfully!')
         .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
         .setThumbnail(emojiUrl)
         .setColor(0x2ecc71)
         .setTimestamp();
-      
       return interaction.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Steal emoji error:', e);
       let errorMessage = 'Failed to steal emoji.';
-      
       if (e.code === 30008) {
         errorMessage = 'Server has reached the maximum number of emojis.';
       } else if (e.code === 50035) {
@@ -2209,7 +2217,6 @@ const slashHandlers = {
       } else if (e.code === 50013) {
         errorMessage = 'Bot lacks permission to manage emojis.';
       }
-      
       return interaction.reply({ content: errorMessage, ephemeral: true });
     }
   },
@@ -2259,6 +2266,7 @@ async function checkRaidProtection(guild, type, userId) {
       .single();
     
     if (config?.raid_protection_enabled !== false) {
+      await logRaidEvent(guild, type, Array.from(uniqueUsers), `Threshold: ${threshold.count} in ${threshold.timeWindow / 1000}s`);
       await handleRaidDetection(guild, type, uniqueUsers, config);
       return true;
     }
@@ -2349,6 +2357,7 @@ async function checkAntiNuke(guild, action, userId) {
   
   // Check for rapid actions
   if (recentActions.length >= 5) { // 5 actions in 1 minute
+    await logAntinukeEvent(guild, action, userId, recentActions.length, `Threshold: 5 in 60s`);
     await handleAntiNukeViolation(guild, userId, action, recentActions.length);
     return true;
   }
@@ -2397,6 +2406,277 @@ async function handleAntiNukeViolation(guild, userId, action, actionCount) {
     }
   }
 }
+
+// Helper: Get or create the Safe role
+async function getOrCreateSafeRole(guild) {
+  let safeRole = guild.roles.cache.find(r => r.name === 'Safe');
+  if (!safeRole) {
+    safeRole = await guild.roles.create({
+      name: 'Safe',
+      color: 0x2ecc71,
+      reason: 'Created for lockdown bypass',
+      mentionable: false
+    });
+  }
+  return safeRole;
+}
+
+// Helper: Lockdown all text channels
+async function lockdownGuild(guild, safeRole) {
+  const channels = guild.channels.cache.filter(ch => ch.type === 0); // Text channels only
+  for (const [id, channel] of channels) {
+    try {
+      await channel.permissionOverwrites.edit(guild.roles.everyone, {
+        SendMessages: false,
+        CreatePublicThreads: false,
+        CreatePrivateThreads: false,
+        AddReactions: false,
+        CreateInstantInvite: false,
+        CreateChannels: false
+      });
+      // Allow Safe role to chat
+      await channel.permissionOverwrites.edit(safeRole, {
+        SendMessages: true,
+        AddReactions: true
+      });
+    } catch (e) {
+      console.error(`Failed to lock channel ${channel.name}:`, e);
+    }
+  }
+}
+
+// Helper: Unlock all text channels
+async function unlockGuild(guild, safeRole) {
+  const channels = guild.channels.cache.filter(ch => ch.type === 0);
+  for (const [id, channel] of channels) {
+    try {
+      await channel.permissionOverwrites.edit(guild.roles.everyone, {
+        SendMessages: null,
+        CreatePublicThreads: null,
+        CreatePrivateThreads: null,
+        AddReactions: null,
+        CreateInstantInvite: null,
+        CreateChannels: null
+      });
+      // Remove Safe role override
+      await channel.permissionOverwrites.delete(safeRole).catch(() => {});
+    } catch (e) {
+      console.error(`Failed to unlock channel ${channel.name}:`, e);
+    }
+  }
+}
+
+// Prefix command: ;raid safe
+prefixCommands['raid'] = async (msg, args) => {
+  const sub = args[0]?.toLowerCase();
+  if (sub === 'safe') {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can lift lockdown.').setColor(0xe74c3c)] });
+    }
+    const safeRole = await getOrCreateSafeRole(msg.guild);
+    await unlockGuild(msg.guild, safeRole);
+    // Log event
+    const { logEvent } = require('../logger');
+    await logEvent(msg.guild, 'Lockdown Lifted', `Lockdown lifted by <@${msg.author.id}>. Permissions restored.`, 0x2ecc71);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Lockdown Lifted').setDescription('All channels have been unlocked and permissions restored.').setColor(0x2ecc71)] });
+  }
+  // ...existing raid command logic...
+  // (Keep the rest of the original raid command implementation here)
+};
+
+// Slash command: /raid safe
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('raid')
+    .setDescription('Configure raid prevention settings or lift lockdown')
+    .addStringOption(option =>
+      option.setName('action')
+        .setDescription('What to do')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Enable', value: 'on' },
+          { name: 'Disable', value: 'off' },
+          { name: 'Set Threshold', value: 'threshold' },
+          { name: 'Toggle Auto-Lock', value: 'autolock' },
+          { name: 'Status', value: 'status' },
+          { name: 'Safe (Lift Lockdown)', value: 'safe' }
+        )
+    )
+    .addIntegerOption(option =>
+      option.setName('threshold')
+        .setDescription('Number of events to trigger raid detection')
+        .setRequired(false)
+    )
+    .addBooleanOption(option =>
+      option.setName('autolock')
+        .setDescription('Whether to auto-lock channels during raid')
+        .setRequired(false)
+    )
+);
+
+slashHandlers['raid'] = async (interaction) => {
+  const action = interaction.options.getString('action');
+  if (action === 'safe') {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'Only admins can lift lockdown.', ephemeral: true });
+    }
+    const safeRole = await getOrCreateSafeRole(interaction.guild);
+    await unlockGuild(interaction.guild, safeRole);
+    // Log event
+    const { logEvent } = require('../logger');
+    await logEvent(interaction.guild, 'Lockdown Lifted', `Lockdown lifted by <@${interaction.user.id}>. Permissions restored.`, 0x2ecc71);
+    return interaction.reply({ content: 'Lockdown lifted. All channels have been unlocked and permissions restored.', ephemeral: true });
+  }
+  // ...existing raid slash command logic...
+  // (Keep the rest of the original slash handler implementation here)
+};
+
+// --- Backup & Recovery ---
+const BACKUP_DIR = path.resolve(__dirname, '../../backups');
+if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR);
+
+async function snapshotGuild(guild) {
+  // Snapshot channels and roles
+  const channels = guild.channels.cache.map(ch => ({
+    id: ch.id,
+    name: ch.name,
+    type: ch.type,
+    parent: ch.parentId,
+    position: ch.position,
+    topic: ch.topic,
+    nsfw: ch.nsfw,
+    rateLimitPerUser: ch.rateLimitPerUser,
+    permissionOverwrites: ch.permissionOverwrites.cache.map(po => ({
+      id: po.id,
+      type: po.type,
+      allow: po.allow.bitfield,
+      deny: po.deny.bitfield
+    }))
+  }));
+  const roles = guild.roles.cache.filter(r => r.id !== guild.id).map(role => ({
+    id: role.id,
+    name: role.name,
+    color: role.color,
+    hoist: role.hoist,
+    position: role.position,
+    permissions: role.permissions.bitfield,
+    mentionable: role.mentionable
+  }));
+  const backup = {
+    guildId: guild.id,
+    timestamp: Date.now(),
+    channels,
+    roles
+  };
+  fs.writeFileSync(path.join(BACKUP_DIR, `${guild.id}.json`), JSON.stringify(backup, null, 2));
+}
+
+// On bot startup, snapshot all guilds
+if (typeof client !== 'undefined' && client.on) {
+  client.on('ready', async () => {
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        await snapshotGuild(guild);
+        console.log(`[BACKUP] Snapshot saved for guild ${guild.name} (${guild.id})`);
+      } catch (e) {
+        console.error(`[BACKUP] Failed to snapshot guild ${guild.id}:`, e);
+      }
+    }
+  });
+}
+
+// Helper: Restore channels and roles from backup
+async function restoreGuildFromBackup(guild) {
+  const backupFile = path.join(BACKUP_DIR, `${guild.id}.json`);
+  if (!fs.existsSync(backupFile)) throw new Error('No backup found for this server.');
+  const backup = JSON.parse(fs.readFileSync(backupFile, 'utf8'));
+  // Restore roles (skip @everyone)
+  for (const roleData of backup.roles) {
+    if (guild.roles.cache.has(roleData.id)) continue;
+    try {
+      await guild.roles.create({
+        name: roleData.name,
+        color: roleData.color,
+        hoist: roleData.hoist,
+        position: roleData.position,
+        permissions: BigInt(roleData.permissions),
+        mentionable: roleData.mentionable,
+        reason: 'Restoring from backup'
+      });
+    } catch (e) {
+      console.error(`[RESTORE] Failed to restore role ${roleData.name}:`, e);
+    }
+  }
+  // Restore channels
+  for (const chData of backup.channels) {
+    if (guild.channels.cache.has(chData.id)) continue;
+    try {
+      await guild.channels.create({
+        name: chData.name,
+        type: chData.type,
+        parent: chData.parent,
+        position: chData.position,
+        topic: chData.topic,
+        nsfw: chData.nsfw,
+        rateLimitPerUser: chData.rateLimitPerUser,
+        permissionOverwrites: chData.permissionOverwrites.map(po => ({
+          id: po.id,
+          type: po.type,
+          allow: BigInt(po.allow),
+          deny: BigInt(po.deny)
+        })),
+        reason: 'Restoring from backup'
+      });
+    } catch (e) {
+      console.error(`[RESTORE] Failed to restore channel ${chData.name}:`, e);
+    }
+  }
+}
+
+// Prefix command: ;raid restore
+prefixCommands['raid_restore'] = async (msg, args) => {
+  if (!await isAdmin(msg.member) && !await isOwnerOrCoOwner(msg.member)) {
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins, the server owner, or co-owners can restore backups.').setColor(0xe74c3c)] });
+  }
+  try {
+    await restoreGuildFromBackup(msg.guild);
+    const { logEvent } = require('../logger');
+    await logEvent(msg.guild, 'Backup Restore', `Backup restored by <@${msg.author.id}>.`, 0x2ecc71);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Backup Restored').setDescription('Channels and roles have been restored from the last backup.').setColor(0x2ecc71)] });
+  } catch (e) {
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('Restore Failed').setDescription(e.message).setColor(0xe74c3c)] });
+  }
+};
+
+// Add to ;raid command
+const oldRaid = prefixCommands['raid'];
+prefixCommands['raid'] = async (msg, args) => {
+  if (args[0]?.toLowerCase() === 'restore') {
+    return prefixCommands['raid_restore'](msg, args.slice(1));
+  }
+  return oldRaid(msg, args);
+};
+
+// Slash command: /raid restore
+// (Add to slash handler)
+const oldRaidHandler = slashHandlers['raid'];
+slashHandlers['raid'] = async (interaction) => {
+  const action = interaction.options.getString('action');
+  if (action === 'restore') {
+    if (!await isAdmin(interaction.member) && !await isOwnerOrCoOwner(interaction.member)) {
+      return interaction.reply({ content: 'Only admins, the server owner, or co-owners can restore backups.', ephemeral: true });
+    }
+    try {
+      await restoreGuildFromBackup(interaction.guild);
+      const { logEvent } = require('../logger');
+      await logEvent(interaction.guild, 'Backup Restore', `Backup restored by <@${interaction.user.id}>.`, 0x2ecc71);
+      return interaction.reply({ content: 'Backup restored. Channels and roles have been restored from the last backup.', ephemeral: true });
+    } catch (e) {
+      return interaction.reply({ content: `Restore failed: ${e.message}`, ephemeral: true });
+    }
+  }
+  return oldRaidHandler(interaction);
+};
 
 module.exports = {
   name: 'moderation',

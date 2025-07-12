@@ -572,7 +572,14 @@ client.on('interactionCreate', async (interaction) => {
 client.on('guildMemberAdd', async (member) => {
   try {
     console.log(`[DEBUG] guildMemberAdd fired for ${member.user.tag} (${member.id}) in ${member.guild.name}`);
-    
+    // New account flagging
+    const accountAgeMs = Date.now() - member.user.createdAt.getTime();
+    const accountAgeDays = accountAgeMs / (1000 * 60 * 60 * 24);
+    if (accountAgeDays < 3) {
+      // Log to mod-log
+      const { logEvent } = require('./src/logger');
+      await logEvent(member.guild, 'RAID WARNING', `New account joined: <@${member.id}> (created <t:${Math.floor(member.user.createdAt.getTime()/1000)}:R>)`, 0xe67e22);
+    }
     // Check for raid protection
     const { checkRaidProtection } = require('./src/cogs/moderation');
     if (checkRaidProtection) {
@@ -772,6 +779,75 @@ client.on('channelDelete', async (channel) => {
     }
   } catch (e) {
     console.error('Anti-nuke check error:', e);
+  }
+});
+
+// Emoji deletion anti-nuke
+client.on('emojiDelete', async (emoji) => {
+  if (!emoji.guild) return;
+  try {
+    const { checkAntiNuke } = require('./src/cogs/moderation');
+    if (checkAntiNuke) {
+      // Get the audit log to find who deleted the emoji
+      const auditLogs = await emoji.guild.fetchAuditLogs({
+        type: 'EMOJI_DELETE',
+        limit: 1
+      }).catch(() => null);
+      if (auditLogs && auditLogs.entries.first()) {
+        const entry = auditLogs.entries.first();
+        const isViolation = await checkAntiNuke(emoji.guild, 'emoji_delete', entry.executor.id);
+        if (isViolation) {
+          console.log(`[ANTI-NUKE] Emoji deletion violation in ${emoji.guild.name} by ${entry.executor.tag}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Anti-nuke emoji check error:', e);
+  }
+});
+
+// Webhook update anti-nuke (detect creation/deletion)
+const webhookCache = new Map(); // Map<guildId-channelId, Set<webhookId>>
+client.on('webhookUpdate', async (channel) => {
+  if (!channel.guild) return;
+  try {
+    const webhooks = await channel.fetchWebhooks();
+    const key = `${channel.guild.id}-${channel.id}`;
+    const prev = webhookCache.get(key) || new Set();
+    const current = new Set(webhooks.map(w => w.id));
+    // Detect new webhooks
+    for (const webhook of webhooks.values()) {
+      if (!prev.has(webhook.id)) {
+        // New webhook detected
+        // Fetch audit log for creation
+        const auditLogs = await channel.guild.fetchAuditLogs({
+          type: 'WEBHOOK_CREATE',
+          limit: 1
+        }).catch(() => null);
+        let creatorId = null;
+        if (auditLogs && auditLogs.entries.first()) {
+          const entry = auditLogs.entries.first();
+          creatorId = entry.executor.id;
+        }
+        // Check anti-nuke whitelist
+        const { checkAntiNuke } = require('./src/cogs/moderation');
+        let isViolation = false;
+        if (checkAntiNuke && creatorId) {
+          isViolation = await checkAntiNuke(channel.guild, 'webhook_create', creatorId);
+        }
+        if (isViolation) {
+          // Delete the webhook
+          await webhook.delete('Unauthorized webhook creation detected by anti-nuke');
+          // Log the event
+          const { logEvent } = require('./src/logger');
+          await logEvent(channel.guild, 'ANTI-NUKE', `Unauthorized webhook created by <@${creatorId}> in <#${channel.id}>. Webhook deleted.`, 0xe74c3c);
+        }
+      }
+    }
+    // Update cache
+    webhookCache.set(key, current);
+  } catch (e) {
+    console.error('Anti-nuke webhook check error:', e);
   }
 });
 
