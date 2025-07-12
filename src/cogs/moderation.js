@@ -2,6 +2,7 @@ const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const fs = require('fs');
 const path = require('path');
+const { logEvent } = require('../logger');
 
 // Helper functions
 async function addWarning(guildId, userId, reason, warnedBy) {
@@ -2269,7 +2270,7 @@ async function checkRaidProtection(guild, type, userId) {
       .single();
     
     if (config?.raid_protection_enabled !== false) {
-      await logRaidEvent(guild, type, Array.from(uniqueUsers), `Threshold: ${threshold.count} in ${threshold.timeWindow / 1000}s`);
+      await logEvent(guild, type, Array.from(uniqueUsers), `Threshold: ${threshold.count} in ${threshold.timeWindow / 1000}s`);
       await handleRaidDetection(guild, type, uniqueUsers, config);
       return true;
     }
@@ -2360,7 +2361,7 @@ async function checkAntiNuke(guild, action, userId) {
   
   // Check for rapid actions
   if (recentActions.length >= 5) { // 5 actions in 1 minute
-    await logAntinukeEvent(guild, action, userId, recentActions.length, `Threshold: 5 in 60s`);
+    await logEvent(guild, action, userId, recentActions.length, `Threshold: 5 in 60s`);
     await handleAntiNukeViolation(guild, userId, action, recentActions.length);
     return true;
   }
@@ -2479,7 +2480,6 @@ prefixCommands['raid'] = async (msg, args) => {
     const safeRole = await getOrCreateSafeRole(msg.guild);
     await unlockGuild(msg.guild, safeRole);
     // Log event
-    const { logEvent } = require('../logger');
     await logEvent(msg.guild, 'Lockdown Lifted', `Lockdown lifted by <@${msg.author.id}>. Permissions restored.`, 0x2ecc71);
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Lockdown Lifted').setDescription('All channels have been unlocked and permissions restored.').setColor(0x2ecc71)] });
   }
@@ -2526,7 +2526,6 @@ slashHandlers['raid'] = async (interaction) => {
     const safeRole = await getOrCreateSafeRole(interaction.guild);
     await unlockGuild(interaction.guild, safeRole);
     // Log event
-    const { logEvent } = require('../logger');
     await logEvent(interaction.guild, 'Lockdown Lifted', `Lockdown lifted by <@${interaction.user.id}>. Permissions restored.`, 0x2ecc71);
     return interaction.reply({ content: 'Lockdown lifted. All channels have been unlocked and permissions restored.', ephemeral: true });
   }
@@ -2643,7 +2642,6 @@ prefixCommands['raid_restore'] = async (msg, args) => {
   }
   try {
     await restoreGuildFromBackup(msg.guild);
-    const { logEvent } = require('../logger');
     await logEvent(msg.guild, 'Backup Restore', `Backup restored by <@${msg.author.id}>.`, 0x2ecc71);
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Backup Restored').setDescription('Channels and roles have been restored from the last backup.').setColor(0x2ecc71)] });
   } catch (e) {
@@ -2671,7 +2669,6 @@ slashHandlers['raid'] = async (interaction) => {
     }
     try {
       await restoreGuildFromBackup(interaction.guild);
-      const { logEvent } = require('../logger');
       await logEvent(interaction.guild, 'Backup Restore', `Backup restored by <@${interaction.user.id}>.`, 0x2ecc71);
       return interaction.reply({ content: 'Backup restored. Channels and roles have been restored from the last backup.', ephemeral: true });
     } catch (e) {

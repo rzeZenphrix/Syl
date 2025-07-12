@@ -1019,7 +1019,7 @@ const prefixCommands = {
       const embed = new EmbedBuilder()
         .setDescription(message)
         .setColor(0x7289da)
-        .setTimestamp();
+      .setTimestamp();
       return msg.channel.send({ embeds: [embed] });
     }
   },
