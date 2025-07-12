@@ -1,6 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { supabase } = require('../utils/supabase');
-const { EmbedBuilder } = require('discord.js');
 
 // Error logging and notification helpers
 const crypto = require('crypto');
