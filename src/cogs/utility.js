@@ -2505,18 +2505,28 @@ prefixCommands.sniper = async (msg, args) => {
 // Helper: fetch all starboards for a guild
 async function getStarboards(guildId) {
   const { data, error } = await supabase.from('starboards').select('*').eq('guild_id', guildId);
-  if (error) return [];
+  if (error) {
+    console.error('[Starboard] Error fetching starboards:', error);
+    return [];
+  }
   return data || [];
 }
 // Helper: fetch a single starboard by name
 async function getStarboard(guildId, name) {
   const { data, error } = await supabase.from('starboards').select('*').eq('guild_id', guildId).eq('name', name).single();
-  if (error) return null;
+  if (error) {
+    console.error(`[Starboard] Error fetching starboard '${name}':`, error);
+    return null;
+  }
   return data;
 }
 // Helper: upsert starboard config
 async function upsertStarboard(config) {
-  return await supabase.from('starboards').upsert(config, { onConflict: ['guild_id', 'name'] });
+  const { data, error } = await supabase.from('starboards').upsert(config, { onConflict: ['guild_id', 'name'] });
+  if (error) {
+    console.error('[Starboard] Error upserting starboard:', error, config);
+  }
+  return { data, error };
 }
 // Helper: remove starboard
 async function removeStarboard(guildId, name) {
