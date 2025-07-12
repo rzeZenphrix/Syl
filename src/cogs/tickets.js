@@ -1,5 +1,45 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { supabase } = require('../utils/supabase');
+const { EmbedBuilder } = require('discord.js');
+
+// Error logging and notification helpers
+const crypto = require('crypto');
+async function sendErrorToLogChannel(guild, context, error, traceId) {
+  try {
+    // Get log channel from config
+    const { data: config } = await supabase
+      .from('guild_configs')
+      .select('log_channel')
+      .eq('guild_id', guild.id)
+      .single();
+    if (config?.log_channel) {
+      const channel = guild.channels.cache.get(config.log_channel);
+      if (channel && channel.isTextBased()) {
+        const embed = new EmbedBuilder()
+          .setTitle('Ticket System Error')
+          .setDescription(`**Context:** ${context}\n**Trace ID:** \`${traceId}\`\n\n\`${error?.message || error}\`\``)
+          .setColor(0xe74c3c)
+          .setTimestamp();
+        await channel.send({ embeds: [embed] });
+      }
+    }
+  } catch (e) {
+    console.error('Failed to send error to log channel:', e);
+  }
+}
+async function notifyOwner(guild, message) {
+  try {
+    const owner = await guild.fetchOwner().catch(() => null);
+    if (owner) {
+      await owner.send(message).catch(() => {});
+    }
+  } catch (e) {
+    console.error('Failed to notify owner:', e);
+  }
+}
+function generateTraceId() {
+  return crypto.randomBytes(4).toString('hex');
+}
 
 // Permission checking
 async function isAdmin(member) {
@@ -146,6 +186,7 @@ async function getNextTicketNumber() {
  * Save ticket to database
  */
 async function saveTicket(ticketData) {
+  const traceId = generateTraceId();
   try {
     const { error } = await supabase
       .from('tickets')
@@ -160,12 +201,12 @@ async function saveTicket(ticketData) {
       });
 
     if (error) {
-      console.error('Error saving ticket:', error);
-      throw error;
+      await sendErrorToLogChannel({ id: ticketData.guildId, channels: { cache: new Map() } }, 'saveTicket', error, traceId);
+      throw { error, traceId };
     }
   } catch (error) {
-    console.error('Error in saveTicket:', error);
-    throw error;
+    await sendErrorToLogChannel({ id: ticketData.guildId, channels: { cache: new Map() } }, 'saveTicket', error, traceId);
+    throw { error, traceId };
   }
 }
 
@@ -173,6 +214,7 @@ async function saveTicket(ticketData) {
  * Create ticket channel
  */
 async function createTicketChannel(interaction, ticketType, formData) {
+  const traceId = generateTraceId();
   try {
     const { guild, user } = interaction;
     const ticketConfig = TICKET_TYPES[ticketType];
@@ -258,8 +300,10 @@ async function createTicketChannel(interaction, ticketType, formData) {
 
     return ticketChannel;
   } catch (error) {
-    console.error('Error creating ticket channel:', error);
-    throw error;
+    const { guild } = interaction;
+    await sendErrorToLogChannel(guild, 'createTicketChannel', error, traceId);
+    await notifyOwner(guild, `Critical error in ticket creation (Trace ID: ${traceId}): ${error?.message || error}`);
+    throw { error, traceId };
   }
 }
 
@@ -267,6 +311,7 @@ async function createTicketChannel(interaction, ticketType, formData) {
  * Send initial ticket message
  */
 async function sendInitialTicketMessage(channel, user, ticketType, ticketNumber, formData, staffRoleId) {
+  const traceId = generateTraceId();
   try {
     const ticketConfig = TICKET_TYPES[ticketType];
 
@@ -314,14 +359,14 @@ async function sendInitialTicketMessage(channel, user, ticketType, ticketNumber,
       );
 
     // Send message with staff ping
-    const staffMention = staffRoleId ? `<@&${staffRoleId}>` : '';
     await channel.send({
-      content: `<@${user.id}> ${staffMention}`,
+      content: `<@${user.id}> ${staffRoleId ? `<@&${staffRoleId}>` : ''}`,
       embeds: [embed],
       components: [row]
     });
   } catch (error) {
-    console.error('Error sending initial ticket message:', error);
+    await sendErrorToLogChannel(channel.guild, 'sendInitialTicketMessage', error, traceId);
+    await notifyOwner(channel.guild, `Critical error sending initial ticket message (Trace ID: ${traceId}): ${error?.message || error}`);
   }
 }
 
@@ -329,6 +374,7 @@ async function sendInitialTicketMessage(channel, user, ticketType, ticketNumber,
  * Update ticket status
  */
 async function updateTicketStatus(ticketNumber, status, updatedBy) {
+  const traceId = generateTraceId();
   try {
     const { error } = await supabase
       .from('tickets')
@@ -340,12 +386,12 @@ async function updateTicketStatus(ticketNumber, status, updatedBy) {
       .eq('ticket_number', ticketNumber);
 
     if (error) {
-      console.error('Error updating ticket status:', error);
-      throw error;
+      await sendErrorToLogChannel(null, 'updateTicketStatus', error, traceId);
+      throw { error, traceId };
     }
   } catch (error) {
-    console.error('Error in updateTicketStatus:', error);
-    throw error;
+    await sendErrorToLogChannel(null, 'updateTicketStatus', error, traceId);
+    throw { error, traceId };
   }
 }
 
@@ -353,6 +399,7 @@ async function updateTicketStatus(ticketNumber, status, updatedBy) {
  * Update ticket claim
  */
 async function updateTicketClaim(ticketNumber, claimedBy) {
+  const traceId = generateTraceId();
   try {
     const { error } = await supabase
       .from('tickets')
@@ -363,12 +410,12 @@ async function updateTicketClaim(ticketNumber, claimedBy) {
       .eq('ticket_number', ticketNumber);
 
     if (error) {
-      console.error('Error updating ticket claim:', error);
-      throw error;
+      await sendErrorToLogChannel(null, 'updateTicketClaim', error, traceId);
+      throw { error, traceId };
     }
   } catch (error) {
-    console.error('Error in updateTicketClaim:', error);
-    throw error;
+    await sendErrorToLogChannel(null, 'updateTicketClaim', error, traceId);
+    throw { error, traceId };
   }
 }
 
@@ -376,6 +423,7 @@ async function updateTicketClaim(ticketNumber, claimedBy) {
  * Get ticket data
  */
 async function getTicketData(ticketNumber) {
+  const traceId = generateTraceId();
   try {
     const { data, error } = await supabase
       .from('tickets')
@@ -384,13 +432,13 @@ async function getTicketData(ticketNumber) {
       .single();
 
     if (error) {
-      console.error('Error fetching ticket data:', error);
+      await sendErrorToLogChannel(null, 'getTicketData', error, traceId);
       return null;
     }
 
     return data;
   } catch (error) {
-    console.error('Error in getTicketData:', error);
+    await sendErrorToLogChannel(null, 'getTicketData', error, traceId);
     return null;
   }
 }
@@ -561,6 +609,7 @@ const buttonHandlers = {
   },
 
   ticket_close: async (interaction) => {
+    const traceId = generateTraceId();
     try {
       const ticketNumber = parseInt(interaction.customId.split('_')[2]);
       
@@ -620,12 +669,14 @@ const buttonHandlers = {
       await interaction.channel.send({ embeds: [embed], components: [row] });
       await interaction.reply({ content: 'Ticket closed successfully.', ephemeral: true });
     } catch (error) {
-      console.error('Error closing ticket:', error);
-      await interaction.reply({ content: 'An error occurred while closing the ticket.', ephemeral: true });
+      await sendErrorToLogChannel(interaction.guild, 'ticket_close', error, traceId);
+      await notifyOwner(interaction.guild, `Critical error closing ticket (Trace ID: ${traceId}): ${error?.message || error}`);
+      await interaction.reply({ content: `An error occurred while closing the ticket. (Trace ID: ${traceId})`, ephemeral: true });
     }
   },
 
   ticket_delete: async (interaction) => {
+    const traceId = generateTraceId();
     try {
       const ticketNumber = parseInt(interaction.customId.split('_')[2]);
       
@@ -655,12 +706,14 @@ const buttonHandlers = {
       
       await interaction.reply({ content: 'Ticket will be deleted in 5 seconds.', ephemeral: true });
     } catch (error) {
-      console.error('Error deleting ticket:', error);
-      await interaction.reply({ content: 'An error occurred while deleting the ticket.', ephemeral: true });
+      await sendErrorToLogChannel(interaction.guild, 'ticket_delete', error, traceId);
+      await notifyOwner(interaction.guild, `Critical error deleting ticket (Trace ID: ${traceId}): ${error?.message || error}`);
+      await interaction.reply({ content: `An error occurred while deleting the ticket. (Trace ID: ${traceId})`, ephemeral: true });
     }
   },
 
   ticket_reopen: async (interaction) => {
+    const traceId = generateTraceId();
     try {
       const ticketNumber = parseInt(interaction.customId.split('_')[2]);
       
@@ -720,12 +773,14 @@ const buttonHandlers = {
       await interaction.channel.send({ embeds: [embed], components: [row] });
       await interaction.reply({ content: 'Ticket reopened successfully.', ephemeral: true });
     } catch (error) {
-      console.error('Error reopening ticket:', error);
-      await interaction.reply({ content: 'An error occurred while reopening the ticket.', ephemeral: true });
+      await sendErrorToLogChannel(interaction.guild, 'ticket_reopen', error, traceId);
+      await notifyOwner(interaction.guild, `Critical error reopening ticket (Trace ID: ${traceId}): ${error?.message || error}`);
+      await interaction.reply({ content: `An error occurred while reopening the ticket. (Trace ID: ${traceId})`, ephemeral: true });
     }
   },
 
   ticket_claim: async (interaction) => {
+    const traceId = generateTraceId();
     try {
       const ticketNumber = parseInt(interaction.customId.split('_')[2]);
       
@@ -758,8 +813,9 @@ const buttonHandlers = {
       await interaction.channel.send({ embeds: [embed] });
       await interaction.reply({ content: 'Ticket claimed successfully.', ephemeral: true });
     } catch (error) {
-      console.error('Error claiming ticket:', error);
-      await interaction.reply({ content: 'An error occurred while claiming the ticket.', ephemeral: true });
+      await sendErrorToLogChannel(interaction.guild, 'ticket_claim', error, traceId);
+      await notifyOwner(interaction.guild, `Critical error claiming ticket (Trace ID: ${traceId}): ${error?.message || error}`);
+      await interaction.reply({ content: `An error occurred while claiming the ticket. (Trace ID: ${traceId})`, ephemeral: true });
     }
   }
 };
@@ -767,6 +823,7 @@ const buttonHandlers = {
 // Modal submission handlers
 const modalHandlers = {
   ticket_modal: async (interaction) => {
+    const traceId = generateTraceId();
     try {
       const ticketType = interaction.fields.getTextInputValue('ticket_type').toLowerCase();
       const description = interaction.fields.getTextInputValue('ticket_description');
@@ -793,14 +850,15 @@ const modalHandlers = {
         });
       } else {
         await interaction.reply({ 
-          content: 'Failed to create ticket. Please try again later.', 
+          content: `Failed to create ticket. Please try again later. (Trace ID: ${traceId})`, 
           ephemeral: true 
         });
       }
     } catch (error) {
-      console.error('Error handling ticket modal:', error);
+      await sendErrorToLogChannel(interaction.guild, 'ticket_modal', error, traceId);
+      await notifyOwner(interaction.guild, `Critical error in ticket modal (Trace ID: ${traceId}): ${error?.message || error}`);
       await interaction.reply({ 
-        content: 'An error occurred while creating your ticket.', 
+        content: `An error occurred while creating your ticket. (Trace ID: ${traceId})`, 
         ephemeral: true 
       });
     }

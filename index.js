@@ -396,6 +396,23 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot || !msg.guild) return;
+  
+  // Check for raid protection (message spam)
+  try {
+    const { checkRaidProtection } = require('./src/cogs/moderation');
+    if (checkRaidProtection) {
+      const isRaid = await checkRaidProtection(msg.guild, 'messages', msg.author.id);
+      if (isRaid) {
+        console.log(`[RAID] Message raid detected in ${msg.guild.name} - ${msg.author.tag} sent message`);
+        // Delete the message if it's part of a raid
+        await msg.delete().catch(() => {});
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('Raid protection check error:', e);
+  }
+  
   // Blacklist checks
   if (await isBlacklisted(msg.guild.id, msg.author.id)) {
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Blacklisted').setDescription('You are blacklisted from using this bot.').setColor(0xe74c3c)] });
@@ -403,6 +420,7 @@ client.on('messageCreate', async (msg) => {
   if (await isChannelBlacklisted(msg.guild.id, msg.channel.id)) {
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('Commands are disabled in this channel.').setColor(0xe74c3c)] });
   }
+  
   // Increment message count and chat uptime in user_stats
   const { data, error } = await supabase.from('user_stats').select('message_count, chat_seconds').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
   if (error && error.code !== 'PGRST116') {
@@ -432,14 +450,18 @@ client.on('messageCreate', async (msg) => {
       .eq('guild_id', msg.guild.id)
       .single();
     
-    if (!error && config?.custom_prefix) {
+    if (!configError && config?.custom_prefix && config.custom_prefix.trim() !== '') {
       guildPrefixes = [config.custom_prefix];
+    } else {
+      guildPrefixes = prefixes;
     }
   } catch (e) {
     // If error, fall back to default prefixes
     console.error('Error fetching custom prefix:', e);
+    guildPrefixes = prefixes;
   }
   
+  // Only accept the first matching prefix (if custom, only that one)
   const prefix = guildPrefixes.find(p => msg.content.startsWith(p));
   if (!prefix) return;
   
@@ -550,6 +572,16 @@ client.on('interactionCreate', async (interaction) => {
 client.on('guildMemberAdd', async (member) => {
   try {
     console.log(`[DEBUG] guildMemberAdd fired for ${member.user.tag} (${member.id}) in ${member.guild.name}`);
+    
+    // Check for raid protection
+    const { checkRaidProtection } = require('./src/cogs/moderation');
+    if (checkRaidProtection) {
+      const isRaid = await checkRaidProtection(member.guild, 'joins', member.id);
+      if (isRaid) {
+        console.log(`[RAID] Raid detected in ${member.guild.name} - ${member.user.tag} joined`);
+      }
+    }
+    
     // Autorole
     const roleId = await getAutorole(member.guild.id);
     if (roleId) {
@@ -614,7 +646,7 @@ client.on('guildMemberAdd', async (member) => {
         logError('welcome-permission', msg);
         return;
       }
-      let msg = welcome.message || 'Welcome, {user}, to {server}!';
+        let msg = welcome.message || 'Welcome, {user}, to {server}!';
       msg = msg.replace('{user}', `<@${member.id}>`).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
       try {
         const imageUrl = welcome.image && welcome.image.trim() ? welcome.image.trim() : null;
@@ -667,7 +699,7 @@ client.on('guildMemberRemove', async (member) => {
         logError('goodbye-permission', msg);
         return;
       }
-      let msg = goodbye.message || 'Goodbye, {user}! We\'ll miss you!';
+        let msg = goodbye.message || 'Goodbye, {user}! We\'ll miss you!';
       msg = msg.replace('{user}', member.user.tag).replace('{server}', member.guild.name).replace('{memberCount}', member.guild.memberCount);
       try {
         const imageUrl = goodbye.image && goodbye.image.trim() ? goodbye.image.trim() : null;
@@ -715,6 +747,82 @@ client.on('messageDelete', async (message) => {
     author: message.author ? `${message.author.tag} (${message.author.id})` : 'Unknown',
     timestamp: message.createdTimestamp
   };
+});
+
+// Add anti-nuke monitoring for channel/role changes
+client.on('channelDelete', async (channel) => {
+  if (!channel.guild) return;
+  
+  try {
+    const { checkAntiNuke } = require('./src/cogs/moderation');
+    if (checkAntiNuke) {
+      // Get the audit log to find who deleted the channel
+      const auditLogs = await channel.guild.fetchAuditLogs({
+        type: 'CHANNEL_DELETE',
+        limit: 1
+      }).catch(() => null);
+      
+      if (auditLogs && auditLogs.entries.first()) {
+        const entry = auditLogs.entries.first();
+        const isViolation = await checkAntiNuke(channel.guild, 'channel_delete', entry.executor.id);
+        if (isViolation) {
+          console.log(`[ANTI-NUKE] Channel deletion violation in ${channel.guild.name} by ${entry.executor.tag}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Anti-nuke check error:', e);
+  }
+});
+
+client.on('roleDelete', async (role) => {
+  if (!role.guild) return;
+  
+  try {
+    const { checkAntiNuke } = require('./src/cogs/moderation');
+    if (checkAntiNuke) {
+      // Get the audit log to find who deleted the role
+      const auditLogs = await role.guild.fetchAuditLogs({
+        type: 'ROLE_DELETE',
+        limit: 1
+      }).catch(() => null);
+      
+      if (auditLogs && auditLogs.entries.first()) {
+        const entry = auditLogs.entries.first();
+        const isViolation = await checkAntiNuke(role.guild, 'role_delete', entry.executor.id);
+        if (isViolation) {
+          console.log(`[ANTI-NUKE] Role deletion violation in ${role.guild.name} by ${entry.executor.tag}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Anti-nuke check error:', e);
+  }
+});
+
+client.on('guildBanAdd', async (ban) => {
+  if (!ban.guild) return;
+  
+  try {
+    const { checkAntiNuke } = require('./src/cogs/moderation');
+    if (checkAntiNuke) {
+      // Get the audit log to find who banned the user
+      const auditLogs = await ban.guild.fetchAuditLogs({
+        type: 'MEMBER_BAN_ADD',
+        limit: 1
+      }).catch(() => null);
+      
+      if (auditLogs && auditLogs.entries.first()) {
+        const entry = auditLogs.entries.first();
+        const isViolation = await checkAntiNuke(ban.guild, 'member_ban', entry.executor.id);
+        if (isViolation) {
+          console.log(`[ANTI-NUKE] Mass ban violation in ${ban.guild.name} by ${entry.executor.tag}`);
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Anti-nuke check error:', e);
+  }
 });
 
 // Login

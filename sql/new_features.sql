@@ -1,5 +1,5 @@
 -- New features SQL setup
--- Run this to add support for reports, modmail, panic mode, feedback, and case management
+-- Run this to add support for reports, modmail, panic mode, feedback, case management, raid prevention, and anti-nuke protection
 
 -- Reports table
 CREATE TABLE IF NOT EXISTS reports (
@@ -63,6 +63,29 @@ CREATE TABLE IF NOT EXISTS moderation_cases (
     case_number INTEGER NOT NULL
 );
 
+-- Raid detection logs table
+CREATE TABLE IF NOT EXISTS raid_logs (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    raid_type TEXT NOT NULL CHECK (raid_type IN ('joins', 'messages')),
+    user_ids TEXT[] NOT NULL,
+    detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    handled BOOLEAN DEFAULT FALSE,
+    action_taken TEXT
+);
+
+-- Anti-nuke violation logs table
+CREATE TABLE IF NOT EXISTS antinuke_logs (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    action_count INTEGER NOT NULL,
+    detected_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    handled BOOLEAN DEFAULT FALSE,
+    action_taken TEXT
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_reports_guild_id ON reports(guild_id);
 CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
@@ -71,6 +94,10 @@ CREATE INDEX IF NOT EXISTS idx_panic_guild ON panic_mode(guild_id);
 CREATE INDEX IF NOT EXISTS idx_feedback_guild ON feedback(guild_id);
 CREATE INDEX IF NOT EXISTS idx_cases_guild_user ON moderation_cases(guild_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_cases_number ON moderation_cases(guild_id, case_number);
+CREATE INDEX IF NOT EXISTS idx_raid_logs_guild ON raid_logs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_raid_logs_type ON raid_logs(raid_type);
+CREATE INDEX IF NOT EXISTS idx_antinuke_logs_guild ON antinuke_logs(guild_id);
+CREATE INDEX IF NOT EXISTS idx_antinuke_logs_user ON antinuke_logs(user_id);
 
 -- Grant permissions to service_role
 GRANT ALL PRIVILEGES ON TABLE reports TO service_role;
@@ -78,6 +105,8 @@ GRANT ALL PRIVILEGES ON TABLE modmail_threads TO service_role;
 GRANT ALL PRIVILEGES ON TABLE panic_mode TO service_role;
 GRANT ALL PRIVILEGES ON TABLE feedback TO service_role;
 GRANT ALL PRIVILEGES ON TABLE moderation_cases TO service_role;
+GRANT ALL PRIVILEGES ON TABLE raid_logs TO service_role;
+GRANT ALL PRIVILEGES ON TABLE antinuke_logs TO service_role;
 
 -- Grant sequence permissions
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
@@ -88,6 +117,8 @@ ALTER TABLE modmail_threads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE panic_mode ENABLE ROW LEVEL SECURITY;
 ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
 ALTER TABLE moderation_cases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE raid_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE antinuke_logs ENABLE ROW LEVEL SECURITY;
 
 -- Create policies for service_role to access all data
 CREATE POLICY "Service role can access all reports" ON reports FOR ALL USING (true);
@@ -95,6 +126,8 @@ CREATE POLICY "Service role can access all modmail" ON modmail_threads FOR ALL U
 CREATE POLICY "Service role can access all panic mode" ON panic_mode FOR ALL USING (true);
 CREATE POLICY "Service role can access all feedback" ON feedback FOR ALL USING (true);
 CREATE POLICY "Service role can access all cases" ON moderation_cases FOR ALL USING (true);
+CREATE POLICY "Service role can access all raid logs" ON raid_logs FOR ALL USING (true);
+CREATE POLICY "Service role can access all antinuke logs" ON antinuke_logs FOR ALL USING (true);
 
 -- Add new columns to guild_configs for new features
 ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS report_channel_id TEXT;
@@ -102,6 +135,16 @@ ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS modmail_channel_id TEXT;
 ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS feedback_channel_id TEXT;
 ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS mod_role_id TEXT;
 ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS next_case_number INTEGER DEFAULT 1;
+
+-- Add raid prevention columns
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS raid_protection_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS raid_protection_threshold INTEGER DEFAULT 10;
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS raid_auto_lock BOOLEAN DEFAULT FALSE;
+
+-- Add anti-nuke protection columns
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS anti_nuke_enabled BOOLEAN DEFAULT FALSE;
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS anti_nuke_whitelist TEXT[] DEFAULT '{}';
+ALTER TABLE guild_configs ADD COLUMN IF NOT EXISTS anti_nuke_auto_ban BOOLEAN DEFAULT FALSE;
 
 -- Create function to auto-increment case numbers per guild
 CREATE OR REPLACE FUNCTION get_next_case_number(guild_id_param TEXT)

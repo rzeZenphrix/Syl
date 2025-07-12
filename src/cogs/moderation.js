@@ -136,7 +136,10 @@ const commandDescriptions = {
   modmail: 'Open a private conversation with staff. Usage: `/modmail <message>`',
   panic: 'Emergency lockdown - locks all channels and pings mods. Usage: `/panic <reason>` (admin only)',
   feedback: 'Send anonymous feedback to staff. Usage: `/feedback <message>`',
-  case: 'View moderation case details. Usage: `/case view <ID>`'
+  case: 'View moderation case details. Usage: `/case view <ID>`',
+  raid: 'Configure raid prevention settings. Usage: `/raid <on/off/threshold>` (admin only)',
+  steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
+  antinuke: 'Configure anti-nuke protection. Usage: `/antinuke <on/off/whitelist>` (owner only)'
 };
 
 // Add new commands to prefixCommands
@@ -882,7 +885,236 @@ const prefixCommands = {
       console.error('Case view error:', e);
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('Failed to retrieve case information.').setColor(0xe74c3c)] });
     }
-  }
+  },
+
+  raid: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can configure raid protection.').setColor(0xe74c3c)] });
+    }
+    
+    const sub = args[0]?.toLowerCase();
+    
+    if (!sub || !['on', 'off', 'threshold', 'autolock'].includes(sub)) {
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('raid_protection_enabled, raid_protection_threshold, raid_auto_lock')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🛡️ Raid Protection Status')
+        .addFields(
+          { name: 'Enabled', value: config?.raid_protection_enabled !== false ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Threshold', value: config?.raid_protection_threshold || 'Default (10 joins/30s, 20 msgs/10s)', inline: true },
+          { name: 'Auto-Lock', value: config?.raid_auto_lock ? '✅ Yes' : '❌ No', inline: true }
+        )
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    }
+    
+    if (sub === 'on') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        raid_protection_enabled: true
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Raid Protection Enabled').setDescription('Raid detection is now active.').setColor(0x2ecc71)] });
+    }
+    
+    if (sub === 'off') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        raid_protection_enabled: false
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('❌ Raid Protection Disabled').setDescription('Raid detection is now inactive.').setColor(0xe74c3c)] });
+    }
+    
+    if (sub === 'threshold') {
+      const threshold = args[1];
+      if (!threshold || !/^\d+$/.test(threshold)) {
+        return msg.reply('Usage: `;raid threshold <number>`');
+      }
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        raid_protection_threshold: parseInt(threshold)
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Threshold Updated').setDescription(`Raid threshold set to ${threshold} events.`).setColor(0x2ecc71)] });
+    }
+    
+    if (sub === 'autolock') {
+      const enabled = args[1]?.toLowerCase() === 'on';
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        raid_auto_lock: enabled
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Auto-Lock Updated').setDescription(`Auto-lock is now ${enabled ? 'enabled' : 'disabled'}.`).setColor(0x2ecc71)] });
+    }
+  },
+
+  antinuke: async (msg, args) => {
+    if (msg.author.id !== msg.guild.ownerId) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only the server owner can configure anti-nuke protection.').setColor(0xe74c3c)] });
+    }
+    
+    const sub = args[0]?.toLowerCase();
+    
+    if (!sub || !['on', 'off', 'whitelist', 'autoban'].includes(sub)) {
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('anti_nuke_enabled, anti_nuke_whitelist, anti_nuke_auto_ban')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🛡️ Anti-Nuke Protection Status')
+        .addFields(
+          { name: 'Enabled', value: config?.anti_nuke_enabled ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Auto-Ban', value: config?.anti_nuke_auto_ban ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Whitelist', value: config?.anti_nuke_whitelist?.length || 0 + ' users', inline: true }
+        )
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    }
+    
+    if (sub === 'on') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        anti_nuke_enabled: true
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Anti-Nuke Enabled').setDescription('Anti-nuke protection is now active.').setColor(0x2ecc71)] });
+    }
+    
+    if (sub === 'off') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        anti_nuke_enabled: false
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('❌ Anti-Nuke Disabled').setDescription('Anti-nuke protection is now inactive.').setColor(0xe74c3c)] });
+    }
+    
+    if (sub === 'whitelist') {
+      const action = args[1]?.toLowerCase();
+      const user = msg.mentions.users.first();
+      
+      if (!action || !['add', 'remove', 'list'].includes(action)) {
+        return msg.reply('Usage: `;antinuke whitelist <add/remove/list> [@user]`');
+      }
+      
+      if (action === 'list') {
+        const { data: config } = await supabase
+          .from('guild_configs')
+          .select('anti_nuke_whitelist')
+          .eq('guild_id', msg.guild.id)
+          .single();
+        
+        const whitelist = config?.anti_nuke_whitelist || [];
+        if (whitelist.length === 0) {
+          return msg.reply('No users in anti-nuke whitelist.');
+        }
+        
+        const userList = whitelist.map(id => `<@${id}>`).join('\n');
+        const embed = new EmbedBuilder()
+          .setTitle('🛡️ Anti-Nuke Whitelist')
+          .setDescription(userList)
+          .setColor(0x3498db);
+        
+        return msg.reply({ embeds: [embed] });
+      }
+      
+      if (!user) {
+        return msg.reply('Please mention a user to add/remove from whitelist.');
+      }
+      
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('anti_nuke_whitelist')
+        .eq('guild_id', msg.guild.id)
+        .single();
+      
+      let whitelist = config?.anti_nuke_whitelist || [];
+      
+      if (action === 'add') {
+        if (!whitelist.includes(user.id)) {
+          whitelist.push(user.id);
+        }
+      } else if (action === 'remove') {
+        whitelist = whitelist.filter(id => id !== user.id);
+      }
+      
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        anti_nuke_whitelist: whitelist
+      }, { onConflict: ['guild_id'] });
+      
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Whitelist Updated').setDescription(`User ${user} ${action === 'add' ? 'added to' : 'removed from'} anti-nuke whitelist.`).setColor(0x2ecc71)] });
+    }
+    
+    if (sub === 'autoban') {
+      const enabled = args[1]?.toLowerCase() === 'on';
+      await supabase.from('guild_configs').upsert({
+        guild_id: msg.guild.id,
+        anti_nuke_auto_ban: enabled
+      }, { onConflict: ['guild_id'] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('✅ Auto-Ban Updated').setDescription(`Auto-ban is now ${enabled ? 'enabled' : 'disabled'}.`).setColor(0x2ecc71)] });
+    }
+  },
+
+  steal: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can steal emojis.').setColor(0xe74c3c)] });
+    }
+    
+    if (args.length < 1) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';steal <emoji> [new_name]\nExample: `;steal 🎉 party`').setColor(0xe74c3c)] });
+    }
+    
+    const emojiArg = args[0];
+    const newName = args[1] || 'stolen_emoji';
+    
+    // Extract emoji ID from the emoji string
+    const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
+    if (!emojiMatch) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Emoji').setDescription('Please provide a valid custom emoji from another server.').setColor(0xe74c3c)] });
+    }
+    
+    const [, emojiName, emojiId] = emojiMatch;
+    const isAnimated = emojiArg.startsWith('<a:');
+    const extension = isAnimated ? 'gif' : 'png';
+    const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
+    
+    try {
+      // Create the emoji in the current server
+      const createdEmoji = await msg.guild.emojis.create({
+        attachment: emojiUrl,
+        name: newName
+      });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🎭 Emoji Stolen Successfully!')
+        .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
+        .setThumbnail(emojiUrl)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return msg.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Steal emoji error:', e);
+      let errorMessage = 'Failed to steal emoji.';
+      
+      if (e.code === 30008) {
+        errorMessage = 'Server has reached the maximum number of emojis.';
+      } else if (e.code === 50035) {
+        errorMessage = 'Invalid emoji name. Use only letters, numbers, and underscores.';
+      } else if (e.code === 50013) {
+        errorMessage = 'Bot lacks permission to manage emojis.';
+      }
+      
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
+    }
+  },
 };
 
 // Slash commands
@@ -985,7 +1217,82 @@ const slashCommands = [
     .addSubcommand(sub => sub
       .setName('view')
       .setDescription('View a specific case')
-      .addIntegerOption(opt => opt.setName('id').setDescription('Case ID to view').setRequired(true)))
+      .addIntegerOption(opt => opt.setName('id').setDescription('Case ID to view').setRequired(true))),
+
+  new SlashCommandBuilder()
+    .setName('raid')
+    .setDescription('Configure raid prevention settings')
+    .addStringOption(option =>
+      option.setName('action')
+        .setDescription('What to do')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Enable', value: 'on' },
+          { name: 'Disable', value: 'off' },
+          { name: 'Set Threshold', value: 'threshold' },
+          { name: 'Toggle Auto-Lock', value: 'autolock' },
+          { name: 'Status', value: 'status' }
+        )
+    )
+    .addIntegerOption(option =>
+      option.setName('threshold')
+        .setDescription('Number of events to trigger raid detection')
+        .setRequired(false)
+    )
+    .addBooleanOption(option =>
+      option.setName('autolock')
+        .setDescription('Whether to auto-lock channels during raid')
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('antinuke')
+    .setDescription('Configure anti-nuke protection (owner only)')
+    .addStringOption(option =>
+      option.setName('action')
+        .setDescription('What to do')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Enable', value: 'on' },
+          { name: 'Disable', value: 'off' },
+          { name: 'Manage Whitelist', value: 'whitelist' },
+          { name: 'Toggle Auto-Ban', value: 'autoban' },
+          { name: 'Status', value: 'status' }
+        )
+    )
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('User to add/remove from whitelist')
+        .setRequired(false)
+    )
+    .addStringOption(option =>
+      option.setName('whitelist_action')
+        .setDescription('Add or remove from whitelist')
+        .setRequired(false)
+        .addChoices(
+          { name: 'Add', value: 'add' },
+          { name: 'Remove', value: 'remove' }
+        )
+    )
+    .addBooleanOption(option =>
+      option.setName('autoban')
+        .setDescription('Whether to auto-ban violators')
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('steal')
+    .setDescription('Steal an emoji from another server')
+    .addStringOption(option =>
+      option.setName('emoji')
+        .setDescription('Emoji to steal (copy from another server)')
+        .setRequired(true)
+    )
+    .addStringOption(option =>
+      option.setName('name')
+        .setDescription('New name for the emoji')
+        .setRequired(false)
+    ),
 ];
 
 // Slash command handlers
@@ -1709,17 +2016,397 @@ const slashHandlers = {
         return interaction.reply({ content: 'Failed to retrieve case information.', ephemeral: true });
       }
     }
-  }
+  },
+
+  raid: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'Only admins can configure raid protection.', ephemeral: true });
+    }
+    
+    const action = interaction.options.getString('action');
+    const threshold = interaction.options.getInteger('threshold');
+    const autolock = interaction.options.getBoolean('autolock');
+    
+    if (action === 'on') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        raid_protection_enabled: true
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: '✅ Raid protection enabled.', ephemeral: true });
+    }
+    
+    if (action === 'off') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        raid_protection_enabled: false
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: '❌ Raid protection disabled.', ephemeral: true });
+    }
+    
+    if (action === 'threshold' && threshold) {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        raid_protection_threshold: threshold
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: `✅ Raid threshold set to ${threshold} events.`, ephemeral: true });
+    }
+    
+    if (action === 'autolock' && autolock !== null) {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        raid_auto_lock: autolock
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: `✅ Auto-lock ${autolock ? 'enabled' : 'disabled'}.`, ephemeral: true });
+    }
+    
+    if (action === 'status') {
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('raid_protection_enabled, raid_protection_threshold, raid_auto_lock')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🛡️ Raid Protection Status')
+        .addFields(
+          { name: 'Enabled', value: config?.raid_protection_enabled !== false ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Threshold', value: config?.raid_protection_threshold || 'Default', inline: true },
+          { name: 'Auto-Lock', value: config?.raid_auto_lock ? '✅ Yes' : '❌ No', inline: true }
+        )
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+  },
+
+  antinuke: async (interaction) => {
+    if (interaction.user.id !== interaction.guild.ownerId) {
+      return interaction.reply({ content: 'Only the server owner can configure anti-nuke protection.', ephemeral: true });
+    }
+    
+    const action = interaction.options.getString('action');
+    const user = interaction.options.getUser('user');
+    const whitelistAction = interaction.options.getString('whitelist_action');
+    const autoban = interaction.options.getBoolean('autoban');
+    
+    if (action === 'on') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        anti_nuke_enabled: true
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: '✅ Anti-nuke protection enabled.', ephemeral: true });
+    }
+    
+    if (action === 'off') {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        anti_nuke_enabled: false
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: '❌ Anti-nuke protection disabled.', ephemeral: true });
+    }
+    
+    if (action === 'whitelist' && user && whitelistAction) {
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('anti_nuke_whitelist')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      let whitelist = config?.anti_nuke_whitelist || [];
+      
+      if (whitelistAction === 'add') {
+        if (!whitelist.includes(user.id)) {
+          whitelist.push(user.id);
+        }
+      } else if (whitelistAction === 'remove') {
+        whitelist = whitelist.filter(id => id !== user.id);
+      }
+      
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        anti_nuke_whitelist: whitelist
+      }, { onConflict: ['guild_id'] });
+      
+      return interaction.reply({ content: `✅ User ${user} ${whitelistAction === 'add' ? 'added to' : 'removed from'} anti-nuke whitelist.`, ephemeral: true });
+    }
+    
+    if (action === 'autoban' && autoban !== null) {
+      await supabase.from('guild_configs').upsert({
+        guild_id: interaction.guild.id,
+        anti_nuke_auto_ban: autoban
+      }, { onConflict: ['guild_id'] });
+      return interaction.reply({ content: `✅ Auto-ban ${autoban ? 'enabled' : 'disabled'}.`, ephemeral: true });
+    }
+    
+    if (action === 'status') {
+      const { data: config } = await supabase
+        .from('guild_configs')
+        .select('anti_nuke_enabled, anti_nuke_whitelist, anti_nuke_auto_ban')
+        .eq('guild_id', interaction.guild.id)
+        .single();
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🛡️ Anti-Nuke Protection Status')
+        .addFields(
+          { name: 'Enabled', value: config?.anti_nuke_enabled ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Auto-Ban', value: config?.anti_nuke_auto_ban ? '✅ Yes' : '❌ No', inline: true },
+          { name: 'Whitelist', value: (config?.anti_nuke_whitelist?.length || 0) + ' users', inline: true }
+        )
+        .setColor(0x3498db)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed], ephemeral: true });
+    }
+  },
+
+  steal: async (interaction) => {
+    if (!await isAdmin(interaction.member)) {
+      return interaction.reply({ content: 'Only admins can steal emojis.', ephemeral: true });
+    }
+    
+    const emojiArg = interaction.options.getString('emoji');
+    const newName = interaction.options.getString('name') || 'stolen_emoji';
+    
+    if (!emojiArg) {
+      return interaction.reply({ content: 'Please provide an emoji to steal. Usage: `/steal emoji:🎉 name:party`', ephemeral: true });
+    }
+    
+    // Extract emoji ID from the emoji string
+    const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
+    if (!emojiMatch) {
+      return interaction.reply({ content: 'Please provide a valid custom emoji from another server.', ephemeral: true });
+    }
+    
+    const [, emojiName, emojiId] = emojiMatch;
+    const isAnimated = emojiArg.startsWith('<a:');
+    const extension = isAnimated ? 'gif' : 'png';
+    const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
+    
+    try {
+      // Create the emoji in the current server
+      const createdEmoji = await interaction.guild.emojis.create({
+        attachment: emojiUrl,
+        name: newName
+      });
+      
+      const embed = new EmbedBuilder()
+        .setTitle('🎭 Emoji Stolen Successfully!')
+        .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
+        .setThumbnail(emojiUrl)
+        .setColor(0x2ecc71)
+        .setTimestamp();
+      
+      return interaction.reply({ embeds: [embed] });
+    } catch (e) {
+      console.error('Steal emoji error:', e);
+      let errorMessage = 'Failed to steal emoji.';
+      
+      if (e.code === 30008) {
+        errorMessage = 'Server has reached the maximum number of emojis.';
+      } else if (e.code === 50035) {
+        errorMessage = 'Invalid emoji name. Use only letters, numbers, and underscores.';
+      } else if (e.code === 50013) {
+        errorMessage = 'Bot lacks permission to manage emojis.';
+      }
+      
+      return interaction.reply({ content: errorMessage, ephemeral: true });
+    }
+  },
 };
 
 const buttonHandlers = {};
 const modalHandlers = {};
 
+// Raid prevention system
+const raidDetection = new Map(); // Map<guildId, {joins: [], messages: [], lastAlert: 0}>
+const RAID_THRESHOLDS = {
+  joins: { count: 10, timeWindow: 30000 }, // 10 joins in 30 seconds
+  messages: { count: 20, timeWindow: 10000 } // 20 messages in 10 seconds
+};
+
+async function checkRaidProtection(guild, type, userId) {
+  const now = Date.now();
+  const guildId = guild.id;
+  
+  if (!raidDetection.has(guildId)) {
+    raidDetection.set(guildId, { joins: [], messages: [], lastAlert: 0 });
+  }
+  
+  const data = raidDetection.get(guildId);
+  const threshold = RAID_THRESHOLDS[type];
+  
+  // Add new event
+  data[type].push({ userId, timestamp: now });
+  
+  // Remove old events outside time window
+  data[type] = data[type].filter(event => now - event.timestamp < threshold.timeWindow);
+  
+  // Check if threshold exceeded
+  if (data[type].length >= threshold.count) {
+    // Prevent spam alerts
+    if (now - data.lastAlert < 60000) return false;
+    data.lastAlert = now;
+    
+    // Get unique users
+    const uniqueUsers = new Set(data[type].map(e => e.userId));
+    
+    // Get raid protection config
+    const { data: config } = await supabase
+      .from('guild_configs')
+      .select('raid_protection_enabled, raid_protection_threshold, log_channel')
+      .eq('guild_id', guildId)
+      .single();
+    
+    if (config?.raid_protection_enabled !== false) {
+      await handleRaidDetection(guild, type, uniqueUsers, config);
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+async function handleRaidDetection(guild, type, users, config) {
+  const userList = Array.from(users).slice(0, 10).map(id => `<@${id}>`).join(', ');
+  const embed = new EmbedBuilder()
+    .setTitle('🚨 RAID DETECTED')
+    .setDescription(`**Type:** ${type.toUpperCase()}\n**Users:** ${userList}${users.size > 10 ? ` and ${users.size - 10} more` : ''}`)
+    .setColor(0xe74c3c)
+    .setTimestamp();
+  
+  // Send to log channel if configured
+  if (config?.log_channel) {
+    const logChannel = guild.channels.cache.get(config.log_channel);
+    if (logChannel?.isTextBased()) {
+      await logChannel.send({ embeds: [embed] });
+    }
+  }
+  
+  // Auto-lock channels if configured
+  if (config?.raid_auto_lock) {
+    const channels = guild.channels.cache.filter(ch => ch.type === 0);
+    for (const [id, channel] of channels) {
+      try {
+        await channel.permissionOverwrites.edit(guild.roles.everyone, {
+          SendMessages: false,
+          AddReactions: false
+        });
+      } catch (e) {
+        console.error(`Failed to lock channel ${channel.name}:`, e);
+      }
+    }
+    
+    const lockEmbed = new EmbedBuilder()
+      .setTitle('🔒 Channels Auto-Locked')
+      .setDescription('All channels have been locked due to raid detection.')
+      .setColor(0xe67e22)
+      .setTimestamp();
+    
+    // Send to first available channel
+    const firstChannel = guild.channels.cache.find(ch => ch.type === 0 && ch.permissionsFor(guild.members.me).has('SendMessages'));
+    if (firstChannel) {
+      await firstChannel.send({ embeds: [lockEmbed] });
+    }
+  }
+}
+
+// Anti-nuke protection
+const antiNukeProtection = new Map(); // Map<guildId, {enabled: boolean, whitelist: Set, lastAction: Map}>
+
+async function checkAntiNuke(guild, action, userId) {
+  const guildId = guild.id;
+  
+  if (!antiNukeProtection.has(guildId)) {
+    antiNukeProtection.set(guildId, { enabled: false, whitelist: new Set(), lastAction: new Map() });
+  }
+  
+  const data = antiNukeProtection.get(guildId);
+  
+  // Check if anti-nuke is enabled
+  const { data: config } = await supabase
+    .from('guild_configs')
+    .select('anti_nuke_enabled, anti_nuke_whitelist')
+    .eq('guild_id', guildId)
+    .single();
+  
+  if (!config?.anti_nuke_enabled) return false;
+  
+  data.enabled = true;
+  if (config.anti_nuke_whitelist) {
+    data.whitelist = new Set(config.anti_nuke_whitelist);
+  }
+  
+  // Check if user is whitelisted
+  if (data.whitelist.has(userId)) return false;
+  
+  // Check for suspicious activity
+  const now = Date.now();
+  const userActions = data.lastAction.get(userId) || [];
+  
+  // Remove old actions (older than 1 minute)
+  const recentActions = userActions.filter(timestamp => now - timestamp < 60000);
+  
+  // Check for rapid actions
+  if (recentActions.length >= 5) { // 5 actions in 1 minute
+    await handleAntiNukeViolation(guild, userId, action, recentActions.length);
+    return true;
+  }
+  
+  // Add current action
+  recentActions.push(now);
+  data.lastAction.set(userId, recentActions);
+  
+  return false;
+}
+
+async function handleAntiNukeViolation(guild, userId, action, actionCount) {
+  const embed = new EmbedBuilder()
+    .setTitle('🛡️ ANTI-NUKE VIOLATION')
+    .setDescription(`**User:** <@${userId}>\n**Action:** ${action}\n**Actions in 1min:** ${actionCount}`)
+    .setColor(0xe74c3c)
+    .setTimestamp();
+  
+  // Get log channel
+  const { data: config } = await supabase
+    .from('guild_configs')
+    .select('log_channel')
+    .eq('guild_id', guild.id)
+    .single();
+  
+  if (config?.log_channel) {
+    const logChannel = guild.channels.cache.get(config.log_channel);
+    if (logChannel?.isTextBased()) {
+      await logChannel.send({ embeds: [embed] });
+    }
+  }
+  
+  // Auto-ban if configured
+  const { data: antiNukeConfig } = await supabase
+    .from('guild_configs')
+    .select('anti_nuke_auto_ban')
+    .eq('guild_id', guild.id)
+    .single();
+  
+  if (antiNukeConfig?.anti_nuke_auto_ban) {
+    try {
+      await guild.members.ban(userId, { reason: 'Anti-nuke violation' });
+      await addModlog(guild.id, userId, 'ban', 'BOT', 'Anti-nuke violation');
+    } catch (e) {
+      console.error('Failed to auto-ban anti-nuke violator:', e);
+    }
+  }
+}
+
 module.exports = {
   name: 'moderation',
   prefixCommands,
-  slashHandlers,
   slashCommands,
+  slashHandlers,
   buttonHandlers,
-  modalHandlers
+  modalHandlers,
+  checkRaidProtection,
+  checkAntiNuke,
+  handleRaidDetection,
+  handleAntiNukeViolation
 }; 

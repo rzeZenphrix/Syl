@@ -80,7 +80,12 @@ const commandDescriptions = {
   'feedback-channel': 'Set the channel where anonymous feedback is sent. Usage: `&feedback-channel #channel` (admin only)',
   'modmail-channel': 'Set the channel where modmail threads are created. Usage: `&modmail-channel #channel` (admin only)',
   'mod-role': 'Set the role to ping during panic mode. Usage: `&mod-role @role` (admin only)',
-  'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel` (admin only)'
+  'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel` (admin only)',
+  
+  // New commands
+  raid: 'Configure raid prevention settings. Usage: `;raid <on/off/threshold/autolock>` (admin only)',
+  antinuke: 'Configure anti-nuke protection. Usage: `;antinuke <on/off/whitelist/autoban>` (owner only)',
+  steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
 };
 
 // Translation function with language detection
@@ -1017,7 +1022,80 @@ const prefixCommands = {
         .setTimestamp();
       return msg.channel.send({ embeds: [embed] });
     }
-  }
+  },
+
+  help: async (msg, args) => {
+    const fs = require('fs');
+    const path = require('path');
+    const MAX_CHUNK = 1900;
+    try {
+      const readmePath = path.resolve(__dirname, '../../README.md');
+      if (!fs.existsSync(readmePath)) {
+        return msg.reply({ embeds: [{ title: 'Help', description: 'Bot guide not found.' }] });
+      }
+      const content = fs.readFileSync(readmePath, 'utf8');
+      const chunks = [];
+      for (let i = 0; i < content.length; i += MAX_CHUNK) {
+        chunks.push(content.slice(i, i + MAX_CHUNK));
+      }
+      for (const chunk of chunks) {
+        await msg.author.send('```markdown\n' + chunk + '\n```');
+      }
+      await msg.reply({ embeds: [{ title: 'Help', description: 'I have sent you the bot guide via DM!' }] });
+    } catch (e) {
+      await msg.reply({ embeds: [{ title: 'Help', description: 'Could not DM you the guide. Please check your DM settings.' }] });
+    }
+  },
+
+  raid: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const sub = args[0]?.toLowerCase();
+    if (!sub || !['on', 'off', 'threshold', 'autolock'].includes(sub)) {
+      return msg.reply('Usage: &raid on/off/threshold/autolock');
+    }
+    if (sub === 'on') {
+      global.raidEnabled = true;
+      return msg.reply('Raid prevention enabled.');
+    } else if (sub === 'off') {
+      global.raidEnabled = false;
+      return msg.reply('Raid prevention disabled.');
+    } else if (sub === 'threshold') {
+      global.raidThreshold = parseInt(args[1]);
+      return msg.reply(`Raid threshold set to ${global.raidThreshold}.`);
+    } else if (sub === 'autolock') {
+      global.raidAutolock = true;
+      return msg.reply('Raid autolock enabled.');
+    }
+  },
+
+  antinuke: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const sub = args[0]?.toLowerCase();
+    if (!sub || !['on', 'off', 'whitelist', 'autoban'].includes(sub)) {
+      return msg.reply('Usage: &antinuke on/off/whitelist/autoban');
+    }
+    if (sub === 'on') {
+      global.antiNukeEnabled = true;
+      return msg.reply('Anti-nuke protection enabled.');
+    } else if (sub === 'off') {
+      global.antiNukeEnabled = false;
+      return msg.reply('Anti-nuke protection disabled.');
+    } else if (sub === 'whitelist') {
+      global.antiNukeWhitelist = args.slice(1).map(id => `<@${id}>`);
+      return msg.reply(`Anti-nuke whitelist updated: ${global.antiNukeWhitelist.join(', ')}`);
+    } else if (sub === 'autoban') {
+      global.antiNukeAutoban = true;
+      return msg.reply('Anti-nuke autoban enabled.');
+    }
+  },
+
+  steal: async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const user = msg.mentions.users.first();
+    if (!user) return msg.reply('Please mention a user to steal their avatar.');
+    const avatarUrl = user.displayAvatarURL({ size: 1024 });
+    return msg.reply({ content: `Avatar stolen: ${avatarUrl}` });
+  },
 };
 
 // Slash commands
@@ -1025,8 +1103,8 @@ const PAGE_SIZE = 8;
 
 function getAllCommandsByCategory() {
   return [
-    { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case'] },
-    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd'] },
+    { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case', 'raid', 'antinuke'] },
+    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
     { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
     { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
     { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
@@ -1571,7 +1649,57 @@ const slashHandlers = {
         .setTimestamp();
       await interaction.reply({ embeds: [embed] });
     }
-  }
+  },
+
+  raid: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const sub = interaction.options.getString('setting');
+    if (!sub || !['on', 'off', 'threshold', 'autolock'].includes(sub)) {
+      return interaction.reply({ content: 'Usage: &raid on/off/threshold/autolock', ephemeral: true });
+    }
+    if (sub === 'on') {
+      global.raidEnabled = true;
+      return interaction.reply({ content: 'Raid prevention enabled.', ephemeral: true });
+    } else if (sub === 'off') {
+      global.raidEnabled = false;
+      return interaction.reply({ content: 'Raid prevention disabled.', ephemeral: true });
+    } else if (sub === 'threshold') {
+      global.raidThreshold = parseInt(interaction.options.getString('value'));
+      return interaction.reply({ content: `Raid threshold set to ${global.raidThreshold}.`, ephemeral: true });
+    } else if (sub === 'autolock') {
+      global.raidAutolock = true;
+      return interaction.reply({ content: 'Raid autolock enabled.', ephemeral: true });
+    }
+  },
+
+  antinuke: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const sub = interaction.options.getString('setting');
+    if (!sub || !['on', 'off', 'whitelist', 'autoban'].includes(sub)) {
+      return interaction.reply({ content: 'Usage: &antinuke on/off/whitelist/autoban', ephemeral: true });
+    }
+    if (sub === 'on') {
+      global.antiNukeEnabled = true;
+      return interaction.reply({ content: 'Anti-nuke protection enabled.', ephemeral: true });
+    } else if (sub === 'off') {
+      global.antiNukeEnabled = false;
+      return interaction.reply({ content: 'Anti-nuke protection disabled.', ephemeral: true });
+    } else if (sub === 'whitelist') {
+      global.antiNukeWhitelist = interaction.options.getString('whitelist').split(',').map(id => `<@${id}>`);
+      return interaction.reply({ content: `Anti-nuke whitelist updated: ${global.antiNukeWhitelist.join(', ')}`, ephemeral: true });
+    } else if (sub === 'autoban') {
+      global.antiNukeAutoban = true;
+      return interaction.reply({ content: 'Anti-nuke autoban enabled.', ephemeral: true });
+    }
+  },
+
+  steal: async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const user = interaction.options.getUser('user');
+    if (!user) return interaction.reply({ content: 'Please mention a user to steal their avatar.', ephemeral: true });
+    const avatarUrl = user.displayAvatarURL({ size: 1024 });
+    return interaction.reply({ content: `Avatar stolen: ${avatarUrl}`, ephemeral: true });
+  },
 };
 
 // Add button handler for pagination

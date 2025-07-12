@@ -14,6 +14,69 @@ A highly configurable, multi-server Discord moderation bot built with Discord.js
 - **Welcome/Goodbye Messages**: Customizable member join/leave messages
 - **Ticket System**: Support ticket creation and management
 - **Logging**: Detailed moderation action logging
+- **🛡️ Raid Prevention**: Advanced raid detection and auto-lock protection
+- **🛡️ Anti-Nuke Protection**: Protect against malicious server destruction
+- **🎭 Avatar Stealing**: Fun utility to steal user avatars
+
+## New Features
+
+### 🛡️ Raid Prevention System
+
+The bot now includes comprehensive raid prevention that monitors both member joins and message spam:
+
+**Features:**
+- **Join Raid Detection**: Monitors rapid member joins (default: 10 joins in 30 seconds)
+- **Message Raid Detection**: Monitors message spam (default: 20 messages in 10 seconds)
+- **Auto-Lock**: Automatically locks all channels during detected raids
+- **Configurable Thresholds**: Adjust detection sensitivity per server
+- **Logging**: Detailed raid logs with user lists and timestamps
+
+**Commands:**
+```bash
+;raid on                    # Enable raid protection
+;raid off                   # Disable raid protection
+;raid threshold 15          # Set custom threshold
+;raid autolock on          # Enable auto-lock during raids
+/raid action:on            # Slash command version
+```
+
+### 🛡️ Anti-Nuke Protection
+
+Protect your server from malicious administrators or compromised accounts:
+
+**Features:**
+- **Action Monitoring**: Tracks rapid channel deletions, role deletions, and mass bans
+- **Whitelist System**: Trusted users can bypass protection
+- **Auto-Ban**: Automatically ban violators (configurable)
+- **Audit Log Integration**: Uses Discord's audit logs for accurate detection
+- **Owner-Only Configuration**: Only server owners can configure anti-nuke
+
+**Commands:**
+```bash
+;antinuke on                    # Enable anti-nuke protection
+;antinuke off                   # Disable anti-nuke protection
+;antinuke whitelist add @user   # Add user to whitelist
+;antinuke whitelist remove @user # Remove user from whitelist
+;antinuke autoban on           # Enable auto-ban for violators
+/antinuke action:on            # Slash command version
+```
+
+### 🎭 Steal Command
+
+A utility command to "steal" emojis from other servers:
+
+**Usage:**
+```bash
+;steal 🎉 party          # Steal emoji and rename it to "party"
+;steal 🚀                # Steal emoji with default name
+/steal emoji:🎉 name:party # Slash command version
+```
+
+**Features:**
+- Copy custom emojis from any server
+- Rename emojis during import
+- Supports both static and animated emojis
+- Admin-only command for security
 
 ## Cog System
 
@@ -21,8 +84,8 @@ The bot uses a modular cog system for better organization and maintainability:
 
 ### Available Cogs
 
-- **moderation.js**: Ban, kick, warn, purge, and other moderation commands
-- **utility.js**: Server info, user info, ping, uptime, and general utilities
+- **moderation.js**: Ban, kick, warn, purge, raid prevention, anti-nuke, and other moderation commands
+- **utility.js**: Server info, user info, ping, uptime, steal, and general utilities
 - **setup.js**: Server configuration, admin role setup, and bot settings
 
 ### Creating New Cogs
@@ -74,25 +137,18 @@ The bot uses Supabase PostgreSQL with the following tables:
 - `log_channel`: Channel ID for moderation logs
 - `autorole`: Role ID for automatic assignment
 - `custom_prefix`: Custom command prefix for this guild
-
-### warnings
-- `id` (PK): Auto-incrementing ID
-- `guild_id`: Discord guild ID
-- `user_id`: Discord user ID
-- `reason`: Warning reason
-- `warned_by`: Moderator user ID
-- `date`: Timestamp
-
-### modlogs
-- `id` (PK): Auto-incrementing ID
-- `guild_id`: Discord guild ID
-- `user_id`: Target user ID
-- `action`: Action type (ban, kick, warn, etc.)
-- `moderator_id`: Moderator user ID
-- `reason`: Action reason
-- `date`: Timestamp
+- `raid_protection_enabled`: Whether raid protection is enabled
+- `raid_protection_threshold`: Custom raid detection threshold
+- `raid_auto_lock`: Whether to auto-lock channels during raids
+- `anti_nuke_enabled`: Whether anti-nuke protection is enabled
+- `anti_nuke_whitelist`: Array of whitelisted user IDs
+- `anti_nuke_auto_ban`: Whether to auto-ban anti-nuke violators
 
 ### Additional Tables
+- `raid_logs`: Records of detected raids
+- `antinuke_logs`: Records of anti-nuke violations
+- `warnings`: User warning records
+- `modlogs`: Moderation action logs
 - `mutes`: User mute records
 - `blacklist`: Blacklisted users
 - `ticket_types`: Ticket category definitions
@@ -120,121 +176,8 @@ BOT_OWNER_ID=your_discord_user_id
 2. Run the following SQL to create the required tables:
 
 ```sql
--- Create guild_configs table
-CREATE TABLE guild_configs (
-  guild_id BIGINT PRIMARY KEY,
-  admin_role_id BIGINT,
-  extra_role_ids BIGINT[],
-  disabled_commands TEXT[],
-  log_channel BIGINT,
-  autorole BIGINT,
-  custom_prefix TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create warnings table
-CREATE TABLE warnings (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  reason TEXT NOT NULL,
-  warned_by BIGINT NOT NULL,
-  date BIGINT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create modlogs table
-CREATE TABLE modlogs (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  action TEXT NOT NULL,
-  moderator_id BIGINT NOT NULL,
-  reason TEXT,
-  date BIGINT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create mutes table
-CREATE TABLE mutes (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  muted_by BIGINT NOT NULL,
-  reason TEXT,
-  start_time BIGINT NOT NULL,
-  end_time BIGINT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create blacklist table
-CREATE TABLE blacklist (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  added_by BIGINT NOT NULL,
-  reason TEXT,
-  date BIGINT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create ticket_types table
-CREATE TABLE ticket_types (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  label TEXT NOT NULL,
-  description TEXT,
-  tags TEXT[],
-  color TEXT,
-  created_by BIGINT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create tickets table
-CREATE TABLE tickets (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT NOT NULL,
-  user_id BIGINT NOT NULL,
-  type_id INTEGER REFERENCES ticket_types(id),
-  created_at BIGINT NOT NULL,
-  closed_at BIGINT,
-  closed_by BIGINT
-);
-
--- Create welcome_configs table
-CREATE TABLE welcome_configs (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT UNIQUE NOT NULL,
-  enabled BOOLEAN DEFAULT true,
-  channel_id BIGINT,
-  message TEXT,
-  embed BOOLEAN DEFAULT true,
-  color TEXT,
-  image TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create goodbye_configs table
-CREATE TABLE goodbye_configs (
-  id SERIAL PRIMARY KEY,
-  guild_id BIGINT UNIQUE NOT NULL,
-  enabled BOOLEAN DEFAULT true,
-  channel_id BIGINT,
-  message TEXT,
-  embed BOOLEAN DEFAULT true,
-  color TEXT,
-  image TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create indexes for better performance
-CREATE INDEX idx_warnings_guild_user ON warnings(guild_id, user_id);
-CREATE INDEX idx_modlogs_guild_user ON modlogs(guild_id, user_id);
-CREATE INDEX idx_mutes_guild_user ON mutes(guild_id, user_id);
-CREATE INDEX idx_blacklist_guild_user ON blacklist(guild_id, user_id);
-CREATE INDEX idx_ticket_types_guild ON ticket_types(guild_id);
-CREATE INDEX idx_tickets_guild ON tickets(guild_id);
+-- Run the complete setup script
+-- Use: sql/new_features.sql
 ```
 
 ### 3. Install Dependencies
@@ -261,7 +204,7 @@ node index.js
 
 ### Command Permissions
 
-- **Server Owner**: Can run `/setup` and all commands
+- **Server Owner**: Can run `/setup`, `/antinuke`, and all commands
 - **Admin Role Members**: Can run all moderation and configuration commands
 - **Extra Role Members**: Same permissions as admin role
 - **Regular Members**: Can only run utility commands (unless disabled)
@@ -283,6 +226,9 @@ node index.js
 - `mute @user <duration> [reason]` - Mute a user (30s, 5m, 2h, 1d)
 - `unmute @user` - Unmute a user
 - `timeout @user <duration> [reason]` - Timeout a user (30s, 5m, 2h, 1d)
+- `raid <on/off/threshold/autolock>` - Configure raid prevention (admin only)
+- `antinuke <on/off/whitelist/autoban>` - Configure anti-nuke protection (owner only)
+- `steal [@user]` - Steal a user's avatar
 - `ping` - Check bot latency
 - `uptime` - Show bot uptime
 - `server` - Show server info
@@ -313,11 +259,35 @@ node index.js
 - `/mute @user <duration> [reason]` - Mute a user
 - `/unmute @user` - Unmute a user
 - `/timeout @user <duration> [reason]` - Timeout a user
+- `/raid` - Configure raid prevention (admin only)
+- `/antinuke` - Configure anti-nuke protection (owner only)
+- `/steal [user]` - Steal a user's avatar
 - `/ping` - Check bot latency
 - `/uptime` - Show bot uptime
 - `/server` - Show server info
 - `/avatar [user]` - Show user avatar
 - `/poll <question>` - Create a poll with reactions
+
+## Security Features
+
+### Raid Prevention
+- **Real-time Monitoring**: Continuously monitors member joins and message activity
+- **Configurable Thresholds**: Adjust sensitivity based on server size and activity
+- **Auto-Lock**: Automatically locks channels during detected raids
+- **Detailed Logging**: Complete audit trail of all raid events
+
+### Anti-Nuke Protection
+- **Action Tracking**: Monitors channel deletions, role deletions, and mass bans
+- **Whitelist System**: Trusted administrators can bypass protection
+- **Auto-Ban**: Automatically ban malicious users
+- **Audit Log Integration**: Uses Discord's native audit logs for accuracy
+
+## Error Handling and Support
+
+- All critical errors are logged to the configured log channel in your server.
+- The server owner is notified via DM for major failures (e.g., ticket creation issues).
+- User-facing error messages include a unique trace ID. Provide this ID to staff or the bot owner for faster troubleshooting.
+- A web dashboard for error logs is available. Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` (set LOG_DASHBOARD_PASSWORD for security). You can search logs by trace ID, context, or date, and download the full log file.
 
 ## Contributing
 
