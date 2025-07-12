@@ -2817,5 +2817,6 @@ module.exports = {
   slashHandlers,
   slashCommands,
   buttonHandlers,
-  modalHandlers
+  modalHandlers,
+  logToModLog,
 }; 
