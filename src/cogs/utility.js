@@ -21,6 +21,9 @@ async function logToModLog(msgOrGuild, title, description, color = 0xe67e22) {
   }
 }
 
+// Declare prefixCommands above commandDescriptions, but define it after
+let prefixCommands = {};
+
 const commandDescriptions = {
   // Setup & Configuration
   setup: 'Configure server settings and admin roles. Usage: `;setup @adminrole [@extrarole1 ...]` (owner only)',
@@ -103,7 +106,7 @@ const commandDescriptions = {
   antinuke: 'Configure anti-nuke protection. Usage: `;antinuke <on/off/whitelist/autoban>` (owner only)',
   steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
   s: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
-  stats: commandDescriptions.s,
+  stats: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
   activity: 'Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;activity` or `/activity`',
   a: 'Short for ;activity. Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;a` or `/a`',
   'a-user': 'Short for ;activity. Usage: `;a @user` for another user, `;a l` for leaderboard. Slash: `/a [user|l]`',
@@ -1083,7 +1086,7 @@ const prefixCommands = {
       return msg.reply('Failed to set report channel.');
     }
   },
-
+  
   say: async (msg, args) => {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
