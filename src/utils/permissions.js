@@ -34,18 +34,25 @@ async function isCommandEnabled(guildId, commandName, member = null) {
     // If we have member info, check if they should bypass disabled commands
     if (member) {
       // Always allow server owner
-      if (member.guild.ownerId === member.id) return true;
+      if (member.guild.ownerId === member.id) {
+        return true;
+      }
       // Always allow users with Administrator permission
-      if (member.permissions.has('Administrator')) return true;
-      // Check guild config for admin roles
-      const { data, error } = await supabase
+      if (member.permissions.has('Administrator')) {
+        return true;
+      }
+      // Check if user is co-owner
+      const { data: config, error: configError } = await supabase
         .from('guild_configs')
-        .select('admin_role_id, extra_role_ids')
+        .select('admin_role_id, extra_role_ids, co_owner_1_id, co_owner_2_id')
         .eq('guild_id', guildId)
         .single();
-      if (!error && data) {
-        const adminRoles = [data.admin_role_id, ...(data.extra_role_ids || [])].filter(Boolean);
+      if (!configError && config) {
+        const adminRoles = [config.admin_role_id, ...(config.extra_role_ids || [])].filter(Boolean);
         if (member.roles.cache.some(role => adminRoles.includes(role.id))) {
+          return true;
+        }
+        if ([config.co_owner_1_id, config.co_owner_2_id].includes(member.id)) {
           return true;
         }
       }

@@ -153,3 +153,20 @@ Disabled commands are stored in the `guild_configs` table in the `disabled_comma
 - Disabled commands are server-specific
 - The system supports both old and new command formats for backward compatibility
 - All changes are applied immediately without requiring bot restart 
+
+## ⭐ Starboard Customization
+
+The starboard system supports advanced customization:
+- **Custom Embed Color**: Set a hex color for each starboard.
+- **Image/Attachment Display Mode**: Show first image, all images, none, or thumbnail.
+- **Whitelist Roles/Channels**: Only allow starring in certain roles/channels.
+- **Minimum Message Length**: Only allow starring messages above a certain length.
+- **Post Style**: Choose between embed, plain, or both.
+- **Custom Placeholders**: Use `{user}`, `{count}`, `{channel}`, `{content}`, `{jump}`, `{author_avatar}`, `{message_link}` in custom message templates.
+
+### Example `/starboard-set` usage:
+```
+/starboard-set name:starboard emoji:⭐ threshold:5 channel:#starboard embed_color:#FFD700 image_mode:all whitelist_roles:@Starboarder whitelist_channels:#memes min_length:20 post_style:embed custom_message:"{user} got {count} stars! [Jump]({jump})"
+```
+
+See `/starboard-info` for all options and current config. 

@@ -2183,7 +2183,7 @@ const slashHandlers = {
     const emojiArg = interaction.options.getString('emoji');
     const newName = interaction.options.getString('name') || 'stolen_emoji';
     if (!emojiArg) {
-      return interaction.reply({ content: 'Please provide an emoji to steal. Usage: `/steal emoji:🎉 name:party`', ephemeral: true });
+      return interaction.reply({ content: 'Please provide a custom emoji to steal. Usage: `/steal emoji:<custom_emoji> name:party`', ephemeral: true });
     }
     // Reject user mentions
     if (/^<@!?\d+>$/.test(emojiArg)) {
@@ -2676,6 +2676,86 @@ slashHandlers['raid'] = async (interaction) => {
     }
   }
   return oldRaidHandler(interaction);
+};
+
+// Setup/config commands: restrict to owner/co-owner only
+const setupSlashCommands = [
+  'antinuke', // already owner/co-owner only
+  // Add any other setup/config slash commands here
+];
+
+// Patch slashHandlers to enforce new permission logic
+for (const [cmd, handler] of Object.entries(slashHandlers)) {
+  if (setupSlashCommands.includes(cmd)) {
+    slashHandlers[cmd] = async (interaction) => {
+      if (!await isOwnerOrCoOwner(interaction.member)) {
+        return interaction.reply({ content: 'Only the server owner or co-owners can use this command.', ephemeral: true });
+      }
+      return handler(interaction);
+    };
+  } else {
+    // Remove admin check: anyone can use, unless disabled
+    slashHandlers[cmd] = async (interaction) => {
+      // Check if command is disabled for this user
+      const { isCommandEnabled } = require('../utils/permissions');
+      const enabled = await isCommandEnabled(interaction.guild.id, cmd, interaction.member);
+      if (!enabled) {
+        return interaction.reply({ content: 'This command is disabled in this server.', ephemeral: true });
+      }
+      return handler(interaction);
+    };
+  }
+}
+
+// Fix /steal slash command to expect a custom emoji, not an avatar
+slashHandlers['steal'] = async (interaction) => {
+  // Only admins can use /steal
+  if (!await isAdmin(interaction.member)) {
+    return interaction.reply({ content: 'Only admins can steal emojis.', ephemeral: true });
+  }
+  const emojiArg = interaction.options.getString('emoji');
+  const newName = interaction.options.getString('name') || 'stolen_emoji';
+  if (!emojiArg) {
+    return interaction.reply({ content: 'Please provide a custom emoji to steal. Usage: `/steal emoji:<custom_emoji> name:party`', ephemeral: true });
+  }
+  // Reject user mentions
+  if (/^<@!?\d+>$/.test(emojiArg)) {
+    return interaction.reply({ content: 'Please provide a custom emoji from another server, not a user mention.', ephemeral: true });
+  }
+  // Extract emoji ID from the emoji string
+  const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
+  if (!emojiMatch) {
+    return interaction.reply({ content: 'Please provide a valid custom emoji from another server.', ephemeral: true });
+  }
+  const [, emojiName, emojiId] = emojiMatch;
+  const isAnimated = emojiArg.startsWith('<a:');
+  const extension = isAnimated ? 'gif' : 'png';
+  const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
+  try {
+    // Create the emoji in the current server
+    const createdEmoji = await interaction.guild.emojis.create({
+      attachment: emojiUrl,
+      name: newName
+    });
+    const embed = new EmbedBuilder()
+      .setTitle('🎭 Emoji Stolen Successfully!')
+      .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
+      .setThumbnail(emojiUrl)
+      .setColor(0x2ecc71)
+      .setTimestamp();
+    return interaction.reply({ embeds: [embed] });
+  } catch (e) {
+    console.error('Steal emoji error:', e);
+    let errorMessage = 'Failed to steal emoji.';
+    if (e.code === 30008) {
+      errorMessage = 'Server has reached the maximum number of emojis.';
+    } else if (e.code === 50035) {
+      errorMessage = 'Invalid emoji name. Use only letters, numbers, and underscores.';
+    } else if (e.code === 50013) {
+      errorMessage = 'Bot lacks permission to manage emojis.';
+    }
+    return interaction.reply({ content: errorMessage, ephemeral: true });
+  }
 };
 
 module.exports = {

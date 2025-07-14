@@ -75,7 +75,7 @@ const commandDescriptions = {
   say: 'Make the bot say something as an embed. Usage: `;say <message>` (admin only)',
   help: 'Show this help message. Usage: `;help`',
   reset: 'Reset the command prefix to default (; and &). Usage: `;reset` (owner only)',
-  top: 'Show top users by messages, infractions, or uptime. Usage: `&top messages`, `&top infractions`, or `&top uptime`',
+  top: 'Show top users by messages, infractions, or uptime. Usage: `;top messages [week|all]`, `;top infractions [week|all]`, `;top vc [week|all]`, `;top chat [week|all]`, `;top uptime [week|all]`',
   sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Usage: `&sysinfo`',
   man: 'Returns the help info for a command like a Linux manpage. Usage: `&man <command>`',
   passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
@@ -102,6 +102,14 @@ const commandDescriptions = {
   raid: 'Configure raid prevention settings. Usage: `;raid <on/off/threshold/autolock>` (admin only)',
   antinuke: 'Configure anti-nuke protection. Usage: `;antinuke <on/off/whitelist/autoban>` (owner only)',
   steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
+  s: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
+  stats: commandDescriptions.s,
+  activity: 'Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;activity` or `/activity`',
+  a: 'Short for ;activity. Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;a` or `/a`',
+  'a-user': 'Short for ;activity. Usage: `;a @user` for another user, `;a l` for leaderboard. Slash: `/a [user|l]`',
+  'a-leaderboard': 'Short for ;activity. Usage: `;a l` for leaderboard. Slash: `/a l`',
+  // Update help text
+  a: 'Short for ;activity. Usage: `;a` for your stats, `;a @user` for another user, `;a l` for leaderboard. Activity resets weekly.',
 };
 
 // Translation function with language detection
@@ -212,6 +220,49 @@ async function isAdmin(member) {
   } catch (err) {
     console.error('Error in isAdmin check:', err);
     return false;
+  }
+}
+
+// Helper to check if member is owner or co-owner
+async function isOwnerOrCoOwner(member) {
+  if (!member || !member.guild) return false;
+  if (member.guild.ownerId === member.id) return true;
+  // Check co-owner columns in guild_configs
+  const { data, error } = await supabase
+    .from('guild_configs')
+    .select('co_owner_1_id, co_owner_2_id')
+    .eq('guild_id', member.guild.id)
+    .single();
+  if (error) return false;
+  return [data?.co_owner_1_id, data?.co_owner_2_id].includes(member.id);
+}
+
+// Setup/config commands: restrict to owner/co-owner only
+const setupCommands = [
+  'setup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands',
+  'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'
+];
+
+// Patch prefixCommands to enforce new permission logic
+for (const [cmd, handler] of Object.entries(prefixCommands)) {
+  if (setupCommands.includes(cmd)) {
+    prefixCommands[cmd] = async (msg, args) => {
+      if (!await isOwnerOrCoOwner(msg.member)) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only the server owner or co-owners can use this command.').setColor(0xe74c3c)] });
+      }
+      return handler(msg, args);
+    };
+  } else {
+    // Remove admin check: anyone can use
+    prefixCommands[cmd] = async (msg, args) => {
+      // Check if command is disabled for this user
+      const { isCommandEnabled } = require('../utils/permissions');
+      const enabled = await isCommandEnabled(msg.guild.id, cmd, msg.member);
+      if (!enabled) {
+        return msg.reply({ embeds: [new EmbedBuilder().setTitle('Command Disabled').setDescription('This command is disabled in this server.').setColor(0xe74c3c)] });
+      }
+      return handler(msg, args);
+    };
   }
 }
 
@@ -350,29 +401,46 @@ const prefixCommands = {
       global.sniperEnabled = global.sniperEnabled || {};
       global.sniperEnabled[msg.guild.id] = true;
       return msg.reply('Sniper enabled. Deleted messages will be logged.');
-    } else if (arg === 'off') {
+    }
+    if (arg === 'off') {
       global.sniperEnabled = global.sniperEnabled || {};
       global.sniperEnabled[msg.guild.id] = false;
       return msg.reply('Sniper disabled.');
-    } else if (!arg) {
-      // Show last deleted message in this channel
-      global.snipedMessages = global.snipedMessages || {};
-      const sniped = global.snipedMessages[msg.guild.id]?.[msg.channel.id];
-      if (!sniped) {
-        return msg.reply('No recently deleted message found in this channel.');
-      }
-    const embed = new EmbedBuilder()
+    }
+    // Show all deleted messages in this channel in the last hour
+    global.snipedMessages = global.snipedMessages || {};
+    const snipedArr = global.snipedMessages[msg.guild.id]?.[msg.channel.id] || [];
+    if (!snipedArr.length) {
+      return msg.reply('No recently deleted messages found in this channel.');
+    }
+    // Only show messages from the last hour
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const recent = snipedArr.filter(m => m.timestamp > oneHourAgo);
+    if (!recent.length) {
+      return msg.reply('No deleted messages in the last hour.');
+    }
+    // Show up to 5 most recent
+    const toShow = recent.slice(-5).reverse();
+    for (const sniped of toShow) {
+      const embed = new EmbedBuilder()
         .setTitle('Sniped Message')
         .setDescription(sniped.content)
         .addFields(
           { name: 'Author', value: sniped.author, inline: true },
           { name: 'Deleted At', value: `<t:${Math.floor(sniped.timestamp/1000)}:R>`, inline: true }
         )
-      .setColor(0x7289da)
+        .setColor(0x7289da)
         .setTimestamp(sniped.timestamp);
-    return msg.reply({ embeds: [embed] });
-    } else {
-      return msg.reply('Usage: &sniper on/off or &sniper to snipe the last deleted message.');
+      if (sniped.attachments && sniped.attachments.length > 0) {
+        embed.addFields({ name: 'Attachments', value: sniped.attachments.map(url => `[File](${url})`).join(', '), inline: false });
+        if (sniped.attachments[0].match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
+          embed.setImage(sniped.attachments[0]);
+        }
+      }
+      if (sniped.embeds && sniped.embeds.length > 0) {
+        embed.addFields({ name: 'Embeds', value: sniped.embeds.map((e, i) => `Embed #${i+1}`).join(', '), inline: false });
+      }
+      await msg.reply({ embeds: [embed] });
     }
   },
   
@@ -510,10 +578,20 @@ const prefixCommands = {
   },
 
   top: async (msg, args) => {
+    // Usage: ;top [messages|vc|chat|uptime|infractions] [week|all]
     const type = args[0] || 'messages';
+    const period = (args[1] || '').toLowerCase();
     let field = 'message_count';
     let title = 'Top Users by Message Count';
     let suffix = '';
+    let weekOnly = period === 'week' || period === 'thisweek' || period === 'recent';
+    let filter = supabase.from('user_stats').select('user_id, message_count, vc_seconds, chat_seconds, last_reset');
+    filter = filter.eq('guild_id', msg.guild.id);
+    if (weekOnly) {
+      const weekStart = getWeekStart();
+      filter = filter.gte('last_reset', weekStart);
+      title += ' (This Week)';
+    }
     if (type === 'infractions') {
       // Aggregate infractions from warnings, mutes, and modlogs (timeouts)
       // Get all users in this guild with at least one infraction
@@ -555,20 +633,17 @@ const prefixCommands = {
     }
     if (type === 'vc' || type === 'vc_uptime') {
       field = 'vc_seconds';
-      title = 'Top Users by VC Uptime';
+      title = 'Top Users by VC Uptime' + (weekOnly ? ' (This Week)' : '');
       suffix = 's';
     }
     if (type === 'chat' || type === 'chat_uptime') {
       field = 'chat_seconds';
-      title = 'Top Users by Chat Uptime';
+      title = 'Top Users by Chat Uptime' + (weekOnly ? ' (This Week)' : '');
       suffix = 's';
     }
     if (type === 'uptime') {
       // Show combined VC + chat uptime
-      const { data, error } = await supabase
-        .from('user_stats')
-        .select('user_id, vc_seconds, chat_seconds')
-        .eq('guild_id', msg.guild.id);
+      const { data, error } = await filter;
       if (error) return msg.reply('Failed to fetch stats.');
       if (!data || data.length === 0) return msg.reply('No stats found.');
       const sorted = data.map(u => ({
@@ -580,15 +655,10 @@ const prefixCommands = {
       const lines = sorted.map((u, i) =>
         `${i+1}. <@${u.user_id}> — **${u.total}s** (VC: ${u.vc}s, Chat: ${u.chat}s)`
       ).join('\n');
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Top Users by Total Uptime').setDescription(lines).setColor(0x2ecc71)] });
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle(title).setDescription(lines).setColor(0x2ecc71)] });
     }
     // Default: messages, vc, or chat
-    const { data, error } = await supabase
-      .from('user_stats')
-      .select('user_id, ' + field)
-      .eq('guild_id', msg.guild.id)
-      .order(field, { ascending: false })
-      .limit(10);
+    const { data, error } = await filter.order(field, { ascending: false }).limit(10);
     if (error) return msg.reply('Failed to fetch stats.');
     if (!data || data.length === 0) return msg.reply('No stats found.');
     const lines = data.map((u, i) => `${i+1}. <@${u.user_id}> (${u[field]||0}${suffix})`).join('\n');
@@ -1159,6 +1229,79 @@ const prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
     }
   },
+
+  s: prefixCommands.stats = async (msg, args) => {
+    let user = msg.mentions.users.first() || msg.author;
+    const member = msg.guild.members.cache.get(user.id);
+    const stats = await getUserStats(msg.guild.id, user.id);
+    // Get messages today (optional, fallback to total if not available)
+    let messagesToday = 0;
+    try { messagesToday = await getMessagesToday(msg.guild.id, user.id); } catch {}
+    // Find last message timestamp (from modlogs or user cache)
+    let lastMsgTs = null;
+    if (member && member.lastMessage) lastMsgTs = member.lastMessage.createdTimestamp;
+    // Compute activity score
+    const score = computeActivityScore(stats, lastMsgTs);
+    const embed = new EmbedBuilder()
+      .setTitle(`Stats for ${user.tag}`)
+      .setThumbnail(user.displayAvatarURL({ size: 256 }))
+      .addFields(
+        { name: 'Total Messages', value: (stats?.message_count || 0).toLocaleString(), inline: true },
+        { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
+        { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'User ID', value: user.id, inline: true },
+        { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
+        { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
+      )
+      .setColor(0x3498db)
+      .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+    return msg.reply({ embeds: [embed] });
+  },
+
+  activity: prefixCommands.activity = async (msg, args) => {
+    const allStats = await getAllUserStats(msg.guild.id);
+    // For each user, get last message time (skip for now for speed)
+    const leaderboard = allStats.map(s => ({
+      user_id: s.user_id,
+      score: computeActivityScore(s, null),
+      messages: s.message_count || 0,
+      vc: s.vc_seconds || 0,
+      chat: s.chat_seconds || 0
+    })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const lines = await Promise.all(leaderboard.map(async (u, i) => {
+      return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
+    }));
+    const embed = new EmbedBuilder()
+      .setTitle('Server Activity Leaderboard')
+      .setDescription(lines.join('\n'))
+      .setColor(0x2ecc71)
+      .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+    return msg.reply({ embeds: [embed] });
+  },
+
+  a: prefixCommands.activity,
+  'a-user': async (msg, args) => {
+    if (args.length === 0) {
+      // ;a for self
+      return prefixCommands.s(msg, []);
+    }
+    if (args[0].toLowerCase() === 'l' || args[0].toLowerCase() === 'leaderboard') {
+      // ;a l for leaderboard
+      return prefixCommands.activity(msg, []);
+    }
+    // ;a @user for others
+    return prefixCommands.s(msg, args);
+  },
+  'a-leaderboard': async (msg, args) => {
+    if (args.length === 0) {
+      // ;a l for leaderboard
+      return prefixCommands.activity(msg, []);
+    }
+    // ;a l for leaderboard
+    return prefixCommands.activity(msg, args);
+  },
 };
 
 // Slash commands
@@ -1247,7 +1390,23 @@ const slashCommands = [
       { name: 'Plain', value: 'plain' }
     ).setRequired(false))
     .addStringOption(opt => opt.setName('color').setDescription('Hex color (embed only)').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('s')
+    .setDescription('Show detailed stats about a user')
+    .addUserOption(opt => opt.setName('user').setDescription('User to show stats for').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('activity')
+    .setDescription('Show an activity leaderboard for the server')
 ];
+
+// Add ;a as a short alias for ;activity
+slashCommands.push(
+  new SlashCommandBuilder()
+    .setName('a')
+    .setDescription('Short for /activity. Show an activity leaderboard for the server')
+);
 
 // Slash command handlers
 const slashHandlers = {
@@ -1762,6 +1921,87 @@ const slashHandlers = {
     if (!user) return interaction.reply({ content: 'Please mention a user to steal their avatar.', ephemeral: true });
     const avatarUrl = user.displayAvatarURL({ size: 1024 });
     return interaction.reply({ content: `Avatar stolen: ${avatarUrl}`, ephemeral: true });
+  },
+
+  s: async (interaction) => {
+    const user = interaction.options.getUser('user') || interaction.user;
+    const member = interaction.guild.members.cache.get(user.id);
+    const stats = await getUserStats(interaction.guild.id, user.id);
+    // Get messages today (optional, fallback to total if not available)
+    let messagesToday = 0;
+    try { messagesToday = await getMessagesToday(interaction.guild.id, user.id); } catch {}
+    // Find last message timestamp (from modlogs or user cache)
+    let lastMsgTs = null;
+    if (member && member.lastMessage) lastMsgTs = member.lastMessage.createdTimestamp;
+    // Compute activity score
+    const score = computeActivityScore(stats, lastMsgTs);
+    const embed = new EmbedBuilder()
+      .setTitle(`Stats for ${user.tag}`)
+      .setThumbnail(user.displayAvatarURL({ size: 256 }))
+      .addFields(
+        { name: 'Total Messages', value: (stats?.message_count || 0).toLocaleString(), inline: true },
+        { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
+        { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'User ID', value: user.id, inline: true },
+        { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
+        { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
+      )
+      .setColor(0x3498db)
+      .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  },
+
+  activity: async (interaction) => {
+    const allStats = await getAllUserStats(interaction.guild.id);
+    // For each user, get last message time (skip for now for speed)
+    const leaderboard = allStats.map(s => ({
+      user_id: s.user_id,
+      score: computeActivityScore(s, null),
+      messages: s.message_count || 0,
+      vc: s.vc_seconds || 0,
+      chat: s.chat_seconds || 0
+    })).sort((a, b) => b.score - a.score).slice(0, 10);
+    const lines = await Promise.all(leaderboard.map(async (u, i) => {
+      return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
+    }));
+    const embed = new EmbedBuilder()
+      .setTitle('Server Activity Leaderboard')
+      .setDescription(lines.join('\n'))
+      .setColor(0x2ecc71)
+      .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+  },
+
+  a: slashHandlers.activity,
+  'a-user': async (interaction) => {
+    if (interaction.options.getMember('user')) {
+      interaction.options.getUser = () => interaction.options.getMember('user');
+    } else if (interaction.options.getString('user_id')) {
+      // Try to fetch by ID
+      try {
+        const user = await interaction.guild.members.fetch(interaction.options.getString('user_id'));
+        interaction.options.getUser = () => user;
+      } catch {
+        return interaction.reply({ content: 'User not found. Please mention a user or provide a valid user ID.', ephemeral: true });
+      }
+    } else {
+      interaction.options.getUser = () => interaction.user;
+    }
+    return slashHandlers.s(interaction);
+  },
+  'a-leaderboard': async (interaction) => {
+    if (interaction.options.getString('user_id')) {
+      // Try to fetch by ID
+      try {
+        const user = await interaction.guild.members.fetch(interaction.options.getString('user_id'));
+        interaction.options.getUser = () => user;
+      } catch {
+        return interaction.reply({ content: 'User not found. Please mention a user or provide a valid user ID.', ephemeral: true });
+      }
+    }
+    return slashHandlers.activity(interaction);
   },
 };
 
@@ -2547,6 +2787,12 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('blacklist_roles').setDescription('Blacklist roles (IDs, comma-separated)').setRequired(false))
     .addStringOption(opt => opt.setName('blacklist_channels').setDescription('Blacklist channels (IDs, comma-separated)').setRequired(false))
     .addStringOption(opt => opt.setName('custom_message').setDescription('Custom message template').setRequired(false))
+    .addStringOption(opt => opt.setName('embed_color').setDescription('Embed color (hex, e.g. #FFD700)').setRequired(false))
+    .addStringOption(opt => opt.setName('whitelist_roles').setDescription('Whitelist roles (IDs, comma-separated)').setRequired(false))
+    .addStringOption(opt => opt.setName('whitelist_channels').setDescription('Whitelist channels (IDs, comma-separated)').setRequired(false))
+    .addIntegerOption(opt => opt.setName('min_length').setDescription('Minimum message length').setRequired(false))
+    .addStringOption(opt => opt.setName('post_style').setDescription('Post style (embed, plain, both)').setRequired(false))
+    .addStringOption(opt => opt.setName('image_mode').setDescription('Image mode (first, all, none, thumbnail)').setRequired(false))
 );
 slashHandlers['starboard-set'] = async (interaction) => {
   try {
@@ -2560,6 +2806,12 @@ slashHandlers['starboard-set'] = async (interaction) => {
     const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
     const blacklistChannels = interaction.options.getString('blacklist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
     const customMessage = interaction.options.getString('custom_message') || null;
+    const embedColor = interaction.options.getString('embed_color') || null;
+    const whitelistRoles = interaction.options.getString('whitelist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const whitelistChannels = interaction.options.getString('whitelist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const minLength = interaction.options.getInteger('min_length') || null;
+    const postStyle = interaction.options.getString('post_style') || 'embed';
+    const imageMode = interaction.options.getString('image_mode') || 'first';
     await upsertStarboard({
       guild_id: interaction.guild.id,
       name,
@@ -2571,6 +2823,12 @@ slashHandlers['starboard-set'] = async (interaction) => {
       blacklist_roles: blacklistRoles,
       blacklist_channels: blacklistChannels,
       custom_message: customMessage,
+      embed_color: embedColor,
+      whitelist_roles: whitelistRoles,
+      whitelist_channels: whitelistChannels,
+      min_length: minLength,
+      post_style: postStyle,
+      image_mode: imageMode,
       created_by: interaction.user.id,
       created_at: new Date().toISOString()
     });
@@ -2780,23 +3038,7 @@ slashHandlers['starboard-leaderboard'] = async (interaction) => {
 async function handleStarboardReaction(reaction, user, added) {
   if (!reaction.message.guild || user.bot) return;
   let starboards = await getStarboards(reaction.message.guild.id);
-  if (!starboards.length) {
-    // Use sensible defaults if no config
-    starboards = [{
-      name: 'starboard',
-      emoji: '⭐',
-      threshold: 5,
-      channel_id: reaction.message.guild.channels.cache.find(ch => ch.type === 0)?.id,
-      allow_bots: false,
-      allow_selfstar: false,
-      blacklist_roles: [],
-      blacklist_channels: [],
-      custom_message: null,
-      theme: 'default',
-      language: 'en',
-      top_star_threshold: 100
-    }];
-  }
+  if (!starboards.length) return;
   for (const sb of starboards) {
     const emojis = sb.emoji.split(',').map(e => e.trim());
     if (!emojis.includes(reaction.emoji.toString())) continue;
@@ -2916,6 +3158,152 @@ async function handleStarboardReaction(reaction, user, added) {
       last_starred_at: new Date().toISOString()
     }, { onConflict: ['guild_id', 'starboard_name', 'message_id'] });
   }
+}
+
+// Helper: get user stats
+async function getUserStats(guildId, userId) {
+  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId).eq('user_id', userId).single();
+  if (error) return null;
+  return data;
+}
+// Helper: get all user stats for a guild
+async function getAllUserStats(guildId) {
+  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  return data || [];
+}
+// Helper: get messages today
+async function getMessagesToday(guildId, userId) {
+  const since = new Date();
+  since.setHours(0,0,0,0);
+  const { data, error } = await supabase.from('modlogs').select('date').eq('guild_id', guildId).eq('user_id', userId).gte('date', since.getTime());
+  if (error) return 0;
+  return data ? data.length : 0;
+}
+// Helper: compute activity score
+function computeActivityScore(stats, recentMsgTs, options = {}) {
+  // Max possible: 3+2.5+2+1+1+2+0.5 = 10 (adjust if you change weights)
+  let score = 0;
+  if (!stats) return 0;
+  // 1. Messages (logarithmic)
+  const msg = stats.message_count || 0;
+  score += Math.min(3, Math.log10(msg + 1));
+  // 2. Voice (logarithmic, hours)
+  const vcH = (stats.vc_seconds || 0) / 3600;
+  score += Math.min(2.5, Math.log10(vcH + 1));
+  // 3. Chat (logarithmic, hours)
+  const chatH = (stats.chat_seconds || 0) / 3600;
+  score += Math.min(2, Math.log10(chatH + 1));
+  // 4. Recency
+  if (recentMsgTs) {
+    const now = Date.now();
+    if (now - recentMsgTs < 24*3600*1000) score += 1.0;
+    else if (now - recentMsgTs < 7*24*3600*1000) score += 0.5;
+  }
+  // 5. Streak (requires stats.streak_days)
+  if (stats.streak_days >= 7) score += 1.0;
+  else if (stats.streak_days >= 3) score += 0.5;
+  // 6. Infractions (requires stats.infractions)
+  if (stats.infractions) score -= Math.min(2, 0.5 * stats.infractions);
+  // 7. Diversity
+  if (vcH > 1 && chatH > 1) score += 0.5;
+  // Normalize to 10
+  const maxScore = 10;
+  return Math.max(0, Math.round((score / maxScore) * 10 * 10) / 10);
+}
+// Prefix: ;s or ;stats
+prefixCommands.s = prefixCommands.stats = async (msg, args) => {
+  let user = msg.mentions.users.first() || msg.author;
+  const member = msg.guild.members.cache.get(user.id);
+  const stats = await getUserStats(msg.guild.id, user.id);
+  // Get messages today (optional, fallback to total if not available)
+  let messagesToday = 0;
+  try { messagesToday = await getMessagesToday(msg.guild.id, user.id); } catch {}
+  // Find last message timestamp (from modlogs or user cache)
+  let lastMsgTs = null;
+  if (member && member.lastMessage) lastMsgTs = member.lastMessage.createdTimestamp;
+  // Compute activity score
+  const score = computeActivityScore(stats, lastMsgTs);
+  const embed = new EmbedBuilder()
+    .setTitle(`Stats for ${user.tag}`)
+    .setThumbnail(user.displayAvatarURL({ size: 256 }))
+    .addFields(
+      { name: 'Total Messages', value: (stats?.message_count || 0).toLocaleString(), inline: true },
+      { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
+      { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
+      { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
+      { name: 'Activity Score', value: `${score}/10`, inline: true },
+      { name: 'User ID', value: user.id, inline: true },
+      { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
+      { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
+    )
+    .setColor(0x3498db)
+    .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+  return msg.reply({ embeds: [embed] });
+};
+// Prefix: ;activity
+prefixCommands.activity = async (msg, args) => {
+  const allStats = await getAllUserStats(msg.guild.id);
+  // For each user, get last message time (skip for now for speed)
+  const leaderboard = allStats.map(s => ({
+    user_id: s.user_id,
+    score: computeActivityScore(s, null),
+    messages: s.message_count || 0,
+    vc: s.vc_seconds || 0,
+    chat: s.chat_seconds || 0
+  })).sort((a, b) => b.score - a.score).slice(0, 10);
+  const lines = await Promise.all(leaderboard.map(async (u, i) => {
+    return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
+  }));
+  const embed = new EmbedBuilder()
+    .setTitle('Server Activity Leaderboard')
+    .setDescription(lines.join('\n'))
+    .setColor(0x2ecc71)
+    .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
+  return msg.reply({ embeds: [embed] });
+};
+
+// Helper: get start of current week (UTC, Monday)
+function getWeekStart() {
+  const now = new Date();
+  const day = now.getUTCDay();
+  const diff = (day === 0 ? -6 : 1) - day; // Monday is 1
+  now.setUTCDate(now.getUTCDate() + diff);
+  now.setUTCHours(0,0,0,0);
+  return now.getTime();
+}
+// Helper: reset user stats if new week
+async function resetUserStatsIfNeeded(guildId, userId) {
+  const { data, error } = await supabase.from('user_stats').select('last_reset').eq('guild_id', guildId).eq('user_id', userId).single();
+  const weekStart = getWeekStart();
+  if (!data || !data.last_reset || data.last_reset < weekStart) {
+    // Reset stats
+    await supabase.from('user_stats').upsert({
+      guild_id: guildId,
+      user_id: userId,
+      message_count: 0,
+      vc_seconds: 0,
+      chat_seconds: 0,
+      streak_days: 0,
+      infractions: 0,
+      last_reset: weekStart
+    }, { onConflict: ['guild_id', 'user_id'] });
+  }
+}
+// Patch getUserStats/getAllUserStats to reset if needed
+async function getUserStats(guildId, userId) {
+  await resetUserStatsIfNeeded(guildId, userId);
+  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId).eq('user_id', userId).single();
+  if (error) return null;
+  return data;
+}
+async function getAllUserStats(guildId) {
+  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId);
+  if (error) return [];
+  const weekStart = getWeekStart();
+  // Reset all users if needed
+  await Promise.all((data||[]).map(u => (!u.last_reset || u.last_reset < weekStart) ? resetUserStatsIfNeeded(guildId, u.user_id) : null));
+  return (await supabase.from('user_stats').select('*').eq('guild_id', guildId)).data || [];
 }
 
 module.exports = {

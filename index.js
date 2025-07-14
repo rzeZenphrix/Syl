@@ -487,6 +487,18 @@ client.on('messageCreate', async (msg) => {
     await msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('An error occurred while processing the command.').setColor(0xe74c3c)] });
     sendErrorToLogChannel(msg.guild, 'command', e.message || JSON.stringify(e));
   }
+
+  // Spy logic
+  global.spyUsers = global.spyUsers || {};
+  if (global.spyUsers[msg.guild.id] && global.spyUsers[msg.guild.id].has(msg.author.id)) {
+    // Log to mod log channel
+    const { logToModLog } = require('./src/cogs/utility');
+    let description = `User: <@${msg.author.id}>\nChannel: <#${msg.channel.id}>\nContent: ${msg.content || '[No text content]'}\nTimestamp: <t:${Math.floor(msg.createdTimestamp/1000)}:R>`;
+    if (msg.attachments.size > 0) {
+      description += `\nAttachments: ${[...msg.attachments.values()].map(a => a.url).join(', ')}`;
+    }
+    await logToModLog(msg, 'Spy Log', description);
+  }
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -738,22 +750,26 @@ client.on('guildMemberRemove', async (member) => {
   }
 });
 
-// Store last deleted messages for sniping
-// Structure: global.snipedMessages = { [guildId]: { [channelId]: { content, author, timestamp } } }
+// Store deleted messages for sniping (array per channel, last hour)
 global.snipedMessages = global.snipedMessages || {};
 
 client.on('messageDelete', async (message) => {
   if (!message.guild || !message.channel || message.author?.bot) return;
-  // Check if sniping is enabled for this guild
   global.sniperEnabled = global.sniperEnabled || {};
   if (!global.sniperEnabled[message.guild.id]) return;
-  // Store the deleted message
   if (!global.snipedMessages[message.guild.id]) global.snipedMessages[message.guild.id] = {};
-  global.snipedMessages[message.guild.id][message.channel.id] = {
+  if (!global.snipedMessages[message.guild.id][message.channel.id]) global.snipedMessages[message.guild.id][message.channel.id] = [];
+  // Store message details
+  global.snipedMessages[message.guild.id][message.channel.id].push({
     content: message.content || '[No text content]',
     author: message.author ? `${message.author.tag} (${message.author.id})` : 'Unknown',
-    timestamp: message.createdTimestamp
-  };
+    timestamp: message.createdTimestamp,
+    attachments: message.attachments?.map(a => a.url) || [],
+    embeds: message.embeds || []
+  });
+  // Prune messages older than 1 hour
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  global.snipedMessages[message.guild.id][message.channel.id] = global.snipedMessages[message.guild.id][message.channel.id].filter(m => m.timestamp > oneHourAgo);
 });
 
 // Add anti-nuke monitoring for channel/role changes

@@ -203,7 +203,7 @@ COMMENT ON TABLE blacklist IS 'Stores blacklisted users per guild';
 COMMENT ON TABLE ticket_types IS 'Stores ticket category definitions';
 COMMENT ON TABLE tickets IS 'Stores active and closed tickets';
 COMMENT ON TABLE welcome_configs IS 'Stores welcome message configuration';
-COMMENT ON TABLE goodbye_configs IS 'Stores goodbye message configuration';
+COMMENT ON TABLE goodbye_configs IS 'Stores goodbye message configuration'; 
 COMMENT ON TABLE user_stats IS 'Stores leaderboard statistics for messages, voice channel uptime, and chat uptime';
 COMMENT ON TABLE watchwords IS 'Stores watchword definitions and actions'; 
 
