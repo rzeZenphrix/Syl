@@ -270,7 +270,7 @@ for (const [cmd, handler] of Object.entries(prefixCommands)) {
 }
 
 // Prefix commands
-const prefixCommands = {
+prefixCommands = {
   ls: async (msg, args) => {
     const names = msg.guild.channels.cache.filter(c => c.isTextBased()).map(c => c.name).join(', ');
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channels').setDescription(names || 'None').setColor(0x3498db)] });
