@@ -5,6 +5,9 @@ const fs = require('fs');
 const path = require('path');
 const archiver = require('archiver');
 
+// Declare slashHandlers at the top to ensure it is always defined before use
+let slashHandlers = {};
+
 // --- LOG TO MODLOG (moved to top to avoid ReferenceError) ---
 async function logToModLog(msgOrGuild, title, description, color = 0xe67e22) {
   let guild = msgOrGuild.guild || msgOrGuild;
@@ -425,14 +428,14 @@ prefixCommands = {
     // Show up to 5 most recent
     const toShow = recent.slice(-5).reverse();
     for (const sniped of toShow) {
-      const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setTitle('Sniped Message')
         .setDescription(sniped.content)
         .addFields(
           { name: 'Author', value: sniped.author, inline: true },
           { name: 'Deleted At', value: `<t:${Math.floor(sniped.timestamp/1000)}:R>`, inline: true }
         )
-        .setColor(0x7289da)
+      .setColor(0x7289da)
         .setTimestamp(sniped.timestamp);
       if (sniped.attachments && sniped.attachments.length > 0) {
         embed.addFields({ name: 'Attachments', value: sniped.attachments.map(url => `[File](${url})`).join(', '), inline: false });
@@ -703,10 +706,10 @@ prefixCommands = {
     if (noteMatch && noteMatch[1]) {
       embed.addFields({ name: 'DESCRIPTION', value: noteMatch[1] });
     }
-
+    
     return msg.reply({ embeds: [embed] });
   },
-
+  
   sysinfo: async (msg, args) => {
     const cpu = os.loadavg()[0].toFixed(2);
     const mem = `${(os.totalmem() - os.freemem()) / 1024 / 1024 | 0}MB/${os.totalmem() / 1024 / 1024 | 0}MB`;
@@ -1212,12 +1215,12 @@ prefixCommands = {
         attachment: emojiUrl,
         name: newName
       });
-      const embed = new EmbedBuilder()
+    const embed = new EmbedBuilder()
         .setTitle('🎭 Emoji Stolen Successfully!')
         .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
         .setThumbnail(emojiUrl)
         .setColor(0x2ecc71)
-        .setTimestamp();
+      .setTimestamp();
       return msg.reply({ embeds: [embed] });
     } catch (e) {
       console.error('Steal emoji error:', e);
@@ -1412,7 +1415,7 @@ slashCommands.push(
 );
 
 // Slash command handlers
-const slashHandlers = {
+slashHandlers = {
   ping: async (interaction) => {
     const embed = new EmbedBuilder()
       .setTitle('Pong!')
