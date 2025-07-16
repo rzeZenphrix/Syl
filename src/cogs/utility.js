@@ -2733,7 +2733,16 @@ prefixCommands.help = async (msg, args) => {
         await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
       }
     } catch (e) {
-      await msg.reply('❌ I couldn\'t DM you the help guide. Please check your DM privacy settings.');
+      let reason = 'Unknown error.';
+      if (e.message && e.message.includes('Cannot send messages to this user')) {
+        reason = 'I cannot DM you. Please check your privacy settings, make sure you share a server with the bot, and that you have not blocked the bot.';
+      } else if (e.code) {
+        reason = `Discord error code: ${e.code}.`;
+      }
+      await msg.reply({
+        content: `❌ Failed to DM you the help guide. ${reason}\nIf your DMs are open and you still have issues, please contact the bot owner or check server privacy settings.`,
+        allowedMentions: { repliedUser: false }
+      });
     }
     return;
   }
@@ -3405,6 +3414,57 @@ prefixCommands.topuptimeweek = async (msg, args) => {
   return msg.reply({ embeds: [embed] });
 };
 
+// --- TRACE LOOKUP COMMAND ---
+prefixCommands.trace = async (msg, args) => {
+  if (!args[0]) {
+    return msg.reply('Usage: ;trace <traceId>');
+  }
+  const traceId = args[0].trim();
+  try {
+    // Search logs.txt for the trace ID
+    const logFile = 'logs.txt';
+    if (!fs.existsSync(logFile)) {
+      return msg.reply('No error log file found.');
+    }
+    const lines = fs.readFileSync(logFile, 'utf8').split('\n');
+    const matches = lines.filter(line => line.includes(traceId));
+    if (matches.length === 0) {
+      return msg.reply(`No log entries found for trace ID: \\`${traceId}\\``);
+    }
+    const output = matches.slice(-5).join('\n');
+    await msg.author.send(`**Error log entries for trace ID \\`${traceId}\\`:**\n\n\`\`\`\n${output}\n\`\`\``)
+      .catch(e => msg.reply('Could not DM you the trace log. Please check your privacy settings.'));
+    if (msg.channel.type !== 1) {
+      await msg.reply('Sent you the error log in DMs.');
+    }
+  } catch (e) {
+    console.error('Trace command error:', e);
+    await msg.reply('An error occurred while looking up the trace ID.');
+  }
+};
+
+// --- DETAILED ERROR MESSAGES FOR COMMON ERRORS ---
+function detailedErrorMessage(context, error, traceId) {
+  let msg = `**Error in ${context}**\n`;
+  msg += `**Trace ID:** \`${traceId}\`\n`;
+  msg += `**Error:** \`${error?.message || error}\`\n`;
+  if (context === 'isCommandEnabled') {
+    msg += '\nPossible causes:';
+    msg += '\n- Database connection issue (Supabase down or misconfigured)';
+    msg += '\n- Command not found in disabled list';
+    msg += '\n- Permission error (RLS or service key)';
+    msg += '\n- The command may not exist or is misspelled.';
+    msg += '\n\nNext steps:';
+    msg += '\n- Check your Supabase credentials and permissions.';
+    msg += '\n- Ensure the command exists and is spelled correctly.';
+    msg += '\n- If the problem persists, contact the bot owner with the trace ID.';
+  }
+  return msg;
+}
+
+// Export detailedErrorMessage for use in other cogs
+module.exports.detailedErrorMessage = detailedErrorMessage;
+
 module.exports = {
   name: 'utility',
   prefixCommands,
@@ -3415,4 +3475,5 @@ module.exports = {
   logToModLog,
   monitorWatchwords,
   monitorBlacklistedWords,
+  detailedErrorMessage,
 }; 
