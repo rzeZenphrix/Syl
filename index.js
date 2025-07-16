@@ -322,54 +322,77 @@ if (!token || !clientId) {
 
 // Event handlers
 client.on('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}`);
-  console.log(`Serving ${client.guilds.cache.size} guilds`);
-  
-  // Load cogs
-  await cogManager.loadCogs();
-
-// Register slash commands
-const rest = new REST({ version: '10' }).setToken(token);
   try {
-    const slashCommands = cogManager.getAllSlashCommands();
-    await rest.put(Routes.applicationCommands(clientId), { body: slashCommands });
-    console.log('Slash commands registered successfully.');
-  } catch (err) {
-    console.error('Error registering slash commands:', err);
-  }
-  // Initialize userVoiceStates for users already in voice
-  for (const guild of client.guilds.cache.values()) {
-    for (const member of guild.members.cache.values()) {
-      if (member.voice && member.voice.channelId) {
-        const key = `${guild.id}-${member.id}`;
-        if (!userVoiceStates.has(key)) {
-          userVoiceStates.set(key, Date.now());
+    console.log(`Logged in as ${client.user.tag}`);
+    console.log(`Serving ${client.guilds.cache.size} guilds`);
+    // Load cogs
+    try {
+      await cogManager.loadCogs();
+    } catch (e) {
+      const logLine = `[${new Date().toISOString()}] [startup-cogs] ${e.message || e}\n`;
+      fs.appendFileSync('logs.txt', logLine);
+      console.error('Cog loading error:', e);
+    }
+    // Register slash commands
+    const rest = new REST({ version: '10' }).setToken(token);
+    try {
+      const slashCommands = cogManager.getAllSlashCommands();
+      await rest.put(Routes.applicationCommands(clientId), { body: slashCommands });
+      console.log('Slash commands registered successfully.');
+    } catch (err) {
+      const logLine = `[${new Date().toISOString()}] [startup-slash] ${err.message || err}\n`;
+      fs.appendFileSync('logs.txt', logLine);
+      console.error('Error registering slash commands:', err);
+    }
+    // Initialize userVoiceStates for users already in voice
+    try {
+      for (const guild of client.guilds.cache.values()) {
+        for (const member of guild.members.cache.values()) {
+          if (member.voice && member.voice.channelId) {
+            const key = `${guild.id}-${member.id}`;
+            if (!userVoiceStates.has(key)) {
+              userVoiceStates.set(key, Date.now());
+            }
+          }
         }
       }
+    } catch (e) {
+      const logLine = `[${new Date().toISOString()}] [startup-voice-init] ${e.message || e}\n`;
+      fs.appendFileSync('logs.txt', logLine);
+      console.error('Voice state init error:', e);
     }
-  }
-  // Periodically flush in-progress voice sessions to DB
-  setInterval(async () => {
-    for (const [key, joinTime] of userVoiceStates.entries()) {
-      const [guildId, userId] = key.split('-');
-      const duration = Math.floor((Date.now() - joinTime) / 1000);
-      // Update user_stats
-      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
-      if (!data) {
-        await supabase.from('user_stats').insert({
-          guild_id: guildId,
-          user_id: userId,
-          vc_seconds: duration
-        });
-      } else {
-        await supabase.from('user_stats').update({
-          vc_seconds: (data.vc_seconds || 0) + duration
-        }).eq('guild_id', guildId).eq('user_id', userId);
+    // Periodically flush in-progress voice sessions to DB
+    setInterval(async () => {
+      for (const [key, joinTime] of userVoiceStates.entries()) {
+        const [guildId, userId] = key.split('-');
+        const duration = Math.floor((Date.now() - joinTime) / 1000);
+        try {
+          const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+          if (!data) {
+            await supabase.from('user_stats').insert({
+              guild_id: guildId,
+              user_id: userId,
+              vc_seconds: duration
+            });
+          } else {
+            await supabase.from('user_stats').update({
+              vc_seconds: (data.vc_seconds || 0) + duration
+            }).eq('guild_id', guildId).eq('user_id', userId);
+          }
+          // Reset join time
+          userVoiceStates.set(key, Date.now());
+        } catch (e) {
+          const logLine = `[${new Date().toISOString()}] [voice-flush] ${e.message || e}\n`;
+          fs.appendFileSync('logs.txt', logLine);
+          console.error('Voice session flush error:', e);
+        }
       }
-      // Reset join time
-      userVoiceStates.set(key, Date.now());
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes
+    }, 5 * 60 * 1000); // Every 5 minutes
+  } catch (e) {
+    const logLine = `[${new Date().toISOString()}] [startup-main] ${e.message || e}\n`;
+    fs.appendFileSync('logs.txt', logLine);
+    console.error('Startup error:', e);
+  }
 });
 
 // --- VC and Chat Uptime Tracking ---
@@ -431,6 +454,15 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot || !msg.guild) return;
+
+  // --- Watchword and Blacklisted Word Enforcement ---
+  try {
+    const { monitorWatchwords, monitorBlacklistedWords } = require('./src/cogs/utility');
+    await monitorWatchwords(msg);
+    await monitorBlacklistedWords(msg);
+  } catch (e) {
+    console.error('Watchword/Blacklist enforcement error:', e);
+  }
 
   // --- SPY LOGIC (move to top) ---
   global.spyUsers = global.spyUsers || {};
@@ -961,6 +993,11 @@ client.on('guildBanAdd', async (ban) => {
     console.error('Anti-nuke check error:', e);
   }
 });
+
+// Register starboard reaction handlers
+const { handleStarboardReaction } = require('./src/cogs/utility');
+client.on('messageReactionAdd', (reaction, user) => handleStarboardReaction(reaction, user, true));
+client.on('messageReactionRemove', (reaction, user) => handleStarboardReaction(reaction, user, false));
 
 // Login
 client.login(token); 

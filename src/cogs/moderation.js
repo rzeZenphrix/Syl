@@ -1750,6 +1750,7 @@ const slashHandlers = {
       return interaction.reply({ content: 'Please provide a reason for the report.', ephemeral: true });
     }
     try {
+      // Save report to database
       const { data, error } = await supabase
         .from('reports')
         .insert({
@@ -1761,6 +1762,7 @@ const slashHandlers = {
         .select()
         .single();
       if (error) throw error;
+      // Get report channel from config
       const { data: config } = await supabase
         .from('guild_configs')
         .select('report_channel_id')
@@ -1772,15 +1774,17 @@ const slashHandlers = {
         .setColor(0xe74c3c)
         .setTimestamp()
         .setFooter({ text: `Report ID: ${data.id}` });
+      // Send to report channel if configured
       if (config?.report_channel_id) {
         const reportChannel = interaction.guild.channels.cache.get(config.report_channel_id);
         if (reportChannel) {
           await reportChannel.send({ embeds: [reportEmbed] });
         }
       }
+      // Confirm to reporter
       const confirmEmbed = new EmbedBuilder()
         .setTitle('Report Submitted')
-        .setDescription(`Your report against ${user} has been submitted.`)
+        .setDescription(`Your report against ${user} has been submitted.\n**Reason:** ${reason}`)
         .setColor(0x2ecc71)
         .setTimestamp();
       return interaction.reply({ embeds: [confirmEmbed], ephemeral: true });
@@ -2866,13 +2870,29 @@ prefixCommands.warn = async (msg, args) => {
     if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
     const user = msg.mentions.users.first();
     const reason = args.slice(1).join(' ') || 'No reason provided';
-    if (!user) return msg.reply('Please mention a user to warn.');
+    if (!user) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a user to warn.').setColor(0xe74c3c)] });
     await addWarning(msg.guild.id, user.id, reason, msg.author.id);
-    // DM the user
+    // Fetch new warning count
+    let warningCount = 1;
     try {
-      await user.send(`You have been **warned** in **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+      const warnings = await getWarnings(msg.guild.id, user.id);
+      warningCount = warnings.length;
     } catch {}
-    return msg.reply(`Warned <@${user.id}>. Reason: ${reason}`);
+    // DM the user as an embed
+    try {
+      const embed = new EmbedBuilder()
+        .setTitle('You have been WARNED')
+        .setDescription(`You have been **warned** in **${msg.guild.name}**.`)
+        .addFields(
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Moderator', value: msg.author.tag, inline: false },
+          { name: 'Total Warnings', value: `${warningCount}`, inline: false }
+        )
+        .setColor(0xf39c12)
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
+    } catch {}
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Warned').setDescription(`Warned <@${user.id}>. Reason: ${reason}`).setColor(0xf39c12)] });
   } catch (error) {
     await handleCommandError('warn', error, msg, msg.guild);
   }
@@ -2885,15 +2905,24 @@ prefixCommands.kick = async (msg, args) => {
     if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
     const user = msg.mentions.users.first();
     const reason = args.slice(1).join(' ') || 'No reason provided';
-    if (!user) return msg.reply('Please mention a user to kick.');
+    if (!user) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Please mention a user to kick.').setColor(0xe74c3c)] });
     const member = await msg.guild.members.fetch(user.id);
     await member.kick(reason);
     await addModlog(msg.guild.id, user.id, 'kick', msg.author.id, reason);
-    // DM the user
+    // DM the user as an embed
     try {
-      await user.send(`You have been **kicked** from **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+      const embed = new EmbedBuilder()
+        .setTitle('You have been KICKED')
+        .setDescription(`You have been **kicked** from **${msg.guild.name}**.`)
+        .addFields(
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Moderator', value: msg.author.tag, inline: false }
+        )
+        .setColor(0xe74c3c)
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
     } catch {}
-    return msg.reply(`Kicked <@${user.id}>. Reason: ${reason}`);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Kicked').setDescription(`Kicked <@${user.id}>. Reason: ${reason}`).setColor(0xe74c3c)] });
   } catch (error) {
     await handleCommandError('kick', error, msg, msg.guild);
   }
@@ -2906,18 +2935,27 @@ prefixCommands.mute = async (msg, args) => {
     const user = msg.mentions.users.first();
     const durationStr = args[1];
     const reason = args.slice(2).join(' ') || 'No reason provided';
-    if (!user || !durationStr) return msg.reply('Usage: ;mute @user <duration> [reason]');
+    if (!user || !durationStr) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Usage: ;mute @user <duration> [reason]').setColor(0xe74c3c)] });
     const duration = parseDuration(durationStr);
-    if (!duration) return msg.reply('Invalid duration format. Use: 30s, 5m, 2h, 1d');
+    if (!duration) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Duration').setDescription('Use format: 30s, 5m, 2h, 1d').setColor(0xe74c3c)] });
     const member = await msg.guild.members.fetch(user.id);
     await member.timeout(duration, reason);
     await addMute(msg.guild.id, user.id, msg.author.id, reason, duration);
     await addModlog(msg.guild.id, user.id, 'mute', msg.author.id, reason);
-    // DM the user
+    // DM the user as an embed
     try {
-      await user.send(`You have been **muted** in **${msg.guild.name}** for ${durationStr}.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+      const embed = new EmbedBuilder()
+        .setTitle('You have been MUTED')
+        .setDescription(`You have been **muted** in **${msg.guild.name}** for ${durationStr}.`)
+        .addFields(
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Moderator', value: msg.author.tag, inline: false }
+        )
+        .setColor(0xf39c12)
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
     } catch {}
-    return msg.reply(`Muted <@${user.id}> for ${durationStr}. Reason: ${reason}`);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Muted').setDescription(`Muted <@${user.id}> for ${durationStr}. Reason: ${reason}`).setColor(0xf39c12)] });
   } catch (error) {
     await handleCommandError('mute', error, msg, msg.guild);
   }
@@ -2930,17 +2968,26 @@ prefixCommands.timeout = async (msg, args) => {
     const user = msg.mentions.users.first();
     const durationStr = args[1];
     const reason = args.slice(2).join(' ') || 'No reason provided';
-    if (!user || !durationStr) return msg.reply('Usage: ;timeout @user <duration> [reason]');
+    if (!user || !durationStr) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Usage: ;timeout @user <duration> [reason]').setColor(0xe74c3c)] });
     const duration = parseDuration(durationStr);
-    if (!duration) return msg.reply('Invalid duration format. Use: 30s, 5m, 2h, 1d');
+    if (!duration) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Duration').setDescription('Use format: 30s, 5m, 2h, 1d').setColor(0xe74c3c)] });
     const member = await msg.guild.members.fetch(user.id);
     await member.timeout(duration, reason);
     await addModlog(msg.guild.id, user.id, 'timeout', msg.author.id, reason);
-    // DM the user
+    // DM the user as an embed
     try {
-      await user.send(`You have been **timed out** in **${msg.guild.name}** for ${durationStr}.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+      const embed = new EmbedBuilder()
+        .setTitle('You have been TIMED OUT')
+        .setDescription(`You have been **timed out** in **${msg.guild.name}** for ${durationStr}.`)
+        .addFields(
+          { name: 'Reason', value: reason, inline: false },
+          { name: 'Moderator', value: msg.author.tag, inline: false }
+        )
+        .setColor(0xf39c12)
+        .setTimestamp();
+      await user.send({ embeds: [embed] });
     } catch {}
-    return msg.reply(`Timed out <@${user.id}> for ${durationStr}. Reason: ${reason}`);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Timed Out').setDescription(`Timed out <@${user.id}> for ${durationStr}. Reason: ${reason}`).setColor(0xf39c12)] });
   } catch (error) {
     await handleCommandError('timeout', error, msg, msg.guild);
   }
@@ -2955,16 +3002,27 @@ prefixCommands.ban = async (msg, args) => {
     if (!user && userId && /^\d{17,20}$/.test(userId)) {
       try { user = await msg.client.users.fetch(userId); } catch {}
     }
-    if (!userId || !/^\d{17,20}$/.test(userId)) return msg.reply('Usage: ;ban @user|user_id [reason]');
-    if (userId === msg.client.user.id) return msg.reply('Cannot ban the bot.');
+    if (!userId || !/^\d{17,20}$/.test(userId)) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription('Usage: ;ban @user|user_id [reason]').setColor(0xe74c3c)] });
+    if (userId === msg.client.user.id) return msg.reply({ embeds: [new EmbedBuilder().setTitle('Protected').setDescription('Cannot ban the bot.').setColor(0xe74c3c)] });
     const reason = args.slice(user ? 1 : 1).join(' ') || 'No reason provided';
     await msg.guild.members.ban(userId, { reason });
     await addModlog(msg.guild.id, userId, 'ban', msg.author.id, reason);
-    // DM the user
+    // DM the user as an embed
     try {
-      if (user) await user.send(`You have been **banned** from **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+      if (user) {
+        const embed = new EmbedBuilder()
+          .setTitle('You have been BANNED')
+          .setDescription(`You have been **banned** from **${msg.guild.name}**.`)
+          .addFields(
+            { name: 'Reason', value: reason, inline: false },
+            { name: 'Moderator', value: msg.author.tag, inline: false }
+          )
+          .setColor(0xe74c3c)
+          .setTimestamp();
+        await user.send({ embeds: [embed] });
+      }
     } catch {}
-    return msg.reply(`Banned <@${userId}>. Reason: ${reason}`);
+    return msg.reply({ embeds: [new EmbedBuilder().setTitle('User Banned').setDescription(`Banned <@${userId}>. Reason: ${reason}`).setColor(0xe74c3c)] });
   } catch (error) {
     await handleCommandError('ban', error, msg, msg.guild);
   }

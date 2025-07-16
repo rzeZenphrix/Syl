@@ -31,81 +31,67 @@ const commandDescriptions = {
   // Setup & Configuration
   setup: 'Configure server settings and admin roles. Usage: `;setup @adminrole [@extrarole1 ...]` (owner only)',
   config: 'Show current server configuration and settings. Usage: `;config`',
-  logchannel: 'Set the log channel for moderation actions. Usage: `;logchannel #channel` (admin only)',
-  autorole: 'Set autorole for new members. Usage: `;autorole @role` (admin only)',
+  logchannel: 'Set the log channel for moderation actions. Usage: `;logchannel #channel`',
+  autorole: 'Set autorole for new members. Usage: `;autorole @role`',
   prefix: 'Set a custom command prefix for this server. Usage: `;prefix <new_prefix>` (owner only)',
   'reset-config': 'Reset server configuration to defaults. Usage: `;reset-config` (owner only)',
-  'disable-commands': 'Manage which commands are enabled/disabled. Usage: `;disable-commands add/remove/list/clear <commands>` (owner only)',
+  'disable-commands': 'Manage which commands are enabled/disabled. Usage: `;disable-commands add/remove/list/clear <commands>` (owner only)\n\n**You can disable most moderation, utility, setup, and fun commands.**\n\n**Examples:**\n- `;disable-commands add ban,kick,warn,purge`\n- `;disable-commands remove ban,kick`\n- `;disable-commands list`\n\n**Available to disable:**\n\n```\nModeration:   ban, kick, warn, warnings, clearwarn, purge, blacklist, unblacklist, mute, unmute, timeout, nuke, spy, sniper, revert, shadowban, massban, lock, unlock, modview, crontab, report, modmail, panic, feedback, case, raid, antinuke\nUtility:      ls, ps, whoami, whois, ping, uptime, server, roles, avatar, poll, say, reset, man, top, sysinfo, passwd, steal, jump, archive, mirror, cooldown, watchword, cloak, blacklistword, curse, npcgen, worldstate\nSetup/Config: setup, showsetup, config, logchannel, autorole, prefix, reset-config, disable-commands, co-owners, add-co-owner, remove-co-owner, feedback-channel, modmail-channel, mod-role, report-channel\nTickets:      ticketsetup, ticket, close, claim\nWelcome:      welcomesetup, goodbyesetup\n```\n',
   
   // Welcome & Goodbye
-  welcomesetup: 'Setup welcome messages for new members. Usage: `;welcomesetup` (admin only)',
-  goodbyesetup: 'Setup goodbye messages for leaving members. Usage: `;goodbyesetup` (admin only)',
+  welcomesetup: 'Setup welcome messages for new members. Usage: `;welcomesetup`',
+  goodbyesetup: 'Setup goodbye messages for leaving members. Usage: `;goodbyesetup`',
   
   // Ticket System
-  ticketsetup: 'Setup ticket system for support. Usage: `;ticketsetup #channel` (admin only)',
+  ticketsetup: 'Setup ticket system for support. Usage: `;ticketsetup #channel`',
   
   // Moderation
-  ban: 'Ban a user from the server (removes them from the server entirely). Usage: `;ban @user [reason]` (admin only)',
-  kick: 'Kick a user from the server (removes them, but they can rejoin if invited). Usage: `;kick @user [reason]` (admin only)',
-  warn: 'Warn a user. Usage: `;warn @user <reason>` (admin only)',
+  ban: 'Ban a user from the server (removes them from the server entirely). Usage: `;ban @user [reason]`',
+  kick: 'Kick a user from the server (removes them, but they can rejoin if invited). Usage: `;kick @user [reason]`',
+  warn: 'Warn a user. Usage: `;warn @user <reason>`',
   warnings: 'Show warnings for a member. Usage: `;warnings [@user]`',
-  clearwarn: 'Clear warnings for a member. Usage: `;clearwarn @user` (admin only)',
-  purge: 'Bulk delete messages. Usage: `;purge <1-100>` (admin only)',
-  nuke: 'Clone and delete the channel. Usage: `;nuke` (admin only)',
-  blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>` (admin only)',
-  unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user` (admin only)',
-  mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]` (admin only)',
-  unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user` (admin only)',
-  timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]` (admin only)',
-  lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock` (admin only)',
-  unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock` (admin only)',
-  spy: 'Secretly logs all messages from a specific user for moderation. Only affects bot logging, does not affect the user\'s server permissions. Usage: `&spy @user` (admin only)',
-  ghostping: 'Sends and deletes a ping instantly for fun or to test mod reactions. Usage: `&ghostping @user` (admin only)',
-  sniper: 'Logs and shows deleted messages (message sniping). Only affects bot logging, does not restore deleted messages in the server. Usage: `&sniper on` to enable, `&sniper off` to disable (admin only)',
-  revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user` (admin only)',
-  modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Does not show server audit log. Usage: `&modview [action] [next|prev]` (admin only)',
-  shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user` (admin only)',
-  massban: 'Ban all users with a specific role from the server. Usage: `&massban @role` (admin only)',
-  crontab: 'Schedule, list, or cancel commands to run after a delay. Usage: `&crontab <time> <command>` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel (admin only)',
-  
-  // Utility
-  ls: 'List all text channels in the server. Usage: `;ls`',
-  ps: 'Show all online members in the server. Usage: `;ps`',
-  whoami: 'Show your user info, including username, ID, join date, and roles. Usage: `;whoami`',
-  ping: 'Check the bot\'s latency to Discord. Usage: `;ping`',
-  uptime: 'Show how long the bot has been running. Usage: `;uptime`',
-  server: 'Show detailed info about the server, including owner, members, channels, roles, creation date, and boost level. Usage: `;server`',
-  roles: 'List all roles in the server. Usage: `;roles`',
-  avatar: 'Show the avatar of a user. Usage: `;avatar [@user]` (defaults to yourself if no user is mentioned)',
-  poll: 'Create a poll with reactions. Usage: `;poll <question>` (admin only)',
-  say: 'Make the bot say something as an embed. Usage: `;say <message>` (admin only)',
-  help: 'Show this help message. Usage: `;help`',
-  reset: 'Reset the command prefix to default (; and &). Usage: `;reset` (owner only)',
+  clearwarn: 'Clear warnings for a member. Usage: `;clearwarn @user`',
+  purge: 'Bulk delete messages. Usage: `;purge <1-100>`',
+  nuke: 'Clone and delete the channel. Usage: `;nuke`',
+  blacklist: 'Add a user to the bot blacklist. This blocks the user from using any bot commands, but does NOT ban or kick them from the server. Usage: `;blacklist @user <reason>`',
+  unblacklist: 'Remove a user from the bot blacklist, restoring their access to bot commands. Usage: `;unblacklist @user`',
+  mute: 'Mute a user in the server (prevents them from sending messages/voice for a duration). Usage: `;mute @user <duration> [reason]`',
+  unmute: 'Unmute a user in the server (restores their ability to speak). Usage: `;unmute @user`',
+  timeout: 'Timeout a user in the server (temporarily restricts their ability to interact). Usage: `;timeout @user <duration> [reason]`',
+  lock: 'Locks the current channel for everyone (prevents all users from sending messages in the channel, but does not affect the whole server). Usage: `;lock`',
+  unlock: 'Unlocks the current channel for everyone (restores ability to send messages in the channel). Usage: `;unlock`',
+  spy: 'Secretly logs all messages from a specific user for moderation. Usage: `&spy @user`',
+  ghostping: 'Sends and deletes a ping instantly for fun or to test mod reactions. Usage: `&ghostping @user`',
+  sniper: 'Logs and shows deleted messages (message sniping). Usage: `&sniper on` to enable, `&sniper off` to disable',
+  revert: 'Removes a user\'s last 10 messages in the current channel (like a soft purge, does not ban or mute the user). Usage: `&revert @user`',
+  modview: 'View and filter mod actions (bans, mutes, warns, etc) logged by the bot. Usage: `&modview [action] [next|prev]`',
+  shadowban: 'Bans a user from the server without showing a ban message or logging (silent ban). Usage: `&shadowban @user`',
+  massban: 'Ban all users with a specific role from the server. Usage: `&massban @role`',
+  crontab: 'Schedule, list, or cancel commands to run after a delay. Usage: `&crontab <time> <command>` to schedule, `&crontab list` to list, `&crontab cancel <id>` to cancel',
   top: 'Show top users by messages, infractions, or uptime. Usage: `;top messages [week|all]`, `;top infractions [week|all]`, `;top vc [week|all]`, `;top chat [week|all]`, `;top uptime [week|all]`',
   sysinfo: 'Show system and bot info: CPU, RAM, uptime, Node.js version, OS, guild/user count. Usage: `&sysinfo`',
   man: 'Returns the help info for a command like a Linux manpage. Usage: `&man <command>`',
-  passwd: 'Set, get, list, or remove a user codeword for events or actions. Only affects bot features, not server permissions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove (admin only)',
+  passwd: 'Set, get, list, or remove a user codeword for events or actions. Usage: `&passwd @user <codeword>` to set, `&passwd @user` to get, `&passwd list` to list all, `&passwd remove @user` to remove',
   jump: 'Send a clickable link to a message by ID. Usage: `&jump <message_id>` or `/jump <message_id>`',
-  archive: 'Archive messages from a channel to a zip/log file. Usage: `/archive #channel [days]` (admin only)',
-  mirror: 'Automatically mirror messages between channels. Usage: `/mirror #source #target` (admin only)',
-  cooldown: 'Set or view command cooldowns. Usage: `/cooldown <command> <seconds>` (admin only)',
-  watchword: 'Watch for specific words and take actions (delete, warn, log, etc). Usage: `/watchword add/remove <word> <actions...>` (admin only)',
-  cloak: 'Temporarily disguise a user\'s name and avatar. Usage: `/cloak @user <nickname>` (admin only)',
-  blacklistword: 'Ban a word (e.g., "sus"). Deletes and logs messages. Usage: `&blacklistword <word>` or `/blacklistword <word>` (admin only)',
-  curse: 'Edit every message a user sends (add emoji/suffix). Usage: `&curse @user` or `/curse @user` (admin only)',
+  archive: 'Archive messages from a channel to a zip/log file. Usage: `/archive #channel [days]`',
+  mirror: 'Automatically mirror messages between channels. Usage: `/mirror #source #target`',
+  cooldown: 'Set or view command cooldowns. Usage: `/cooldown <command> <seconds>`',
+  watchword: 'Watch for specific words and take actions (delete, warn, log, etc). Usage: `/watchword add/remove <word> <actions...>`',
+  cloak: 'Temporarily disguise a user\'s name and avatar. Usage: `/cloak @user <nickname>`',
+  blacklistword: 'Ban a word (e.g., "sus"). Deletes and logs messages. Usage: `&blacklistword <word>` or `/blacklistword <word>`',
+  curse: 'Edit every message a user sends (add emoji/suffix). Usage: `&curse @user` or `/curse @user`',
   npcgen: 'Generate a random character with traits, class, and name. Usage: `&npcgen` or `/npcgen`',
   worldstate: 'Describe the fictional world state of the server. Usage: `&worldstate` or `/worldstate`',
   whois: 'Show another user\'s info. Usage: `;whois [@user]`',
   'co-owners': 'Manage co-owners for bot setup and management. Usage: `&co-owners add/remove/list @user` (owner only)',
   'add-co-owner': 'Add a co-owner to help with bot management. Usage: `&add-co-owner @user` (owner only)',
   'remove-co-owner': 'Remove a co-owner. Usage: `&remove-co-owner @user` (owner only)',
-  'feedback-channel': 'Set the channel where anonymous feedback is sent. Usage: `&feedback-channel #channel` (admin only)',
-  'modmail-channel': 'Set the channel where modmail threads are created. Usage: `&modmail-channel #channel` (admin only)',
-  'mod-role': 'Set the role to ping during panic mode. Usage: `&mod-role @role` (admin only)',
-  'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel` (admin only)',
+  'feedback-channel': 'Set the channel where anonymous feedback is sent. Usage: `&feedback-channel #channel`',
+  'modmail-channel': 'Set the channel where modmail threads are created. Usage: `&modmail-channel #channel`',
+  'mod-role': 'Set the role to ping during panic mode. Usage: `&mod-role @role`',
+  'report-channel': 'Set the channel where user reports are sent. Usage: `&report-channel #channel`',
   
   // New commands
-  raid: 'Configure raid prevention settings. Usage: `;raid <on/off/threshold/autolock>` (admin only)',
+  raid: 'Configure raid prevention settings. Usage: `;raid <on/off/threshold/autolock>`',
   antinuke: 'Configure anti-nuke protection. Usage: `;antinuke <on/off/whitelist/autoban>` (owner only)',
   s: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
   stats: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
@@ -114,6 +100,7 @@ const commandDescriptions = {
   'a-leaderboard': 'Short for ;activity. Usage: `;a l` for leaderboard. Slash: `/a l`',
   // Update help text
   a: 'Short for ;activity. Usage: `;a` for your stats, `;a @user` for another user, `;a l` for leaderboard. Activity resets weekly.',
+  'starboard-set': 'Configure a starboard. Usage: `/starboard-set name:<name> emoji:<emoji> threshold:<num> channel:<#channel> exclude:<#chan1,#chan2,...>`',
 };
 
 // Translation function with language detection
@@ -1118,34 +1105,66 @@ prefixCommands = {
   },
 
   help: async (msg, args) => {
-    const PAGE_SIZE = 15;
-    const categories = [
-      { name: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case', 'raid', 'antinuke'] },
-      { name: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
-      { name: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
-      { name: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
-      { name: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
-    ];
-    let helpText = '**Syl Commands**\n\n';
-    for (const cat of categories) {
-      helpText += `__${cat.name}__\n`;
-      for (const cmd of cat.commands) {
-        if (commandDescriptions[cmd]) {
-          helpText += `• **${cmd}**: ${commandDescriptions[cmd]}\n`;
-        }
-      }
-      helpText += '\n';
+    const { prefixCount, slashCount, totalCount } = getCommandCount();
+    const whatsNew = [
+      '**What\'s New:**',
+      '- ⭐ **Starboard System**: Multi-emoji, leaderboards, jump links, attachments, `/starboard-set`, `/starboard-leaderboard`',
+      '- 📝 **Advanced Logging**: All mod, config, watchword, blacklist, snipe, and server actions are logged',
+      '- 👑 **Co-Owner System**: Up to 2 co-owners per server (`/co-owners`, `;add-co-owner`)',
+      '- 💾 **Backup & Restore**: Channel/role snapshot, `/raid restore`, `;raid restore`',
+      '- 🛡️ **Enhanced Raid/Anti-Nuke**: Early detection, lockdown, safe role, audit logging, auto-ban/whitelist',
+      '- 🎭 **Emoji Stealing**: `;steal <emoji> [name]`, `/steal emoji:<emoji> name:<name>`',
+      '- 🏆 **Leaderboards**: Per-starboard and global, `/starboard-leaderboard`',
+      '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide, web dashboard for logs',
+      '',
+    ].join('\n');
+
+    if (args.length === 0) {
+      const categories = getAllCommandsByCategory();
+      const embed = new EmbedBuilder()
+        .setTitle('🤖 Asylum Bot Help')
+        .setDescription(`${whatsNew}\nI have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
+        .addFields(
+          categories.map(cat => ({
+            name: cat.category,
+            value: `${cat.commands.length} commands available`,
+            inline: true
+          }))
+        )
+        .addFields(
+          { name: 'Quick Start', value: 'Use `/setup @adminrole` to configure the bot for your server.', inline: false },
+          { name: 'Support', value: 'For support, contact the bot owner or use `/feedback` to submit feedback.', inline: false }
+        )
+        .setColor(0x3498db)
+        .setTimestamp();
+      return msg.reply({ embeds: [embed] });
     }
-    // Paginate if too long
-    const MAX_CHUNK = 1900;
-    const chunks = [];
-    for (let i = 0; i < helpText.length; i += MAX_CHUNK) {
-      chunks.push(helpText.slice(i, i + MAX_CHUNK));
+    
+    const category = args[0].toLowerCase();
+    const categories = getAllCommandsByCategory();
+    const selectedCategory = categories.find(cat => cat.category.toLowerCase().includes(category) || cat.category.toLowerCase().replace(/[^\w]/g, '').includes(category));
+    
+    if (!selectedCategory) {
+      const embed = new EmbedBuilder()
+        .setTitle('Category Not Found')
+        .setDescription(`Available categories:\n${categories.map(cat => `• ${cat.category}`).join('\n')}`)
+        .setColor(0xe74c3c);
+      return msg.reply({ embeds: [embed] });
     }
-    for (const chunk of chunks) {
-      await msg.author.send('```markdown\n' + chunk + '\n```');
-    }
-    await msg.reply({ embeds: [{ title: 'Syl Commands', description: 'I have sent you the full bot command list via DM!' }] });
+    
+    const commandList = selectedCategory.commands.map(cmd => {
+      const description = commandDescriptions[cmd] || 'No description available';
+      return `**${cmd}** - ${description}`;
+    }).join('\n');
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`${selectedCategory.category} Commands`)
+      .setDescription(commandList)
+      .setFooter({ text: `${selectedCategory.commands.length} commands in this category` })
+      .setColor(0x3498db)
+      .setTimestamp();
+    
+    return msg.reply({ embeds: [embed] });
   },
 
   raid: async (msg, args) => {
@@ -1270,6 +1289,34 @@ prefixCommands = {
     }
     // ;a l for leaderboard
     return prefixCommands.activity(msg, args);
+  },
+  'starboard-set': async (msg, args) => {
+    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
+    const name = args[0];
+    const emoji = args[1];
+    const threshold = parseInt(args[2]);
+    const channel = msg.mentions.channels.first();
+    const exclude = args[3] ? args[3].split(',').map(x => x.trim()) : [];
+    if (!name || !emoji || isNaN(threshold) || !channel) {
+      return msg.reply('Usage: &starboard-set name:<name> emoji:<emoji> threshold:<num> channel:<#channel> exclude:<#chan1,#chan2,...>');
+    }
+    try {
+      await upsertStarboard({
+        guild_id: msg.guild.id,
+        name,
+        emoji,
+        threshold,
+        channel_id: channel.id,
+        blacklist_channels: exclude,
+        created_by: msg.author.id,
+        created_at: new Date().toISOString()
+      });
+      await logToModLog(msg, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>\nExcluded: ${exclude.map(id => `<#${id}>`).join(', ') || 'None'}`);
+      return msg.reply(`Starboard **${name}** configured!`);
+    } catch (e) {
+      console.error('Failed to configure starboard:', e);
+      return msg.reply('Failed to configure starboard.');
+    }
   },
 };
 
@@ -1972,6 +2019,49 @@ slashHandlers = {
     }
     return slashHandlers.activity(interaction);
   },
+  'starboard-set': async (interaction) => {
+    if (!await isAdmin(interaction.member)) return interaction.reply({ content: 'Admin only.', ephemeral: true });
+    const name = interaction.options.getString('name');
+    const emoji = interaction.options.getString('emoji');
+    const threshold = interaction.options.getInteger('threshold');
+    const channel = interaction.options.getChannel('channel');
+    const exclude = interaction.options.getString('exclude');
+    const blacklistChannels = exclude ? exclude.split(',').map(x => x.replace(/<#|>/g, '').trim()).filter(Boolean) : [];
+    const allowBots = interaction.options.getBoolean('allow_bots') ?? false;
+    const allowSelfstar = interaction.options.getBoolean('allow_selfstar') ?? false;
+    const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const whitelistRoles = interaction.options.getString('whitelist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const customMessage = interaction.options.getString('custom_message') || null;
+    const embedColor = interaction.options.getString('embed_color') || null;
+    const whitelistChannels = interaction.options.getString('whitelist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const minLength = interaction.options.getInteger('min_length') || null;
+    const postStyle = interaction.options.getString('post_style') || 'embed';
+    const imageMode = interaction.options.getString('image_mode') || 'first';
+    await upsertStarboard({
+      guild_id: interaction.guild.id,
+      name,
+      emoji,
+      threshold,
+      channel_id: channel.id,
+      blacklist_channels: blacklistChannels,
+      allow_bots: allowBots,
+      allow_selfstar: allowSelfstar,
+      blacklist_roles: blacklistRoles,
+      whitelist_roles: whitelistRoles,
+      whitelist_channels: whitelistChannels,
+      min_length: minLength,
+      post_style: postStyle,
+      image_mode: imageMode,
+      custom_message: customMessage,
+      embed_color: embedColor,
+      created_by: interaction.user.id,
+      created_at: new Date().toISOString()
+    });
+    await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>\nExcluded: ${blacklistChannels.map(id => `<#${id}>`).join(', ') || 'None'}`);
+    if (!interaction.replied && !interaction.deferred) {
+      return interaction.reply({ content: `Starboard **${name}** configured!`, ephemeral: true });
+    }
+  },
 };
 
 // Add button handler for pagination
@@ -2598,14 +2688,26 @@ function getCommandCount() {
 }
 
 // Update the help command to show accurate command count
-help: async (msg, args) => {
+prefixCommands.help = async (msg, args) => {
   const { prefixCount, slashCount, totalCount } = getCommandCount();
-  
+  const whatsNew = [
+    '**What\'s New:**',
+    '- ⭐ **Starboard System**: Multi-emoji, leaderboards, jump links, attachments, `/starboard-set`, `/starboard-leaderboard`',
+    '- 📝 **Advanced Logging**: All mod, config, watchword, blacklist, snipe, and server actions are logged',
+    '- 👑 **Co-Owner System**: Up to 2 co-owners per server (`/co-owners`, `;add-co-owner`)',
+    '- 💾 **Backup & Restore**: Channel/role snapshot, `/raid restore`, `;raid restore`',
+    '- 🛡️ **Enhanced Raid/Anti-Nuke**: Early detection, lockdown, safe role, audit logging, auto-ban/whitelist',
+    '- 🎭 **Emoji Stealing**: `;steal <emoji> [name]`, `/steal emoji:<emoji> name:<name>`',
+    '- 🏆 **Leaderboards**: Per-starboard and global, `/starboard-leaderboard`',
+    '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide, web dashboard for logs',
+    '',
+  ].join('\n');
+
   if (args.length === 0) {
     const categories = getAllCommandsByCategory();
     const embed = new EmbedBuilder()
       .setTitle('🤖 Asylum Bot Help')
-      .setDescription(`Welcome to Asylum Bot! I have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
+      .setDescription(`${whatsNew}\nI have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
       .addFields(
         categories.map(cat => ({
           name: cat.category,
@@ -2648,7 +2750,7 @@ help: async (msg, args) => {
     .setTimestamp();
   
   return msg.reply({ embeds: [embed] });
-}
+};
 
 // --- Update watchword and blacklistword prefix commands to log actions ---
 const oldWatchword = prefixCommands.watchword;
@@ -2751,6 +2853,7 @@ slashCommands.push(
     .addStringOption(opt => opt.setName('emoji').setDescription('Emoji(s) to use, comma-separated').setRequired(true))
     .addIntegerOption(opt => opt.setName('threshold').setDescription('Reactions required').setRequired(true))
     .addChannelOption(opt => opt.setName('channel').setDescription('Starboard channel').addChannelTypes(ChannelType.GuildText).setRequired(true))
+    .addStringOption(opt => opt.setName('exclude').setDescription('Channels to exclude (comma-separated)').setRequired(false))
     .addBooleanOption(opt => opt.setName('allow_bots').setDescription('Allow starring bot messages?').setRequired(false))
     .addBooleanOption(opt => opt.setName('allow_selfstar').setDescription('Allow starring own messages?').setRequired(false))
     .addStringOption(opt => opt.setName('blacklist_roles').setDescription('Blacklist roles (IDs, comma-separated)').setRequired(false))
@@ -2770,13 +2873,14 @@ slashHandlers['starboard-set'] = async (interaction) => {
     const emoji = interaction.options.getString('emoji');
     const threshold = interaction.options.getInteger('threshold');
     const channel = interaction.options.getChannel('channel');
+    const exclude = interaction.options.getString('exclude');
+    const blacklistChannels = exclude ? exclude.split(',').map(x => x.replace(/<#|>/g, '').trim()).filter(Boolean) : [];
     const allowBots = interaction.options.getBoolean('allow_bots') ?? false;
     const allowSelfstar = interaction.options.getBoolean('allow_selfstar') ?? false;
     const blacklistRoles = interaction.options.getString('blacklist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
-    const blacklistChannels = interaction.options.getString('blacklist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
+    const whitelistRoles = interaction.options.getString('whitelist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
     const customMessage = interaction.options.getString('custom_message') || null;
     const embedColor = interaction.options.getString('embed_color') || null;
-    const whitelistRoles = interaction.options.getString('whitelist_roles')?.split(',').map(x => x.trim()).filter(Boolean) || [];
     const whitelistChannels = interaction.options.getString('whitelist_channels')?.split(',').map(x => x.trim()).filter(Boolean) || [];
     const minLength = interaction.options.getInteger('min_length') || null;
     const postStyle = interaction.options.getString('post_style') || 'embed';
@@ -2787,21 +2891,21 @@ slashHandlers['starboard-set'] = async (interaction) => {
       emoji,
       threshold,
       channel_id: channel.id,
+      blacklist_channels: blacklistChannels,
       allow_bots: allowBots,
       allow_selfstar: allowSelfstar,
       blacklist_roles: blacklistRoles,
-      blacklist_channels: blacklistChannels,
-      custom_message: customMessage,
-      embed_color: embedColor,
       whitelist_roles: whitelistRoles,
       whitelist_channels: whitelistChannels,
       min_length: minLength,
       post_style: postStyle,
       image_mode: imageMode,
+      custom_message: customMessage,
+      embed_color: embedColor,
       created_by: interaction.user.id,
       created_at: new Date().toISOString()
     });
-    await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>`);
+    await logToModLog(interaction.guild, 'Starboard Configured', `Name: **${name}**\nEmoji: ${emoji}\nThreshold: ${threshold}\nChannel: <#${channel.id}>\nExcluded: ${blacklistChannels.map(id => `<#${id}>`).join(', ') || 'None'}`);
     if (!interaction.replied && !interaction.deferred) {
       return interaction.reply({ content: `Starboard **${name}** configured!`, ephemeral: true });
     }
@@ -3151,40 +3255,21 @@ async function getMessagesToday(guildId, userId) {
 }
 // Helper: compute activity score
 function computeActivityScore(stats, recentMsgTs, options = {}) {
-  let score = 0;
+  // Use persistent stats only
   if (!stats) return 0;
-  // 1. Messages (logarithmic)
-  const msg = stats.message_count || 0;
-  score += Math.min(3, Math.log10(msg + 1));
-  // 2. Voice (logarithmic, hours)
-  const vcH = (stats.vc_seconds || 0) / 3600;
-  score += Math.min(2.5, Math.log10(vcH + 1));
-  // 3. Chat (logarithmic, hours)
-  const chatH = (stats.chat_seconds || 0) / 3600;
-  score += Math.min(2, Math.log10(chatH + 1));
-  // 4. Recency (stronger decay)
-    const now = Date.now();
-  let lastActive = recentMsgTs;
-  if (!lastActive && stats.last_active) lastActive = stats.last_active;
-  if (lastActive) {
-    const daysAgo = (now - lastActive) / (1000 * 60 * 60 * 24);
-    if (daysAgo < 1) score += 1.0;
-    else if (daysAgo < 7) score += 0.5;
-    else if (daysAgo < 30) score -= 1.0;
-    else score -= 5.0; // Strong decay for 30+ days inactivity
-  } else {
-    score -= 5.0; // No activity timestamp, treat as inactive
+  const now = Date.now();
+  // Score: weighted sum of message count, voice time, chat time, with decay for inactivity
+  let score = 0;
+  score += (stats.message_count || 0) * 1;
+  score += Math.floor((stats.vc_seconds || 0) / 60) * 2; // 2 points per minute in VC
+  score += Math.floor((stats.chat_seconds || 0) / 60) * 1; // 1 point per minute in chat
+  // Decay for inactivity: if no message in 7+ days, drop score sharply
+  if (recentMsgTs && now - recentMsgTs > 7 * 24 * 60 * 60 * 1000) {
+    score = Math.floor(score * 0.1); // 90% decay if inactive for 7+ days
+  } else if (recentMsgTs && now - recentMsgTs > 3 * 24 * 60 * 60 * 1000) {
+    score = Math.floor(score * 0.5); // 50% decay if inactive for 3+ days
   }
-  // 5. Streak (requires stats.streak_days)
-  if (stats.streak_days >= 7) score += 1.0;
-  else if (stats.streak_days >= 3) score += 0.5;
-  // 6. Infractions (requires stats.infractions)
-  if (stats.infractions) score -= Math.min(2, 0.5 * stats.infractions);
-  // 7. Diversity
-  if (vcH > 1 && chatH > 1) score += 0.5;
-  // Normalize to 10
-  const maxScore = 10;
-  return Math.max(0, Math.round((score / maxScore) * 10 * 10) / 10);
+  return Math.max(0, Math.floor(score));
 }
 // Prefix: ;s or ;stats
 prefixCommands.s = prefixCommands.stats = async (msg, args) => {
@@ -3250,6 +3335,61 @@ prefixCommands.a = async (msg, args) => {
   }
   // ;a @user for others
   return prefixCommands.s(msg, args);
+};
+
+// --- Weekly Leaderboards ---
+const MS_IN_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+async function getWeeklyMessageLeaderboard(guildId, limit = 10) {
+  const since = Date.now() - MS_IN_WEEK;
+  // Query modlogs for 'message' actions in the last 7 days
+  const { data, error } = await supabase
+    .from('modlogs')
+    .select('user_id')
+    .eq('guild_id', guildId)
+    .eq('action', 'message')
+    .gte('date', since);
+  if (error) return [];
+  const counts = {};
+  for (const row of data) {
+    counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+  }
+  // Sort and return top users
+  return Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([userId, count]) => ({ userId, count }));
+}
+
+async function getWeeklyUptimeLeaderboard(guildId, limit = 10) {
+  // This requires logging voice/chat sessions with timestamps for true accuracy.
+  // As a fallback, show users with the most chat messages in the last week (proxy for activity)
+  // If you have a session log table, query it here. Otherwise, use modlogs as a proxy.
+  return await getWeeklyMessageLeaderboard(guildId, limit);
+}
+
+// Prefix command: ;topmessagesweek
+prefixCommands.topmessagesweek = async (msg, args) => {
+  const leaderboard = await getWeeklyMessageLeaderboard(msg.guild.id, 10);
+  if (!leaderboard.length) return msg.reply('No message data for this week.');
+  let desc = leaderboard.map((entry, i) => `${i+1}. <@${entry.userId}> (${entry.count})`).join('\n');
+  const embed = new EmbedBuilder()
+    .setTitle('Top Users by Messages (This Week)')
+    .setDescription(desc)
+    .setColor(0x3498db);
+  return msg.reply({ embeds: [embed] });
+};
+
+// Prefix command: ;topuptimeweek
+prefixCommands.topuptimeweek = async (msg, args) => {
+  const leaderboard = await getWeeklyUptimeLeaderboard(msg.guild.id, 10);
+  if (!leaderboard.length) return msg.reply('No uptime data for this week.');
+  let desc = leaderboard.map((entry, i) => `${i+1}. <@${entry.userId}> (${entry.count})`).join('\n');
+  const embed = new EmbedBuilder()
+    .setTitle('Top Users by Uptime (This Week)')
+    .setDescription(desc)
+    .setColor(0x2ecc71);
+  return msg.reply({ embeds: [embed] });
 };
 
 module.exports = {
