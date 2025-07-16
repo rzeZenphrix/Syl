@@ -2694,6 +2694,15 @@ function getCommandCount() {
   return { prefixCount, slashCount, totalCount };
 }
 
+// Helper to send long DMs in chunks of 2000 characters
+async function sendLongDM(user, text) {
+  const MAX_CHARS = 2000;
+  for (let i = 0; i < text.length; i += MAX_CHARS) {
+    const chunk = text.slice(i, i + MAX_CHARS);
+    await user.send(chunk);
+  }
+}
+
 // Update the help command to show accurate command count
 prefixCommands.help = async (msg, args) => {
   const { prefixCount, slashCount, totalCount } = getCommandCount();
@@ -2728,7 +2737,7 @@ prefixCommands.help = async (msg, args) => {
     helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
     helpText += 'Web dashboard: Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` to view/search/download logs.';
     try {
-      await msg.author.send(helpText);
+      await sendLongDM(msg.author, helpText);
       if (msg.guild) {
         await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
       }
