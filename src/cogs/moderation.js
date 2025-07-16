@@ -3,6 +3,7 @@ const { supabase } = require('../utils/supabase');
 const fs = require('fs');
 const path = require('path');
 const { logEvent } = require('../logger');
+const crypto = require('crypto');
 
 // Helper functions
 async function addWarning(guildId, userId, reason, warnedBy) {
@@ -156,7 +157,8 @@ const commandDescriptions = {
   case: 'View moderation case details. Usage: `/case view <ID>`',
   raid: 'Configure raid prevention settings. Usage: `/raid <on/off/threshold>` (admin only)',
   steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
-  antinuke: 'Configure anti-nuke protection. Usage: `/antinuke <on/off/whitelist>` (owner only)'
+  antinuke: 'Configure anti-nuke protection. Usage: `/antinuke <on/off/whitelist>` (owner only)',
+  stealsticker: 'Steal a sticker from a message reply. Usage: `;stealsticker <name>` (reply to a sticker)'
 };
 
 // Add new commands to prefixCommands
@@ -1130,6 +1132,37 @@ const prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
     }
   },
+
+  stealsticker: async (msg, args) => {
+    try {
+      if (!msg.reference || !msg.guild) return msg.reply('Reply to a sticker message with `;stealsticker <name>`.');
+      const name = args[0];
+      if (!name) return msg.reply('Please provide a name for the sticker. Usage: `;stealsticker <name>`');
+      const repliedMsg = await msg.channel.messages.fetch(msg.reference.messageId).catch(() => null);
+      if (!repliedMsg || !repliedMsg.stickers || repliedMsg.stickers.size === 0) {
+        return msg.reply('The replied message does not contain a sticker.');
+      }
+      const sticker = repliedMsg.stickers.first();
+      if (!sticker) return msg.reply('Could not find a sticker in the replied message.');
+      // Download the sticker file
+      const url = sticker.url;
+      const ext = url.split('.').pop().split('?')[0];
+      const res = await fetch(url);
+      if (!res.ok) return msg.reply('Failed to download sticker.');
+      const buffer = Buffer.from(await res.arrayBuffer());
+      // Create the sticker in the server
+      await msg.guild.stickers.create({
+        file: buffer,
+        name: name,
+        tags: 'sticker',
+        description: sticker.name || 'Stolen sticker'
+      });
+      return msg.reply(`Sticker added as \`${name}\``);
+    } catch (e) {
+      console.error('Steal sticker error:', e);
+      return msg.reply('Failed to steal sticker. Make sure the bot has Manage Stickers permission and the sticker is a standard Discord sticker.');
+    }
+  },
 };
 
 // Slash commands
@@ -1308,6 +1341,15 @@ const slashCommands = [
       option.setName('name')
         .setDescription('New name for the emoji')
         .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
+    .setName('stealsticker')
+    .setDescription('Steal a sticker from a message reply')
+    .addStringOption(option =>
+      option.setName('name')
+        .setDescription('Name for the sticker')
+        .setRequired(true)
     ),
 ];
 
@@ -2224,6 +2266,37 @@ const slashHandlers = {
       return interaction.reply({ content: errorMessage, ephemeral: true });
     }
   },
+
+  stealsticker: async (interaction) => {
+    try {
+      if (!interaction.reference || !interaction.guild) return interaction.reply('Reply to a sticker message with `;stealsticker <name>`.');
+      const name = interaction.options.getString('name');
+      if (!name) return interaction.reply('Please provide a name for the sticker. Usage: `;stealsticker <name>`');
+      const repliedMsg = await interaction.channel.messages.fetch(interaction.reference.messageId).catch(() => null);
+      if (!repliedMsg || !repliedMsg.stickers || repliedMsg.stickers.size === 0) {
+        return interaction.reply('The replied message does not contain a sticker.');
+      }
+      const sticker = repliedMsg.stickers.first();
+      if (!sticker) return interaction.reply('Could not find a sticker in the replied message.');
+      // Download the sticker file
+      const url = sticker.url;
+      const ext = url.split('.').pop().split('?')[0];
+      const res = await fetch(url);
+      if (!res.ok) return interaction.reply('Failed to download sticker.');
+      const buffer = Buffer.from(await res.arrayBuffer());
+      // Create the sticker in the server
+      await interaction.guild.stickers.create({
+        file: buffer,
+        name: name,
+        tags: 'sticker',
+        description: sticker.name || 'Stolen sticker'
+      });
+      return interaction.reply(`Sticker added as \`${name}\``);
+    } catch (e) {
+      console.error('Steal sticker error:', e);
+      return interaction.reply('Failed to steal sticker. Make sure the bot has Manage Stickers permission and the sticker is a standard Discord sticker.');
+    }
+  },
 };
 
 const buttonHandlers = {};
@@ -2755,6 +2828,145 @@ slashHandlers['steal'] = async (interaction) => {
       errorMessage = 'Bot lacks permission to manage emojis.';
     }
     return interaction.reply({ content: errorMessage, ephemeral: true });
+  }
+};
+
+// --- Centralized Error Handler ---
+async function handleCommandError(context, error, msgOrInteraction, guild) {
+  const traceId = crypto.randomBytes(4).toString('hex');
+  const errMsg = error?.message || error;
+  // Log error with trace ID
+  console.error(`[${context}] Error (Trace ID: ${traceId}):`, errMsg);
+  const logLine = `[${new Date().toISOString()}] [${context}] [Trace ID: ${traceId}] ${errMsg}\n`;
+  require('fs').appendFileSync('logs.txt', logLine);
+  // User-friendly error message
+  const reply = { embeds: [
+    { title: 'Error', description: `An error occurred. Please try again later.\n**Trace ID:** \`${traceId}\``, color: 0xe74c3c }
+  ] };
+  if (msgOrInteraction?.reply) {
+    try { await msgOrInteraction.reply(reply); } catch {}
+  } else if (msgOrInteraction?.channel?.send) {
+    try { await msgOrInteraction.channel.send(reply); } catch {}
+  }
+  // DM owner for critical errors
+  if (guild && error.critical) {
+    try {
+      const owner = await guild.fetchOwner().catch(() => null);
+      if (owner) {
+        await owner.send(`Critical error in **${context}** (Trace ID: \`${traceId}\`): \`${errMsg}\``).catch(() => {});
+      }
+    } catch {}
+  }
+}
+
+// --- Update moderation commands to DM users and use error handler ---
+// Example for warn command:
+prefixCommands.warn = async (msg, args) => {
+  try {
+    if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
+    const user = msg.mentions.users.first();
+    const reason = args.slice(1).join(' ') || 'No reason provided';
+    if (!user) return msg.reply('Please mention a user to warn.');
+    await addWarning(msg.guild.id, user.id, reason, msg.author.id);
+    // DM the user
+    try {
+      await user.send(`You have been **warned** in **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+    } catch {}
+    return msg.reply(`Warned <@${user.id}>. Reason: ${reason}`);
+  } catch (error) {
+    await handleCommandError('warn', error, msg, msg.guild);
+  }
+};
+// Repeat similar pattern for kick, mute, timeout, ban
+
+// Kick command
+prefixCommands.kick = async (msg, args) => {
+  try {
+    if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
+    const user = msg.mentions.users.first();
+    const reason = args.slice(1).join(' ') || 'No reason provided';
+    if (!user) return msg.reply('Please mention a user to kick.');
+    const member = await msg.guild.members.fetch(user.id);
+    await member.kick(reason);
+    await addModlog(msg.guild.id, user.id, 'kick', msg.author.id, reason);
+    // DM the user
+    try {
+      await user.send(`You have been **kicked** from **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+    } catch {}
+    return msg.reply(`Kicked <@${user.id}>. Reason: ${reason}`);
+  } catch (error) {
+    await handleCommandError('kick', error, msg, msg.guild);
+  }
+};
+
+// Mute command
+prefixCommands.mute = async (msg, args) => {
+  try {
+    if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
+    const user = msg.mentions.users.first();
+    const durationStr = args[1];
+    const reason = args.slice(2).join(' ') || 'No reason provided';
+    if (!user || !durationStr) return msg.reply('Usage: ;mute @user <duration> [reason]');
+    const duration = parseDuration(durationStr);
+    if (!duration) return msg.reply('Invalid duration format. Use: 30s, 5m, 2h, 1d');
+    const member = await msg.guild.members.fetch(user.id);
+    await member.timeout(duration, reason);
+    await addMute(msg.guild.id, user.id, msg.author.id, reason, duration);
+    await addModlog(msg.guild.id, user.id, 'mute', msg.author.id, reason);
+    // DM the user
+    try {
+      await user.send(`You have been **muted** in **${msg.guild.name}** for ${durationStr}.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+    } catch {}
+    return msg.reply(`Muted <@${user.id}> for ${durationStr}. Reason: ${reason}`);
+  } catch (error) {
+    await handleCommandError('mute', error, msg, msg.guild);
+  }
+};
+
+// Timeout command
+prefixCommands.timeout = async (msg, args) => {
+  try {
+    if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
+    const user = msg.mentions.users.first();
+    const durationStr = args[1];
+    const reason = args.slice(2).join(' ') || 'No reason provided';
+    if (!user || !durationStr) return msg.reply('Usage: ;timeout @user <duration> [reason]');
+    const duration = parseDuration(durationStr);
+    if (!duration) return msg.reply('Invalid duration format. Use: 30s, 5m, 2h, 1d');
+    const member = await msg.guild.members.fetch(user.id);
+    await member.timeout(duration, reason);
+    await addModlog(msg.guild.id, user.id, 'timeout', msg.author.id, reason);
+    // DM the user
+    try {
+      await user.send(`You have been **timed out** in **${msg.guild.name}** for ${durationStr}.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+    } catch {}
+    return msg.reply(`Timed out <@${user.id}> for ${durationStr}. Reason: ${reason}`);
+  } catch (error) {
+    await handleCommandError('timeout', error, msg, msg.guild);
+  }
+};
+
+// Ban command
+prefixCommands.ban = async (msg, args) => {
+  try {
+    if (!await isAdmin(msg.member)) throw new Error('Missing permissions');
+    let user = msg.mentions.users.first();
+    let userId = user ? user.id : args[0];
+    if (!user && userId && /^\d{17,20}$/.test(userId)) {
+      try { user = await msg.client.users.fetch(userId); } catch {}
+    }
+    if (!userId || !/^\d{17,20}$/.test(userId)) return msg.reply('Usage: ;ban @user|user_id [reason]');
+    if (userId === msg.client.user.id) return msg.reply('Cannot ban the bot.');
+    const reason = args.slice(user ? 1 : 1).join(' ') || 'No reason provided';
+    await msg.guild.members.ban(userId, { reason });
+    await addModlog(msg.guild.id, userId, 'ban', msg.author.id, reason);
+    // DM the user
+    try {
+      if (user) await user.send(`You have been **banned** from **${msg.guild.name}**.\nReason: ${reason}\nModerator: ${msg.author.tag}`);
+    } catch {}
+    return msg.reply(`Banned <@${userId}>. Reason: ${reason}`);
+  } catch (error) {
+    await handleCommandError('ban', error, msg, msg.guild);
   }
 };
 
