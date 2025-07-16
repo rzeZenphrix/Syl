@@ -1249,7 +1249,7 @@ prefixCommands = {
         { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
         { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
         { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
-        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'Activity Score', value: `${Math.min(score, 10).toFixed(1)}/10`, inline: true },
         { name: 'User ID', value: user.id, inline: true },
         { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
         { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
@@ -1279,7 +1279,7 @@ prefixCommands = {
         { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
         { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
         { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
-        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'Activity Score', value: `${Math.min(score, 10).toFixed(1)}/10`, inline: true },
         { name: 'User ID', value: user.id, inline: true },
         { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
         { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
@@ -1979,7 +1979,7 @@ slashHandlers = {
         { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
         { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
         { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
-        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'Activity Score', value: `${Math.min(score, 10).toFixed(1)}/10`, inline: true },
         { name: 'User ID', value: user.id, inline: true },
         { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
         { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
@@ -2000,7 +2000,7 @@ slashHandlers = {
       chat: s.chat_seconds || 0
     })).sort((a, b) => b.score - a.score).slice(0, 10);
     const lines = await Promise.all(leaderboard.map(async (u, i) => {
-      return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
+      return `**${i+1}.** <@${u.user_id}> — **${Math.min(u.score, 10)}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
     }));
     const embed = new EmbedBuilder()
       .setTitle('Server Activity Leaderboard')
@@ -3374,7 +3374,7 @@ prefixCommands.s = prefixCommands.stats = async (msg, args) => {
       { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
       { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
       { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
-      { name: 'Activity Score', value: `${score}/10`, inline: true },
+      { name: 'Activity Score', value: `${Math.min(score, 10).toFixed(1)}/10`, inline: true },
       { name: 'User ID', value: user.id, inline: true },
       { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
       { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
@@ -3395,7 +3395,7 @@ prefixCommands.activity = async (msg, args) => {
     chat: s.chat_seconds || 0
   })).sort((a, b) => b.score - a.score).slice(0, 10);
   const lines = await Promise.all(leaderboard.map(async (u, i) => {
-    return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
+    return `**${i+1}.** <@${u.user_id}> — **${Math.min(u.score, 10)}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
   }));
   const embed = new EmbedBuilder()
     .setTitle('Server Activity Leaderboard')
@@ -3539,480 +3539,126 @@ if (Array.isArray(module.exports.slashCommands)) {
 // Add boostsetup handler
 if (module.exports.slashHandlers) {
   module.exports.slashHandlers.boostsetup = async (interaction) => {
-    // Permission check: allow anyone unless disabled in server (TODO: add check later)
-    // Step 1: Show General Settings modal
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_general')
-      .setTitle('Boost Message Setup: General Settings');
+    try {
+      // Permission check: allow anyone unless disabled in server (TODO: add check later)
+      // Step 1: Show General Settings modal
+      const modal = new ModalBuilder()
+        .setCustomId('boostsetup_general')
+        .setTitle('Boost Message Setup: General Settings');
 
-    // Channel selector (text input for now, dropdown in dashboard)
-    const channelInput = new TextInputBuilder()
-      .setCustomId('boost_channel')
-      .setLabel('Channel ID or #channel mention')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Paste channel ID or #channel')
-      .setRequired(true);
+      // Channel selector (text input for now, dropdown in dashboard)
+      const channelInput = new TextInputBuilder()
+        .setCustomId('boost_channel')
+        .setLabel('Channel ID or #channel mention')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Paste channel ID or #channel')
+        .setRequired(true);
 
-    // Min. Boost Tier (1, 2, 3)
-    const tierInput = new TextInputBuilder()
-      .setCustomId('boost_min_tier')
-      .setLabel('Minimum Boost Tier (1, 2, or 3)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('1 (default), 2, or 3')
-      .setRequired(true);
+      // Min. Boost Tier (1, 2, 3)
+      const tierInput = new TextInputBuilder()
+        .setCustomId('boost_min_tier')
+        .setLabel('Minimum Boost Tier (1, 2, or 3)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('1 (default), 2, or 3')
+        .setRequired(true);
 
-    // Rate Limit (cooldown in seconds)
-    const rateLimitInput = new TextInputBuilder()
-      .setCustomId('boost_rate_limit')
-      .setLabel('Rate Limit (seconds between messages)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. 60 for 1 minute')
-      .setRequired(true);
+      // Rate Limit (cooldown in seconds)
+      const rateLimitInput = new TextInputBuilder()
+        .setCustomId('boost_rate_limit')
+        .setLabel('Rate Limit (seconds between messages)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. 60 for 1 minute')
+        .setRequired(true);
 
-    // Send as Embed? (yes/no)
-    const embedInput = new TextInputBuilder()
-      .setCustomId('boost_send_embed')
-      .setLabel('Send as Embed? (yes/no)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('yes or no')
-      .setRequired(true);
+      // Send as Embed? (yes/no)
+      const embedInput = new TextInputBuilder()
+        .setCustomId('boost_send_embed')
+        .setLabel('Send as Embed? (yes/no)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('yes or no')
+        .setRequired(true);
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(channelInput),
-      new ActionRowBuilder().addComponents(tierInput),
-      new ActionRowBuilder().addComponents(rateLimitInput),
-      new ActionRowBuilder().addComponents(embedInput)
-    );
-    await interaction.showModal(modal);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(channelInput),
+        new ActionRowBuilder().addComponents(tierInput),
+        new ActionRowBuilder().addComponents(rateLimitInput),
+        new ActionRowBuilder().addComponents(embedInput)
+      );
+      await interaction.showModal(modal);
+    } catch (err) {
+      console.error('Error in /boostsetup:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: 'An error occurred while starting boost setup. Please try again or contact the bot owner.', ephemeral: true });
+      }
+    }
   };
 }
 
-// Modal handler for boostsetup_general (scaffold only)
+// Modal handler for boostsetup_general (step 1)
 if (module.exports.modalHandlers) {
   module.exports.modalHandlers.boostsetup_general = async (interaction) => {
-    // TODO: Save modal values and proceed to next step/modal
-    await interaction.reply({ content: 'General settings received! (Next: Embed Style)', ephemeral: true });
-  };
-  // Modal handler for boostsetup_embed (step 2)
-  module.exports.modalHandlers.boostsetup_embed = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].embed = {
-      color: interaction.fields.getTextInputValue('boost_embed_color'),
-      border: interaction.fields.getTextInputValue('boost_embed_border'),
-      borderWidth: interaction.fields.getTextInputValue('boost_embed_border_width'),
-      fontFamily: interaction.fields.getTextInputValue('boost_embed_font_family'),
-      fontSize: interaction.fields.getTextInputValue('boost_embed_font_size'),
-    };
-    // Show next modal: Content & Variables
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_content')
-      .setTitle('Boost Message Setup: Content & Variables');
-    const contentInput = new TextInputBuilder()
-      .setCustomId('boost_content')
-      .setLabel('Message Content (supports placeholders)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('e.g. Thank you {user} for boosting {server}!')
-      .setRequired(true);
-    const titleInput = new TextInputBuilder()
-      .setCustomId('boost_embed_title')
-      .setLabel('Embed Title (optional, supports markdown)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. 🎉 New Booster!')
-      .setRequired(false);
-    const descInput = new TextInputBuilder()
-      .setCustomId('boost_embed_desc')
-      .setLabel('Embed Description (optional, supports markdown)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('e.g. {user} just boosted us to Tier {tier}!')
-      .setRequired(false);
-    const placeholdersInput = new TextInputBuilder()
-      .setCustomId('boost_placeholders')
-      .setLabel('Available Placeholders (see below)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('{user}, {username}, {server}, {boost_count}, {tier}, {rank}')
-      .setRequired(false);
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(contentInput),
-      new ActionRowBuilder().addComponents(titleInput),
-      new ActionRowBuilder().addComponents(descInput),
-      new ActionRowBuilder().addComponents(placeholdersInput)
-    );
-    await interaction.showModal(modal);
-  };
-  // Modal handler for boostsetup_content (step 3)
-  module.exports.modalHandlers.boostsetup_content = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].content = {
-      content: interaction.fields.getTextInputValue('boost_content'),
-      title: interaction.fields.getTextInputValue('boost_embed_title'),
-      description: interaction.fields.getTextInputValue('boost_embed_desc'),
-      placeholders: interaction.fields.getTextInputValue('boost_placeholders'),
-    };
-    // Show next modal: Multimedia
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_multimedia')
-      .setTitle('Boost Message Setup: Multimedia');
-    const thumbInput = new TextInputBuilder()
-      .setCustomId('boost_thumb_url')
-      .setLabel('Thumbnail URL (booster avatar or custom)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://...')
-      .setRequired(false);
-    const imageInput = new TextInputBuilder()
-      .setCustomId('boost_image_url')
-      .setLabel('Main Image/Banner URL (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://...')
-      .setRequired(false);
-    const field1Label = new TextInputBuilder()
-      .setCustomId('boost_field1_label')
-      .setLabel('Custom Field 1 Label (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. Total Boosts')
-      .setRequired(false);
-    const field1Value = new TextInputBuilder()
-      .setCustomId('boost_field1_value')
-      .setLabel('Custom Field 1 Value (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. {boost_count}')
-      .setRequired(false);
-    // Only 5 fields per modal, so only 1 custom field for now (can add more in next step if needed)
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(thumbInput),
-      new ActionRowBuilder().addComponents(imageInput),
-      new ActionRowBuilder().addComponents(field1Label),
-      new ActionRowBuilder().addComponents(field1Value)
-    );
-    await interaction.showModal(modal);
-  };
-  // Modal handler for boostsetup_multimedia (step 4)
-  module.exports.modalHandlers.boostsetup_multimedia = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].multimedia = {
-      thumbnail: interaction.fields.getTextInputValue('boost_thumbnail_url'),
-      image: interaction.fields.getTextInputValue('boost_image_url'),
-      field1_label: interaction.fields.getTextInputValue('boost_field1_label'),
-      field1_value: interaction.fields.getTextInputValue('boost_field1_value'),
-    };
-
-    // Show next modal: Actions & Buttons
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_actions')
-      .setTitle('Boost Message: Actions & Buttons');
-
-    const primaryLabel = new TextInputBuilder()
-      .setCustomId('boost_primary_label')
-      .setLabel('Primary Button Label')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. View Perks')
-      .setRequired(false);
-    const primaryUrl = new TextInputBuilder()
-      .setCustomId('boost_primary_url')
-      .setLabel('Primary Button URL')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://...')
-      .setRequired(false);
-    const secondaryLabel = new TextInputBuilder()
-      .setCustomId('boost_secondary_label')
-      .setLabel('Secondary Button Label')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. Join Booster Lounge')
-      .setRequired(false);
-    const secondaryUrl = new TextInputBuilder()
-      .setCustomId('boost_secondary_url')
-      .setLabel('Secondary Button URL')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('https://...')
-      .setRequired(false);
-    const buttonEmoji = new TextInputBuilder()
-      .setCustomId('boost_button_emoji')
-      .setLabel('Button Emoji (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder('e.g. 🎉')
-      .setRequired(false);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(primaryLabel),
-      new ActionRowBuilder().addComponents(primaryUrl),
-      new ActionRowBuilder().addComponents(secondaryLabel),
-      new ActionRowBuilder().addComponents(secondaryUrl),
-      new ActionRowBuilder().addComponents(buttonEmoji)
-    );
-    await interaction.showModal(modal);
-  };
-
-  // Modal handler for boostsetup_actions (step 5)
-  module.exports.modalHandlers.boostsetup_actions = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].actions = {
-      primaryLabel: interaction.fields.getTextInputValue('boost_primary_label'),
-      primaryUrl: interaction.fields.getTextInputValue('boost_primary_url'),
-      secondaryLabel: interaction.fields.getTextInputValue('boost_secondary_label'),
-      secondaryUrl: interaction.fields.getTextInputValue('boost_secondary_url'),
-      buttonEmoji: interaction.fields.getTextInputValue('boost_button_emoji'),
-    };
-
-    // Show Footer & Timestamp modal (step 6)
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_footer')
-      .setTitle('Boost Message: Footer & Timestamp');
-
-    const footerText = new TextInputBuilder()
-      .setCustomId('boost_footer_text')
-      .setLabel('Footer Text')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('e.g. Thanks for boosting!');
-
-    const footerIcon = new TextInputBuilder()
-      .setCustomId('boost_footer_icon')
-      .setLabel('Footer Icon URL')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('https://...');
-
-    const toggleTimestamp = new TextInputBuilder()
-      .setCustomId('boost_toggle_timestamp')
-      .setLabel('Show Timestamp? (yes/no)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('yes or no');
-
-    const customTimestamp = new TextInputBuilder()
-      .setCustomId('boost_custom_timestamp')
-      .setLabel('Custom Timestamp (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('YYYY-MM-DD HH:mm:ss or leave blank');
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(footerText),
-      new ActionRowBuilder().addComponents(footerIcon),
-      new ActionRowBuilder().addComponents(toggleTimestamp),
-      new ActionRowBuilder().addComponents(customTimestamp)
-    );
-    await interaction.showModal(modal);
-  };
-
-  // Modal handler for boostsetup_footer (step 6)
-  module.exports.modalHandlers.boostsetup_footer = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].footer = {
-      footerText: interaction.fields.getTextInputValue('boost_footer_text'),
-      footerIcon: interaction.fields.getTextInputValue('boost_footer_icon'),
-      showTimestamp: interaction.fields.getTextInputValue('boost_show_timestamp'),
-      customTimestamp: interaction.fields.getTextInputValue('boost_custom_timestamp'),
-    };
-
-    // Next modal: Role & Permission Hooks
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_roleperm')
-      .setTitle('Boost Message: Role & Permission Hooks');
-
-    const roleInput = new TextInputBuilder()
-      .setCustomId('boost_auto_role')
-      .setLabel('Auto-assign Role (ID or @mention)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('Paste role ID or @mention');
-
-    const mentionRolesInput = new TextInputBuilder()
-      .setCustomId('boost_mention_roles')
-      .setLabel('Mention Roles (e.g. @Booster, @everyone)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('Separate multiple with commas');
-
-    const permCheckInput = new TextInputBuilder()
-      .setCustomId('boost_perm_check')
-      .setLabel('Permission Check? (yes/no)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('yes or no');
-
-    const customPermInput = new TextInputBuilder()
-      .setCustomId('boost_custom_perm')
-      .setLabel('Custom Permission (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('e.g. Manage Server');
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(roleInput),
-      new ActionRowBuilder().addComponents(mentionRolesInput),
-      new ActionRowBuilder().addComponents(permCheckInput),
-      new ActionRowBuilder().addComponents(customPermInput)
-    );
-    await interaction.showModal(modal);
-  };
-
-  // Modal handler for boostsetup_roleperm (step 7)
-  module.exports.modalHandlers.boostsetup_roleperm = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].roleperm = {
-      autoRole: interaction.fields.getTextInputValue('boost_auto_role'),
-      mentionRoles: interaction.fields.getTextInputValue('boost_mention_roles'),
-      permCheck: interaction.fields.getTextInputValue('boost_perm_check'),
-      customPerm: interaction.fields.getTextInputValue('boost_custom_perm'),
-    };
-    await interaction.reply({ content: 'Role & Permission Hooks received! (Next: Preview & Save)', ephemeral: true });
-    // Next: Preview & Save modal step (not yet implemented)
-  };
-
-  // Modal handler for boostsetup_role (step 7)
-  module.exports.modalHandlers.boostsetup_role = async (interaction) => {
-    const userId = interaction.user.id;
-    global.boostSetup = global.boostSetup || {};
-    global.boostSetup[userId] = global.boostSetup[userId] || {};
-    global.boostSetup[userId].role = {
-      autoRole: interaction.fields.getTextInputValue('boost_auto_role'),
-      mentionRoles: interaction.fields.getTextInputValue('boost_mention_roles'),
-      permCheck: interaction.fields.getTextInputValue('boost_perm_check'),
-      customPerm: interaction.fields.getTextInputValue('boost_custom_perm'),
-    };
-
-    // Show Preview & Save modal
-    const { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } = require('discord.js');
-    const modal = new ModalBuilder()
-      .setCustomId('boostsetup_preview')
-      .setTitle('Preview & Save');
-
-    const presetNameInput = new TextInputBuilder()
-      .setCustomId('boost_preset_name')
-      .setLabel('Preset Name (optional)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
-    const savePresetInput = new TextInputBuilder()
-      .setCustomId('boost_save_preset')
-      .setLabel('Save as Preset? (yes/no)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-    const confirmInput = new TextInputBuilder()
-      .setCustomId('boost_confirm_save')
-      .setLabel("Type 'CONFIRM' to save your boost message setup")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(presetNameInput),
-      new ActionRowBuilder().addComponents(savePresetInput),
-      new ActionRowBuilder().addComponents(confirmInput)
-    );
-    await interaction.showModal(modal);
-  };
-
-  // Modal handler for boostsetup_preview (final step)
-  module.exports.modalHandlers.boostsetup_preview = async (interaction) => {
-    const userId = interaction.user.id;
-    const guildId = interaction.guild.id;
-    global.boostSetup = global.boostSetup || {};
-    const setup = global.boostSetup[userId];
-    if (!setup) {
-      return interaction.reply({ content: 'No setup data found. Please restart the setup.', ephemeral: true });
-    }
-    // Get modal values
-    const presetName = interaction.fields.getTextInputValue('boost_preset_name');
-    const saveAsPreset = interaction.fields.getTextInputValue('boost_save_preset').toLowerCase() === 'yes';
-    const confirm = interaction.fields.getTextInputValue('boost_confirm_save');
-    if (confirm !== 'CONFIRM') {
-      return interaction.reply({ content: 'You must type CONFIRM to save your boost message setup.', ephemeral: true });
-    }
-    // Compose the config object
-    const config = {
-      guild_id: guildId,
-      user_id: userId,
-      general: setup.general,
-      embed: setup.embed,
-      content: setup.content,
-      multimedia: setup.multimedia,
-      actions: setup.actions,
-      footer: setup.footer,
-      role: setup.role,
-      created_at: new Date().toISOString(),
-      preset_name: saveAsPreset && presetName ? presetName : null
-    };
-    // Save to Supabase
-    let saveError = null;
     try {
-      if (saveAsPreset && presetName) {
-        // Save as a named preset (up to 2 per guild)
-        const { data: existing, error: fetchErr } = await require('../utils/supabase').supabase
-          .from('boost_presets')
-          .select('id')
-          .eq('guild_id', guildId);
-        if (fetchErr) throw fetchErr;
-        if (existing && existing.length >= 2) {
-          return interaction.reply({ content: 'You can only save up to 2 presets per server. Delete an old one first.', ephemeral: true });
-        }
-        const { error } = await require('../utils/supabase').supabase
-          .from('boost_presets')
-          .upsert({
-            guild_id: guildId,
-            preset_name: presetName,
-            config: config,
-            updated_at: new Date().toISOString()
-          }, { onConflict: ['guild_id', 'preset_name'] });
-        if (error) throw error;
-      } else {
-        // Save as the active config
-        const { error } = await require('../utils/supabase').supabase
-          .from('boost_configs')
-          .upsert({
-            guild_id: guildId,
-            config: config,
-            updated_at: new Date().toISOString()
-          }, { onConflict: ['guild_id'] });
-        if (error) throw error;
+      // Save modal values in a temporary store (global, keyed by user ID)
+      const userId = interaction.user.id;
+      global.boostSetup = global.boostSetup || {};
+      global.boostSetup[userId] = global.boostSetup[userId] || {};
+      global.boostSetup[userId].general = {
+        channel: interaction.fields.getTextInputValue('boost_channel'),
+        minTier: interaction.fields.getTextInputValue('boost_min_tier'),
+        rateLimit: interaction.fields.getTextInputValue('boost_rate_limit'),
+        sendEmbed: interaction.fields.getTextInputValue('boost_send_embed'),
+      };
+      // Show next modal: Embed Style
+      const modal = new ModalBuilder()
+        .setCustomId('boostsetup_embed')
+        .setTitle('Boost Message Setup: Embed Style');
+      const colorInput = new TextInputBuilder()
+        .setCustomId('boost_embed_color')
+        .setLabel('Embed Color (HEX)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('#5865F2')
+        .setRequired(false);
+      const borderInput = new TextInputBuilder()
+        .setCustomId('boost_embed_border')
+        .setLabel('Embed Border? (yes/no)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('no')
+        .setRequired(false);
+      const borderWidthInput = new TextInputBuilder()
+        .setCustomId('boost_embed_border_width')
+        .setLabel('Border Width (px)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('2')
+        .setRequired(false);
+      const fontFamilyInput = new TextInputBuilder()
+        .setCustomId('boost_embed_font_family')
+        .setLabel('Font Family')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Default')
+        .setRequired(false);
+      const fontSizeInput = new TextInputBuilder()
+        .setCustomId('boost_embed_font_size')
+        .setLabel('Font Size')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('Default')
+        .setRequired(false);
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(colorInput),
+        new ActionRowBuilder().addComponents(borderInput),
+        new ActionRowBuilder().addComponents(borderWidthInput),
+        new ActionRowBuilder().addComponents(fontFamilyInput),
+        new ActionRowBuilder().addComponents(fontSizeInput)
+      );
+      await interaction.showModal(modal);
+    } catch (err) {
+      console.error('Error in boostsetup_general modal handler:', err);
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
       }
-    } catch (e) {
-      saveError = e;
-    }
-    // Clean up temp store
-    delete global.boostSetup[userId];
-    // DM user with result
-    try {
-      if (saveError) {
-        await interaction.user.send('❌ Failed to save boost message setup. Please try again or contact support.');
-        return interaction.reply({ content: 'Failed to save boost message setup. Please try again.', ephemeral: true });
-      } else {
-        await interaction.user.send('✅ Boost message setup saved successfully!');
-        return interaction.reply({ content: 'Boost message setup saved! You can now test or edit your boost message.', ephemeral: true });
-      }
-    } catch (dmErr) {
-      return interaction.reply({ content: 'Setup saved, but I could not DM you the result. Please check your DM settings.', ephemeral: true });
     }
   };
 }
-
-// Ensure /boostsetup is included in slashCommands and slashHandlers
-// (This is a safeguard in case of partial registration)
-if (!Array.isArray(slashCommands)) slashCommands = [];
-if (!slashCommands.some(cmd => cmd.name === 'boostsetup')) {
-  slashCommands.push(
-    new SlashCommandBuilder()
-      .setName('boostsetup')
-      .setDescription('Set up a customizable boost message for your server')
-  );
-}
-if (!slashHandlers.boostsetup) {
-  slashHandlers.boostsetup = async (interaction) => {
-    // Start the boost setup modal flow (already implemented above)
-    // This is a fallback to ensure the handler exists
-    // ... (actual handler logic is already present in the file) ...
-  };
-}
+// ... existing code ...
 
 module.exports = {
   name: 'utility',
