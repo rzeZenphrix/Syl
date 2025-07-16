@@ -107,11 +107,9 @@ const commandDescriptions = {
   // New commands
   raid: 'Configure raid prevention settings. Usage: `;raid <on/off/threshold/autolock>` (admin only)',
   antinuke: 'Configure anti-nuke protection. Usage: `;antinuke <on/off/whitelist/autoban>` (owner only)',
-  steal: 'Steal an emoji from another server. Usage: `;steal <emoji> [new_name]` (admin only)',
   s: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
   stats: 'Show detailed stats about a user: total messages, messages today, voice time, chat time, activity score, and more. Usage: `;s [@user]` or `/s [user]`',
   activity: 'Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;activity` or `/activity`',
-  a: 'Short for ;activity. Show an activity leaderboard for the server, scoring users out of 10 based on messages, voice, and recency. Usage: `;a` or `/a`',
   'a-user': 'Short for ;activity. Usage: `;a @user` for another user, `;a l` for leaderboard. Slash: `/a [user|l]`',
   'a-leaderboard': 'Short for ;activity. Usage: `;a l` for leaderboard. Slash: `/a l`',
   // Update help text
@@ -403,6 +401,7 @@ prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('Only admins can use this command.').setColor(0xe74c3c)] });
     }
     const arg = args[0]?.toLowerCase();
+    global.snipedMessages = global.snipedMessages || {};
     if (arg === 'on') {
       global.sniperEnabled = global.sniperEnabled || {};
       global.sniperEnabled[msg.guild.id] = true;
@@ -413,41 +412,43 @@ prefixCommands = {
       global.sniperEnabled[msg.guild.id] = false;
       return msg.reply('Sniper disabled.');
     }
-    // Show all deleted messages in this channel in the last hour
-    global.snipedMessages = global.snipedMessages || {};
+    // Show deleted messages
     const snipedArr = global.snipedMessages[msg.guild.id]?.[msg.channel.id] || [];
-    if (!snipedArr.length) {
-      return msg.reply('No recently deleted messages found in this channel.');
-    }
-    // Only show messages from the last hour
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
     const recent = snipedArr.filter(m => m.timestamp > oneHourAgo);
-    if (!recent.length) {
-      return msg.reply('No deleted messages in the last hour.');
+    const toShow = recent.slice(-10).reverse();
+    let userSnipes = [];
+    let userMention = msg.mentions.users.first();
+    if (userMention) {
+      // Collect from all channels in this guild
+      const allSnipes = Object.values(global.snipedMessages[msg.guild.id] || {}).flat();
+      userSnipes = allSnipes.filter(m => m.author_id === userMention.id && m.timestamp > oneHourAgo)
+        .slice(-20).reverse();
     }
-    // Show up to 5 most recent
-    const toShow = recent.slice(-5).reverse();
-    for (const sniped of toShow) {
+    if (!toShow.length && !userSnipes.length) {
+      return msg.reply('No deleted messages found in the last hour.');
+    }
     const embed = new EmbedBuilder()
-        .setTitle('Sniped Message')
-        .setDescription(sniped.content)
-        .addFields(
-          { name: 'Author', value: sniped.author, inline: true },
-          { name: 'Deleted At', value: `<t:${Math.floor(sniped.timestamp/1000)}:R>`, inline: true }
-        )
+      .setTitle('Sniped Deleted Messages')
       .setColor(0x7289da)
-        .setTimestamp(sniped.timestamp);
-      if (sniped.attachments && sniped.attachments.length > 0) {
-        embed.addFields({ name: 'Attachments', value: sniped.attachments.map(url => `[File](${url})`).join(', '), inline: false });
-        if (sniped.attachments[0].match(/\.(png|jpg|jpeg|gif|webp)$/i)) {
-          embed.setImage(sniped.attachments[0]);
-        }
-      }
-      if (sniped.embeds && sniped.embeds.length > 0) {
-        embed.addFields({ name: 'Embeds', value: sniped.embeds.map((e, i) => `Embed #${i+1}`).join(', '), inline: false });
-      }
-      await msg.reply({ embeds: [embed] });
+      .setTimestamp();
+    if (toShow.length) {
+      embed.addFields({ name: `Recent Deleted Messages (Channel #${msg.channel.name})`, value: toShow.map((sniped, i) => {
+        let content = sniped.content?.slice(0, 256) || '[No text]';
+        let author = sniped.author || 'Unknown';
+        let time = `<t:${Math.floor(sniped.timestamp/1000)}:R>`;
+        return `**${i+1}.** ${author}: ${content}\n${time}`;
+      }).join('\n\n').slice(0, 1024) });
     }
+    if (userSnipes.length) {
+      embed.addFields({ name: `Recent Deleted Messages by ${userMention.tag}`, value: userSnipes.map((sniped, i) => {
+        let content = sniped.content?.slice(0, 256) || '[No text]';
+        let channel = sniped.channel_name ? `#${sniped.channel_name}` : (sniped.channel_id ? `<#${sniped.channel_id}>` : 'Unknown');
+        let time = `<t:${Math.floor(sniped.timestamp/1000)}:R>`;
+        return `**${i+1}.** ${channel}: ${content}\n${time}`;
+      }).join('\n\n').slice(0, 1024) });
+    }
+    return msg.reply({ embeds: [embed] });
   },
   
   revert: async (msg, args) => {
@@ -1189,53 +1190,6 @@ prefixCommands = {
     }
   },
 
-  steal: async (msg, args) => {
-    if (!await isAdmin(msg.member)) return msg.reply('Admin only.');
-    if (args.length < 1) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';steal <emoji> [new_name]\nExample: `;steal <:party:123456789012345678> party`').setColor(0xe74c3c)] });
-    }
-    const emojiArg = args[0];
-    const newName = args[1] || 'stolen_emoji';
-    // Reject user mentions
-    if (/^<@!?\d+>$/.test(emojiArg)) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Usage').setDescription('Please provide a custom emoji from another server, not a user mention.').setColor(0xe74c3c)] });
-    }
-    // Extract emoji ID from the emoji string
-    const emojiMatch = emojiArg.match(/<a?:(\w+):(\d+)>/);
-    if (!emojiMatch) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Invalid Emoji').setDescription('Please provide a valid custom emoji from another server.').setColor(0xe74c3c)] });
-    }
-    const [, emojiName, emojiId] = emojiMatch;
-    const isAnimated = emojiArg.startsWith('<a:');
-    const extension = isAnimated ? 'gif' : 'png';
-    const emojiUrl = `https://cdn.discordapp.com/emojis/${emojiId}.${extension}`;
-    try {
-      // Create the emoji in the current server
-      const createdEmoji = await msg.guild.emojis.create({
-        attachment: emojiUrl,
-        name: newName
-      });
-    const embed = new EmbedBuilder()
-        .setTitle('🎭 Emoji Stolen Successfully!')
-        .setDescription(`**Original:** ${emojiArg}\n**New Name:** ${newName}\n**New Emoji:** ${createdEmoji}`)
-        .setThumbnail(emojiUrl)
-        .setColor(0x2ecc71)
-      .setTimestamp();
-      return msg.reply({ embeds: [embed] });
-    } catch (e) {
-      console.error('Steal emoji error:', e);
-      let errorMessage = 'Failed to steal emoji.';
-      if (e.code === 30008) {
-        errorMessage = 'Server has reached the maximum number of emojis.';
-      } else if (e.code === 50035) {
-        errorMessage = 'Invalid emoji name. Use only letters, numbers, and underscores.';
-      } else if (e.code === 50013) {
-        errorMessage = 'Bot lacks permission to manage emojis.';
-      }
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription(errorMessage).setColor(0xe74c3c)] });
-    }
-  },
-
   s: prefixCommands.stats = async (msg, args) => {
     let user = msg.mentions.users.first() || msg.author;
     const member = msg.guild.members.cache.get(user.id);
@@ -1266,23 +1220,32 @@ prefixCommands = {
     return msg.reply({ embeds: [embed] });
   },
 
-  activity: prefixCommands.activity = async (msg, args) => {
-    const allStats = await getAllUserStats(msg.guild.id);
-    // For each user, get last message time (skip for now for speed)
-    const leaderboard = allStats.map(s => ({
-      user_id: s.user_id,
-      score: computeActivityScore(s, null),
-      messages: s.message_count || 0,
-      vc: s.vc_seconds || 0,
-      chat: s.chat_seconds || 0
-    })).sort((a, b) => b.score - a.score).slice(0, 10);
-    const lines = await Promise.all(leaderboard.map(async (u, i) => {
-      return `**${i+1}.** <@${u.user_id}> — **${u.score}/10** (Msgs: ${u.messages}, VC: ${Math.floor(u.vc/3600)}h, Chat: ${Math.floor(u.chat/3600)}h)`;
-    }));
+  s: async (msg, args) => {
+    const user = msg.mentions.users.first() || msg.author;
+    const member = msg.guild.members.cache.get(user.id);
+    const stats = await getUserStats(msg.guild.id, user.id);
+    // Get messages today (optional, fallback to total if not available)
+    let messagesToday = 0;
+    try { messagesToday = await getMessagesToday(msg.guild.id, user.id); } catch {}
+    // Find last message timestamp (from modlogs or user cache)
+    let lastMsgTs = null;
+    if (member && member.lastMessage) lastMsgTs = member.lastMessage.createdTimestamp;
+    // Compute activity score
+    const score = computeActivityScore(stats, lastMsgTs);
     const embed = new EmbedBuilder()
-      .setTitle('Server Activity Leaderboard')
-      .setDescription(lines.join('\n'))
-      .setColor(0x2ecc71)
+      .setTitle(`Stats for ${user.tag}`)
+      .setThumbnail(user.displayAvatarURL({ size: 256 }))
+      .addFields(
+        { name: 'Total Messages', value: (stats?.message_count || 0).toLocaleString(), inline: true },
+        { name: 'Messages Today', value: messagesToday.toLocaleString(), inline: true },
+        { name: 'Voice Time', value: stats ? `${Math.floor((stats.vc_seconds||0)/3600)}h ${(Math.floor((stats.vc_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Chat Time', value: stats ? `${Math.floor((stats.chat_seconds||0)/3600)}h ${(Math.floor((stats.chat_seconds||0)%3600/60))}m` : '0h', inline: true },
+        { name: 'Activity Score', value: `${score}/10`, inline: true },
+        { name: 'User ID', value: user.id, inline: true },
+        { name: 'Joined', value: member ? `<t:${Math.floor(member.joinedTimestamp/1000)}:R>` : 'Unknown', inline: true },
+        { name: 'Roles', value: member ? member.roles.cache.map(r => r.name).join(', ') : 'None', inline: false }
+      )
+      .setColor(0x3498db)
       .setFooter({ text: 'Activity score is based on messages, voice, chat, and recency.' });
     return msg.reply({ embeds: [embed] });
   },
@@ -3188,7 +3151,6 @@ async function getMessagesToday(guildId, userId) {
 }
 // Helper: compute activity score
 function computeActivityScore(stats, recentMsgTs, options = {}) {
-  // Max possible: 3+2.5+2+1+1+2+0.5 = 10 (adjust if you change weights)
   let score = 0;
   if (!stats) return 0;
   // 1. Messages (logarithmic)
@@ -3200,11 +3162,18 @@ function computeActivityScore(stats, recentMsgTs, options = {}) {
   // 3. Chat (logarithmic, hours)
   const chatH = (stats.chat_seconds || 0) / 3600;
   score += Math.min(2, Math.log10(chatH + 1));
-  // 4. Recency
-  if (recentMsgTs) {
+  // 4. Recency (stronger decay)
     const now = Date.now();
-    if (now - recentMsgTs < 24*3600*1000) score += 1.0;
-    else if (now - recentMsgTs < 7*24*3600*1000) score += 0.5;
+  let lastActive = recentMsgTs;
+  if (!lastActive && stats.last_active) lastActive = stats.last_active;
+  if (lastActive) {
+    const daysAgo = (now - lastActive) / (1000 * 60 * 60 * 24);
+    if (daysAgo < 1) score += 1.0;
+    else if (daysAgo < 7) score += 0.5;
+    else if (daysAgo < 30) score -= 1.0;
+    else score -= 5.0; // Strong decay for 30+ days inactivity
+  } else {
+    score -= 5.0; // No activity timestamp, treat as inactive
   }
   // 5. Streak (requires stats.streak_days)
   if (stats.streak_days >= 7) score += 1.0;
@@ -3269,48 +3238,19 @@ prefixCommands.activity = async (msg, args) => {
   return msg.reply({ embeds: [embed] });
 };
 
-// Helper: get start of current week (UTC, Monday)
-function getWeekStart() {
-  const now = new Date();
-  const day = now.getUTCDay();
-  const diff = (day === 0 ? -6 : 1) - day; // Monday is 1
-  now.setUTCDate(now.getUTCDate() + diff);
-  now.setUTCHours(0,0,0,0);
-  return now.getTime();
-}
-// Helper: reset user stats if new week
-async function resetUserStatsIfNeeded(guildId, userId) {
-  const { data, error } = await supabase.from('user_stats').select('last_reset').eq('guild_id', guildId).eq('user_id', userId).single();
-  const weekStart = getWeekStart();
-  if (!data || !data.last_reset || data.last_reset < weekStart) {
-    // Reset stats
-    await supabase.from('user_stats').upsert({
-      guild_id: guildId,
-      user_id: userId,
-      message_count: 0,
-      vc_seconds: 0,
-      chat_seconds: 0,
-      streak_days: 0,
-      infractions: 0,
-      last_reset: weekStart
-    }, { onConflict: ['guild_id', 'user_id'] });
+// Refactor ;a command for requested behavior
+prefixCommands.a = async (msg, args) => {
+  if (args.length === 0) {
+    // ;a for self
+    return prefixCommands.s(msg, []);
   }
-}
-// Patch getUserStats/getAllUserStats to reset if needed
-async function getUserStats(guildId, userId) {
-  await resetUserStatsIfNeeded(guildId, userId);
-  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId).eq('user_id', userId).single();
-  if (error) return null;
-  return data;
-}
-async function getAllUserStats(guildId) {
-  const { data, error } = await supabase.from('user_stats').select('*').eq('guild_id', guildId);
-  if (error) return [];
-  const weekStart = getWeekStart();
-  // Reset all users if needed
-  await Promise.all((data||[]).map(u => (!u.last_reset || u.last_reset < weekStart) ? resetUserStatsIfNeeded(guildId, u.user_id) : null));
-  return (await supabase.from('user_stats').select('*').eq('guild_id', guildId)).data || [];
-}
+  if (args[0].toLowerCase() === 'lb' || args[0].toLowerCase() === 'leaderboard') {
+    // ;a lb or ;a leaderboard for leaderboard
+    return prefixCommands.activity(msg, []);
+  }
+  // ;a @user for others
+  return prefixCommands.s(msg, args);
+};
 
 module.exports = {
   name: 'utility',

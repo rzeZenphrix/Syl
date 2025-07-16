@@ -49,7 +49,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildPresences
+    GatewayIntentBits.GuildPresences,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -336,6 +337,39 @@ const rest = new REST({ version: '10' }).setToken(token);
   } catch (err) {
     console.error('Error registering slash commands:', err);
   }
+  // Initialize userVoiceStates for users already in voice
+  for (const guild of client.guilds.cache.values()) {
+    for (const member of guild.members.cache.values()) {
+      if (member.voice && member.voice.channelId) {
+        const key = `${guild.id}-${member.id}`;
+        if (!userVoiceStates.has(key)) {
+          userVoiceStates.set(key, Date.now());
+        }
+      }
+    }
+  }
+  // Periodically flush in-progress voice sessions to DB
+  setInterval(async () => {
+    for (const [key, joinTime] of userVoiceStates.entries()) {
+      const [guildId, userId] = key.split('-');
+      const duration = Math.floor((Date.now() - joinTime) / 1000);
+      // Update user_stats
+      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+      if (!data) {
+        await supabase.from('user_stats').insert({
+          guild_id: guildId,
+          user_id: userId,
+          vc_seconds: duration
+        });
+      } else {
+        await supabase.from('user_stats').update({
+          vc_seconds: (data.vc_seconds || 0) + duration
+        }).eq('guild_id', guildId).eq('user_id', userId);
+      }
+      // Reset join time
+      userVoiceStates.set(key, Date.now());
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
 });
 
 // --- VC and Chat Uptime Tracking ---
@@ -397,6 +431,17 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
 
 client.on('messageCreate', async (msg) => {
   if (msg.author.bot || !msg.guild) return;
+
+  // --- SPY LOGIC (move to top) ---
+  global.spyUsers = global.spyUsers || {};
+  if (global.spyUsers[msg.guild.id] && global.spyUsers[msg.guild.id].has(msg.author.id)) {
+    const { logToModLog } = require('./src/cogs/utility');
+    let description = `User: <@${msg.author.id}>\nChannel: <#${msg.channel.id}>\nContent: ${msg.content || '[No text content]'}\nTimestamp: <t:${Math.floor(msg.createdTimestamp/1000)}:R>`;
+    if (msg.attachments.size > 0) {
+      description += `\nAttachments: ${[...msg.attachments.values()].map(a => a.url).join(', ')}`;
+    }
+    await logToModLog(msg, 'Spy Log', description);
+  }
   
   // Check for raid protection (message spam)
   try {
@@ -442,6 +487,16 @@ client.on('messageCreate', async (msg) => {
     }).eq('guild_id', msg.guild.id).eq('user_id', msg.author.id);
   }
   
+  // Log every message to modlogs for accurate 'messages today'
+  await supabase.from('modlogs').insert({
+    guild_id: msg.guild.id,
+    user_id: msg.author.id,
+    action: 'message',
+    moderator_id: msg.author.id,
+    reason: null,
+    date: Date.now()
+  });
+  
   // Get custom prefix for this guild
   let guildPrefixes = prefixes;
   try {
@@ -486,18 +541,6 @@ client.on('messageCreate', async (msg) => {
     console.error('Command error:', e.message || JSON.stringify(e));
     await msg.reply({ embeds: [new EmbedBuilder().setTitle('Error').setDescription('An error occurred while processing the command.').setColor(0xe74c3c)] });
     sendErrorToLogChannel(msg.guild, 'command', e.message || JSON.stringify(e));
-  }
-
-  // Spy logic
-  global.spyUsers = global.spyUsers || {};
-  if (global.spyUsers[msg.guild.id] && global.spyUsers[msg.guild.id].has(msg.author.id)) {
-    // Log to mod log channel
-    const { logToModLog } = require('./src/cogs/utility');
-    let description = `User: <@${msg.author.id}>\nChannel: <#${msg.channel.id}>\nContent: ${msg.content || '[No text content]'}\nTimestamp: <t:${Math.floor(msg.createdTimestamp/1000)}:R>`;
-    if (msg.attachments.size > 0) {
-      description += `\nAttachments: ${[...msg.attachments.values()].map(a => a.url).join(', ')}`;
-    }
-    await logToModLog(msg, 'Spy Log', description);
   }
 });
 
@@ -759,10 +802,13 @@ client.on('messageDelete', async (message) => {
   if (!global.sniperEnabled[message.guild.id]) return;
   if (!global.snipedMessages[message.guild.id]) global.snipedMessages[message.guild.id] = {};
   if (!global.snipedMessages[message.guild.id][message.channel.id]) global.snipedMessages[message.guild.id][message.channel.id] = [];
-  // Store message details
+  // Store message details (add author_id and channel_name)
   global.snipedMessages[message.guild.id][message.channel.id].push({
     content: message.content || '[No text content]',
     author: message.author ? `${message.author.tag} (${message.author.id})` : 'Unknown',
+    author_id: message.author?.id,
+    channel_id: message.channel.id,
+    channel_name: message.channel.name,
     timestamp: message.createdTimestamp,
     attachments: message.attachments?.map(a => a.url) || [],
     embeds: message.embeds || []
