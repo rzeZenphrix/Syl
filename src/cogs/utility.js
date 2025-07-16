@@ -1119,25 +1119,32 @@ prefixCommands = {
       '',
     ].join('\n');
 
-    if (args.length === 0) {
+    // If no arguments, DM the full help/guide
+    if (!args || args.length === 0) {
+      // Build the full help text
+      let helpText = `${whatsNew}\n\n`;
+      helpText += `I have **${totalCount} commands** available.\n`;
+      helpText += `**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n`;
+      helpText += '\n**Command Categories:**\n';
       const categories = getAllCommandsByCategory();
-      const embed = new EmbedBuilder()
-        .setTitle('🤖 Asylum Bot Help')
-        .setDescription(`${whatsNew}\nI have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
-        .addFields(
-          categories.map(cat => ({
-            name: cat.category,
-            value: `${cat.commands.length} commands available`,
-            inline: true
-          }))
-        )
-        .addFields(
-          { name: 'Quick Start', value: 'Use `/setup @adminrole` to configure the bot for your server.', inline: false },
-          { name: 'Support', value: 'For support, contact the bot owner or use `/feedback` to submit feedback.', inline: false }
-        )
-        .setColor(0x3498db)
-        .setTimestamp();
-      return msg.reply({ embeds: [embed] });
+      for (const cat of categories) {
+        helpText += `\n__${cat.category}__\n`;
+        for (const cmd of cat.commands) {
+          const desc = commandDescriptions[cmd] || 'No description available';
+          helpText += `• **${cmd}** — ${desc}\n`;
+        }
+      }
+      helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
+      helpText += 'Web dashboard: Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` to view/search/download logs.';
+      try {
+        await msg.author.send(helpText);
+        if (msg.guild) {
+          await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
+        }
+      } catch (e) {
+        await msg.reply('❌ I couldn\'t DM you the help guide. Please check your DM privacy settings.');
+      }
+      return;
     }
     
     const category = args[0].toLowerCase();
@@ -2702,27 +2709,33 @@ prefixCommands.help = async (msg, args) => {
     '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide, web dashboard for logs',
     '',
   ].join('\n');
-
-  if (args.length === 0) {
+  
+  // If no arguments, DM the full help/guide
+  if (!args || args.length === 0) {
+    // Build the full help text
+    let helpText = `${whatsNew}\n\n`;
+    helpText += `I have **${totalCount} commands** available.\n`;
+    helpText += `**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n`;
+    helpText += '\n**Command Categories:**\n';
     const categories = getAllCommandsByCategory();
-    const embed = new EmbedBuilder()
-      .setTitle('🤖 Asylum Bot Help')
-      .setDescription(`${whatsNew}\nI have **${totalCount} commands** available.\n\n**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n\nUse \`&help <category>\` to see commands in a specific category.`)
-      .addFields(
-        categories.map(cat => ({
-          name: cat.category,
-          value: `${cat.commands.length} commands available`,
-          inline: true
-        }))
-      )
-      .addFields(
-        { name: 'Quick Start', value: 'Use `/setup @adminrole` to configure the bot for your server.', inline: false },
-        { name: 'Support', value: 'For support, contact the bot owner or use `/feedback` to submit feedback.', inline: false }
-      )
-      .setColor(0x3498db)
-      .setTimestamp();
-    
-    return msg.reply({ embeds: [embed] });
+    for (const cat of categories) {
+      helpText += `\n__${cat.category}__\n`;
+      for (const cmd of cat.commands) {
+        const desc = commandDescriptions[cmd] || 'No description available';
+        helpText += `• **${cmd}** — ${desc}\n`;
+      }
+    }
+    helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
+    helpText += 'Web dashboard: Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` to view/search/download logs.';
+    try {
+      await msg.author.send(helpText);
+      if (msg.guild) {
+        await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
+      }
+    } catch (e) {
+      await msg.reply('❌ I couldn\'t DM you the help guide. Please check your DM privacy settings.');
+    }
+    return;
   }
   
   const category = args[0].toLowerCase();
@@ -3257,7 +3270,7 @@ async function getMessagesToday(guildId, userId) {
 function computeActivityScore(stats, recentMsgTs, options = {}) {
   // Use persistent stats only
   if (!stats) return 0;
-  const now = Date.now();
+    const now = Date.now();
   // Score: weighted sum of message count, voice time, chat time, with decay for inactivity
   let score = 0;
   score += (stats.message_count || 0) * 1;
@@ -3400,4 +3413,6 @@ module.exports = {
   buttonHandlers,
   modalHandlers,
   logToModLog,
+  monitorWatchwords,
+  monitorBlacklistedWords,
 }; 
