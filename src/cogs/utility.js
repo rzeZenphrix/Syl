@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } = require('discord.js');
 const { supabase } = require('../utils/supabase');
 const os = require('os');
 const fs = require('fs');
@@ -2716,88 +2716,122 @@ async function sendLongDM(user, text) {
   }
 }
 
-// Update the help command to show accurate command count
-prefixCommands.help = async (msg, args) => {
-  // Hardcode the command counts as requested
-  const prefixCount = 89;
-  const slashCount = 59;
-  const totalCount = prefixCount + slashCount;
-  const whatsNew = [
-    '**What\'s New:**',
-    '- ⭐ **Starboard System**: Multi-emoji, leaderboards, jump links, attachments, `/starboard-set`, `/starboard-leaderboard`',
-    '- 📝 **Advanced Logging**: All mod, config, watchword, blacklist, snipe, and server actions are logged',
-    '- 👑 **Co-Owner System**: Up to 2 co-owners per server (`/co-owners`, `;add-co-owner`)',
-    '- 💾 **Backup & Restore**: Channel/role snapshot, `/raid restore`, `;raid restore`',
-    '- 🛡️ **Enhanced Raid/Anti-Nuke**: Early detection, lockdown, safe role, audit logging, auto-ban/whitelist',
-    '- 🎭 **Emoji Stealing**: `;steal <emoji> [name]`, `/steal emoji:<emoji> name:<name>`',
-    '- 🏆 **Leaderboards**: Per-starboard and global, `/starboard-leaderboard`',
-    '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide',
-    ''
-  ].join('\n');
-
-  // If no arguments, DM the full help/guide
-  if (!args || args.length === 0) {
-    // Build the full help text with improved formatting
-    let helpText = `${whatsNew}\n`;
-    helpText += `**Total Commands:** ${totalCount}\n`;
-    helpText += `• **Prefix Commands:** ${prefixCount}\n`;
-    helpText += `• **Slash Commands:** ${slashCount}\n`;
-    helpText += '\n';
-    helpText += '=== **Command Categories** ===\n';
-    const categories = getAllCommandsByCategory();
-    for (const cat of categories) {
-      helpText += `\n__${cat.category}__\n`;
-      for (const cmd of cat.commands) {
-        const desc = commandDescriptions[cmd] || 'No description available';
-        helpText += `• **${cmd}** — ${desc.split(' Usage:')[0]}\n`;
-      }
-    }
-    helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
-    try {
-      await sendLongDM(msg.author, helpText);
-      if (msg.guild) {
-        await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
-      }
-    } catch (e) {
-      let reason = 'Unknown error.';
-      if (e.message && e.message.includes('Cannot send messages to this user')) {
-        reason = 'I cannot DM you. Please check your privacy settings, make sure you share a server with the bot, and that you have not blocked the bot.';
-      } else if (e.code) {
-        reason = `Discord error code: ${e.code}.`;
-      }
-      await msg.reply({
-        content: `❌ Failed to DM you the help guide. ${reason}\nIf your DMs are open and you still have issues, please contact the bot owner or check server privacy settings.`,
-        allowedMentions: { repliedUser: false }
-      });
-    }
-    return;
-  }
-  
-  const category = args[0].toLowerCase();
-  const categories = getAllCommandsByCategory();
-  const selectedCategory = categories.find(cat => cat.category.toLowerCase().includes(category) || cat.category.toLowerCase().replace(/[^\w]/g, '').includes(category));
-  
-  if (!selectedCategory) {
+// Helper to build paginated help embeds
+function buildHelpEmbeds(allCmds, pageSize = 8) {
+  const totalPages = Math.ceil(allCmds.length / pageSize);
+  const embeds = [];
+  for (let page = 0; page < totalPages; page++) {
+    const cmdsOnPage = allCmds.slice(page * pageSize, (page + 1) * pageSize);
     const embed = new EmbedBuilder()
-      .setTitle('Category Not Found')
-      .setDescription(`Available categories:\n${categories.map(cat => `• ${cat.category}`).join('\n')}`)
-      .setColor(0xe74c3c);
-    return msg.reply({ embeds: [embed] });
+      .setTitle('Help Guide')
+      .setColor(0x7289da)
+      .setFooter({ text: `Page ${page + 1} of ${totalPages}` })
+      .setTimestamp();
+    if (page === 0) {
+      embed.setDescription(
+        '**Welcome to the Asylum Bot Help Guide!**\n' +
+        'Below are all available commands, with descriptions and usage.\n' +
+        `**Prefix Commands:** 89\n**Slash Commands:** 59\n**Total:** 148\n` +
+        '\nUse the navigation buttons below to view all commands.'
+      );
+    }
+    for (const cmd of cmdsOnPage) {
+      let value = cmd.desc;
+      const usageMatch = cmd.desc.match(/Usage: `([^`]+)`/);
+      if (usageMatch) {
+        value = value.replace(/Usage: `([^`]+)`/, '');
+        value += `\n**Usage:** \`${usageMatch[1]}\``;
+      }
+      embed.addFields({ name: `• ${cmd.name}`, value: value.trim().slice(0, 1024) });
+    }
+    embeds.push(embed);
   }
-  
-  const commandList = selectedCategory.commands.map(cmd => {
-    const description = commandDescriptions[cmd] || 'No description available';
-    return `**${cmd}** - ${description}`;
-  }).join('\n');
-  
-  const embed = new EmbedBuilder()
-    .setTitle(`${selectedCategory.category} Commands`)
-    .setDescription(commandList)
-    .setFooter({ text: `${selectedCategory.commands.length} commands in this category` })
-    .setColor(0x3498db)
-    .setTimestamp();
-  
-  return msg.reply({ embeds: [embed] });
+  return embeds;
+}
+
+// Helper to collect all commands (prefix + slash)
+function getAllDetailedCommands() {
+  const allCmds = [];
+  // Prefix commands
+  for (const [name, handler] of Object.entries(prefixCommands)) {
+    if (name === 'help') continue;
+    const desc = commandDescriptions[name] || 'No description available';
+    allCmds.push({ name: `;${name}`, desc });
+  }
+  // Slash commands
+  for (const slash of slashCommands) {
+    const name = slash.name;
+    // Try to get description from slash definition
+    let desc = slash.description || commandDescriptions[name] || 'No description available';
+    allCmds.push({ name: `/${name}`, desc });
+  }
+  // Sort alphabetically
+  allCmds.sort((a, b) => a.name.localeCompare(b.name));
+  return allCmds;
+}
+
+// Helper to send paginated help DM
+async function sendPaginatedHelpDM(user) {
+  const allCmds = getAllDetailedCommands();
+  const embeds = buildHelpEmbeds(allCmds, 8);
+  // Send first page with navigation buttons
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(true),
+    new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(embeds.length <= 1)
+  );
+  const dm = await user.send({ embeds: [embeds[0]], components: [row] });
+  // Store message id and user id for navigation
+  if (!global.helpDMs) global.helpDMs = {};
+  global.helpDMs[dm.id] = { userId: user.id, page: 0, embeds };
+}
+
+// Overwrite the help command
+prefixCommands.help = async (msg, args) => {
+  try {
+    await sendPaginatedHelpDM(msg.author);
+    if (msg.guild) {
+      await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
+    }
+  } catch (e) {
+    let reason = 'Unknown error.';
+    if (e.message && e.message.includes('Cannot send messages to this user')) {
+      reason = 'I cannot DM you. Please check your privacy settings, make sure you share a server with the bot, and that you have not blocked the bot.';
+    } else if (e.code) {
+      reason = `Discord error code: ${e.code}.`;
+    }
+    await msg.reply({
+      content: `❌ Failed to DM you the help guide. ${reason}\nIf your DMs are open and you still have issues, please contact the bot owner or check server privacy settings.`,
+      allowedMentions: { repliedUser: false }
+    });
+  }
+};
+
+// Add button handlers for help navigation
+buttonHandlers.help_prev = async (interaction) => {
+  const dmId = interaction.message.id;
+  if (!global.helpDMs || !global.helpDMs[dmId]) return;
+  let { userId, page, embeds } = global.helpDMs[dmId];
+  if (interaction.user.id !== userId) return interaction.reply({ content: 'Only the original requester can use these buttons.', ephemeral: true });
+  page = Math.max(0, page - 1);
+  global.helpDMs[dmId].page = page;
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+    new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= embeds.length)
+  );
+  await interaction.update({ embeds: [embeds[page]], components: [row] });
+};
+buttonHandlers.help_next = async (interaction) => {
+  const dmId = interaction.message.id;
+  if (!global.helpDMs || !global.helpDMs[dmId]) return;
+  let { userId, page, embeds } = global.helpDMs[dmId];
+  if (interaction.user.id !== userId) return interaction.reply({ content: 'Only the original requester can use these buttons.', ephemeral: true });
+  page = Math.min(embeds.length - 1, page + 1);
+  global.helpDMs[dmId].page = page;
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('help_prev').setLabel('Prev').setStyle(ButtonStyle.Secondary).setDisabled(page === 0),
+    new ButtonBuilder().setCustomId('help_next').setLabel('Next').setStyle(ButtonStyle.Primary).setDisabled(page + 1 >= embeds.length)
+  );
+  await interaction.update({ embeds: [embeds[page]], components: [row] });
 };
 
 // --- Update watchword and blacklistword prefix commands to log actions ---
@@ -3490,6 +3524,76 @@ function detailedErrorMessage(context, error, traceId) {
 
 // Export detailedErrorMessage for use in other cogs
 module.exports.detailedErrorMessage = detailedErrorMessage;
+
+// --- BOOST SETUP SLASH COMMAND & MODAL (Step 1: General Settings) ---
+
+// Add /boostsetup to slashCommands
+if (Array.isArray(module.exports.slashCommands)) {
+  module.exports.slashCommands.push(
+    new SlashCommandBuilder()
+      .setName('boostsetup')
+      .setDescription('Set up a custom server boost message')
+  );
+}
+
+// Add boostsetup handler
+if (module.exports.slashHandlers) {
+  module.exports.slashHandlers.boostsetup = async (interaction) => {
+    // Permission check: allow anyone unless disabled in server (TODO: add check later)
+    // Step 1: Show General Settings modal
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_general')
+      .setTitle('Boost Message Setup: General Settings');
+
+    // Channel selector (text input for now, dropdown in dashboard)
+    const channelInput = new TextInputBuilder()
+      .setCustomId('boost_channel')
+      .setLabel('Channel ID or #channel mention')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Paste channel ID or #channel')
+      .setRequired(true);
+
+    // Min. Boost Tier (1, 2, 3)
+    const tierInput = new TextInputBuilder()
+      .setCustomId('boost_min_tier')
+      .setLabel('Minimum Boost Tier (1, 2, or 3)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('1 (default), 2, or 3')
+      .setRequired(true);
+
+    // Rate Limit (cooldown in seconds)
+    const rateLimitInput = new TextInputBuilder()
+      .setCustomId('boost_rate_limit')
+      .setLabel('Rate Limit (seconds between messages)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. 60 for 1 minute')
+      .setRequired(true);
+
+    // Send as Embed? (yes/no)
+    const embedInput = new TextInputBuilder()
+      .setCustomId('boost_send_embed')
+      .setLabel('Send as Embed? (yes/no)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('yes or no')
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(channelInput),
+      new ActionRowBuilder().addComponents(tierInput),
+      new ActionRowBuilder().addComponents(rateLimitInput),
+      new ActionRowBuilder().addComponents(embedInput)
+    );
+    await interaction.showModal(modal);
+  };
+}
+
+// Modal handler for boostsetup_general (scaffold only)
+if (module.exports.modalHandlers) {
+  module.exports.modalHandlers.boostsetup_general = async (interaction) => {
+    // TODO: Save modal values and proceed to next step/modal
+    await interaction.reply({ content: 'General settings received! (Next: Embed Style)', ephemeral: true });
+  };
+}
 
 module.exports = {
   name: 'utility',
