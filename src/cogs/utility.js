@@ -1127,9 +1127,9 @@ prefixCommands = {
       helpText += `**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n`;
       helpText += '\n**Command Categories:**\n';
       const categories = getAllCommandsByCategory();
-      for (const cat of categories) {
+    for (const cat of categories) {
         helpText += `\n__${cat.category}__\n`;
-        for (const cmd of cat.commands) {
+      for (const cmd of cat.commands) {
           const desc = commandDescriptions[cmd] || 'No description available';
           helpText += `• **${cmd}** — ${desc}\n`;
         }
@@ -3429,10 +3429,10 @@ prefixCommands.trace = async (msg, args) => {
     const lines = fs.readFileSync(logFile, 'utf8').split('\n');
     const matches = lines.filter(line => line.includes(traceId));
     if (matches.length === 0) {
-      return msg.reply(`No log entries found for trace ID: \\`${traceId}\\``);
+      return msg.reply(`No log entries found for trace ID: \`${traceId}\``);
     }
     const output = matches.slice(-5).join('\n');
-    await msg.author.send(`**Error log entries for trace ID \\`${traceId}\\`:**\n\n\`\`\`\n${output}\n\`\`\``)
+    await msg.author.send(`**Error log entries for trace ID \`${traceId}\`:**\n\n\`\`\`\n${output}\n\`\`\``)
       .catch(e => msg.reply('Could not DM you the trace log. Please check your privacy settings.'));
     if (msg.channel.type !== 1) {
       await msg.reply('Sent you the error log in DMs.');
