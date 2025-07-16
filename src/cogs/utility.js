@@ -3527,9 +3527,9 @@ module.exports.detailedErrorMessage = detailedErrorMessage;
 
 // --- BOOST SETUP SLASH COMMAND & MODAL (Step 1: General Settings) ---
 
-// Add /boostsetup to slashCommands
-if (Array.isArray(module.exports.slashCommands)) {
-  module.exports.slashCommands.push(
+// Ensure /boostsetup is always present in slashCommands
+if (!slashCommands.find(cmd => cmd.name === 'boostsetup')) {
+  slashCommands.push(
     new SlashCommandBuilder()
       .setName('boostsetup')
       .setDescription('Set up a custom server boost message')
@@ -3537,127 +3537,123 @@ if (Array.isArray(module.exports.slashCommands)) {
 }
 
 // Add boostsetup handler
-if (module.exports.slashHandlers) {
-  module.exports.slashHandlers.boostsetup = async (interaction) => {
-    try {
-      // Permission check: allow anyone unless disabled in server (TODO: add check later)
-      // Step 1: Show General Settings modal
-      const modal = new ModalBuilder()
-        .setCustomId('boostsetup_general')
-        .setTitle('Boost Message Setup: General Settings');
+slashHandlers.boostsetup = async (interaction) => {
+  try {
+    // Permission check: allow anyone unless disabled in server (TODO: add check later)
+    // Step 1: Show General Settings modal
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_general')
+      .setTitle('Boost Message Setup: General Settings');
 
-      // Channel selector (text input for now, dropdown in dashboard)
-      const channelInput = new TextInputBuilder()
-        .setCustomId('boost_channel')
-        .setLabel('Channel ID or #channel mention')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Paste channel ID or #channel')
-        .setRequired(true);
+    // Channel selector (text input for now, dropdown in dashboard)
+    const channelInput = new TextInputBuilder()
+      .setCustomId('boost_channel')
+      .setLabel('Channel ID or #channel mention')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Paste channel ID or #channel')
+      .setRequired(true);
 
-      // Min. Boost Tier (1, 2, 3)
-      const tierInput = new TextInputBuilder()
-        .setCustomId('boost_min_tier')
-        .setLabel('Minimum Boost Tier (1, 2, or 3)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('1 (default), 2, or 3')
-        .setRequired(true);
+    // Min. Boost Tier (1, 2, 3)
+    const tierInput = new TextInputBuilder()
+      .setCustomId('boost_min_tier')
+      .setLabel('Minimum Boost Tier (1, 2, or 3)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('1 (default), 2, or 3')
+      .setRequired(true);
 
-      // Rate Limit (cooldown in seconds)
-      const rateLimitInput = new TextInputBuilder()
-        .setCustomId('boost_rate_limit')
-        .setLabel('Rate Limit (seconds between messages)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('e.g. 60 for 1 minute')
-        .setRequired(true);
+    // Rate Limit (cooldown in seconds)
+    const rateLimitInput = new TextInputBuilder()
+      .setCustomId('boost_rate_limit')
+      .setLabel('Rate Limit (seconds between messages)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('e.g. 60 for 1 minute')
+      .setRequired(true);
 
-      // Send as Embed? (yes/no)
-      const embedInput = new TextInputBuilder()
-        .setCustomId('boost_send_embed')
-        .setLabel('Send as Embed? (yes/no)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('yes or no')
-        .setRequired(true);
+    // Send as Embed? (yes/no)
+    const embedInput = new TextInputBuilder()
+      .setCustomId('boost_send_embed')
+      .setLabel('Send as Embed? (yes/no)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('yes or no')
+      .setRequired(true);
 
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(channelInput),
-        new ActionRowBuilder().addComponents(tierInput),
-        new ActionRowBuilder().addComponents(rateLimitInput),
-        new ActionRowBuilder().addComponents(embedInput)
-      );
-      await interaction.showModal(modal);
-    } catch (err) {
-      console.error('Error in /boostsetup:', err);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'An error occurred while starting boost setup. Please try again or contact the bot owner.', ephemeral: true });
-      }
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(channelInput),
+      new ActionRowBuilder().addComponents(tierInput),
+      new ActionRowBuilder().addComponents(rateLimitInput),
+      new ActionRowBuilder().addComponents(embedInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in /boostsetup:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while starting boost setup. Please try again or contact the bot owner.', ephemeral: true });
     }
-  };
-}
+  }
+};
 
 // Modal handler for boostsetup_general (step 1)
-if (module.exports.modalHandlers) {
-  module.exports.modalHandlers.boostsetup_general = async (interaction) => {
-    try {
-      // Save modal values in a temporary store (global, keyed by user ID)
-      const userId = interaction.user.id;
-      global.boostSetup = global.boostSetup || {};
-      global.boostSetup[userId] = global.boostSetup[userId] || {};
-      global.boostSetup[userId].general = {
-        channel: interaction.fields.getTextInputValue('boost_channel'),
-        minTier: interaction.fields.getTextInputValue('boost_min_tier'),
-        rateLimit: interaction.fields.getTextInputValue('boost_rate_limit'),
-        sendEmbed: interaction.fields.getTextInputValue('boost_send_embed'),
-      };
-      // Show next modal: Embed Style
-      const modal = new ModalBuilder()
-        .setCustomId('boostsetup_embed')
-        .setTitle('Boost Message Setup: Embed Style');
-      const colorInput = new TextInputBuilder()
-        .setCustomId('boost_embed_color')
-        .setLabel('Embed Color (HEX)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('#5865F2')
-        .setRequired(false);
-      const borderInput = new TextInputBuilder()
-        .setCustomId('boost_embed_border')
-        .setLabel('Embed Border? (yes/no)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('no')
-        .setRequired(false);
-      const borderWidthInput = new TextInputBuilder()
-        .setCustomId('boost_embed_border_width')
-        .setLabel('Border Width (px)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('2')
-        .setRequired(false);
-      const fontFamilyInput = new TextInputBuilder()
-        .setCustomId('boost_embed_font_family')
-        .setLabel('Font Family')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Default')
-        .setRequired(false);
-      const fontSizeInput = new TextInputBuilder()
-        .setCustomId('boost_embed_font_size')
-        .setLabel('Font Size')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder('Default')
-        .setRequired(false);
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(colorInput),
-        new ActionRowBuilder().addComponents(borderInput),
-        new ActionRowBuilder().addComponents(borderWidthInput),
-        new ActionRowBuilder().addComponents(fontFamilyInput),
-        new ActionRowBuilder().addComponents(fontSizeInput)
-      );
-      await interaction.showModal(modal);
-    } catch (err) {
-      console.error('Error in boostsetup_general modal handler:', err);
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
-      }
+modalHandlers.boostsetup_general = async (interaction) => {
+  try {
+    // Save modal values in a temporary store (global, keyed by user ID)
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].general = {
+      channel: interaction.fields.getTextInputValue('boost_channel'),
+      minTier: interaction.fields.getTextInputValue('boost_min_tier'),
+      rateLimit: interaction.fields.getTextInputValue('boost_rate_limit'),
+      sendEmbed: interaction.fields.getTextInputValue('boost_send_embed'),
+    };
+    // Show next modal: Embed Style (placeholder for next step)
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_embed')
+      .setTitle('Boost Message Setup: Embed Style');
+    const colorInput = new TextInputBuilder()
+      .setCustomId('boost_embed_color')
+      .setLabel('Embed Color (HEX)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('#5865F2')
+      .setRequired(false);
+    const borderInput = new TextInputBuilder()
+      .setCustomId('boost_embed_border')
+      .setLabel('Embed Border? (yes/no)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('no')
+      .setRequired(false);
+    const borderWidthInput = new TextInputBuilder()
+      .setCustomId('boost_embed_border_width')
+      .setLabel('Border Width (px)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('2')
+      .setRequired(false);
+    const fontFamilyInput = new TextInputBuilder()
+      .setCustomId('boost_embed_font_family')
+      .setLabel('Font Family')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Default')
+      .setRequired(false);
+    const fontSizeInput = new TextInputBuilder()
+      .setCustomId('boost_embed_font_size')
+      .setLabel('Font Size')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Default')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(colorInput),
+      new ActionRowBuilder().addComponents(borderInput),
+      new ActionRowBuilder().addComponents(borderWidthInput),
+      new ActionRowBuilder().addComponents(fontFamilyInput),
+      new ActionRowBuilder().addComponents(fontSizeInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_general modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
     }
-  };
-}
+  }
+};
 // ... existing code ...
 
 module.exports = {
