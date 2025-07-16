@@ -1105,7 +1105,10 @@ prefixCommands = {
   },
 
   help: async (msg, args) => {
-    const { prefixCount, slashCount, totalCount } = getCommandCount();
+    // Hardcode the command counts as requested
+    const prefixCount = 89;
+    const slashCount = 59;
+    const totalCount = prefixCount + slashCount;
     const whatsNew = [
       '**What\'s New:**',
       '- ⭐ **Starboard System**: Multi-emoji, leaderboards, jump links, attachments, `/starboard-set`, `/starboard-leaderboard`',
@@ -1115,34 +1118,44 @@ prefixCommands = {
       '- 🛡️ **Enhanced Raid/Anti-Nuke**: Early detection, lockdown, safe role, audit logging, auto-ban/whitelist',
       '- 🎭 **Emoji Stealing**: `;steal <emoji> [name]`, `/steal emoji:<emoji> name:<name>`',
       '- 🏆 **Leaderboards**: Per-starboard and global, `/starboard-leaderboard`',
-      '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide, web dashboard for logs',
-      '',
+      '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide',
+      ''
     ].join('\n');
 
     // If no arguments, DM the full help/guide
     if (!args || args.length === 0) {
-      // Build the full help text
-      let helpText = `${whatsNew}\n\n`;
-      helpText += `I have **${totalCount} commands** available.\n`;
-      helpText += `**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n`;
-      helpText += '\n**Command Categories:**\n';
+      // Build the full help text with improved formatting
+      let helpText = `${whatsNew}\n`;
+      helpText += `**Total Commands:** ${totalCount}\n`;
+      helpText += `• **Prefix Commands:** ${prefixCount}\n`;
+      helpText += `• **Slash Commands:** ${slashCount}\n`;
+      helpText += '\n';
+      helpText += '=== **Command Categories** ===\n';
       const categories = getAllCommandsByCategory();
-    for (const cat of categories) {
+      for (const cat of categories) {
         helpText += `\n__${cat.category}__\n`;
-      for (const cmd of cat.commands) {
+        for (const cmd of cat.commands) {
           const desc = commandDescriptions[cmd] || 'No description available';
-          helpText += `• **${cmd}** — ${desc}\n`;
+          helpText += `• **${cmd}** — ${desc.split(' Usage:')[0]}\n`;
         }
       }
       helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
-      helpText += 'Web dashboard: Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` to view/search/download logs.';
       try {
-        await msg.author.send(helpText);
+        await sendLongDM(msg.author, helpText);
         if (msg.guild) {
-          await msg.reply('📬 I\'ve sent you the full help guide in DMs!');
+          await msg.reply('�� I\'ve sent you the full help guide in DMs!');
         }
       } catch (e) {
-        await msg.reply('❌ I couldn\'t DM you the help guide. Please check your DM privacy settings.');
+        let reason = 'Unknown error.';
+        if (e.message && e.message.includes('Cannot send messages to this user')) {
+          reason = 'I cannot DM you. Please check your privacy settings, make sure you share a server with the bot, and that you have not blocked the bot.';
+        } else if (e.code) {
+          reason = `Discord error code: ${e.code}.`;
+        }
+        await msg.reply({
+          content: `❌ Failed to DM you the help guide. ${reason}\nIf your DMs are open and you still have issues, please contact the bot owner or check server privacy settings.`,
+          allowedMentions: { repliedUser: false }
+        });
       }
       return;
     }
@@ -2705,7 +2718,10 @@ async function sendLongDM(user, text) {
 
 // Update the help command to show accurate command count
 prefixCommands.help = async (msg, args) => {
-  const { prefixCount, slashCount, totalCount } = getCommandCount();
+  // Hardcode the command counts as requested
+  const prefixCount = 89;
+  const slashCount = 59;
+  const totalCount = prefixCount + slashCount;
   const whatsNew = [
     '**What\'s New:**',
     '- ⭐ **Starboard System**: Multi-emoji, leaderboards, jump links, attachments, `/starboard-set`, `/starboard-leaderboard`',
@@ -2715,27 +2731,28 @@ prefixCommands.help = async (msg, args) => {
     '- 🛡️ **Enhanced Raid/Anti-Nuke**: Early detection, lockdown, safe role, audit logging, auto-ban/whitelist',
     '- 🎭 **Emoji Stealing**: `;steal <emoji> [name]`, `/steal emoji:<emoji> name:<name>`',
     '- 🏆 **Leaderboards**: Per-starboard and global, `/starboard-leaderboard`',
-    '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide, web dashboard for logs',
-    '',
+    '- 📖 **Help & Dashboard**: `;help`/`/help` DMs full guide',
+    ''
   ].join('\n');
-  
+
   // If no arguments, DM the full help/guide
   if (!args || args.length === 0) {
-    // Build the full help text
-    let helpText = `${whatsNew}\n\n`;
-    helpText += `I have **${totalCount} commands** available.\n`;
-    helpText += `**Prefix Commands:** ${prefixCount} | **Slash Commands:** ${slashCount}\n`;
-    helpText += '\n**Command Categories:**\n';
+    // Build the full help text with improved formatting
+    let helpText = `${whatsNew}\n`;
+    helpText += `**Total Commands:** ${totalCount}\n`;
+    helpText += `• **Prefix Commands:** ${prefixCount}\n`;
+    helpText += `• **Slash Commands:** ${slashCount}\n`;
+    helpText += '\n';
+    helpText += '=== **Command Categories** ===\n';
     const categories = getAllCommandsByCategory();
     for (const cat of categories) {
       helpText += `\n__${cat.category}__\n`;
       for (const cmd of cat.commands) {
         const desc = commandDescriptions[cmd] || 'No description available';
-        helpText += `• **${cmd}** — ${desc}\n`;
+        helpText += `• **${cmd}** — ${desc.split(' Usage:')[0]}\n`;
       }
     }
     helpText += '\n---\nFor more details, use `/help` or `/man <command>`.\n';
-    helpText += 'Web dashboard: Run `node scripts/log-dashboard.js` and visit `http://localhost:4000/logs` to view/search/download logs.';
     try {
       await sendLongDM(msg.author, helpText);
       if (msg.guild) {
