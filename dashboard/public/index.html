@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYL Dashboard</title>
+  <style>
+    body {
+      background: #23272a;
+      color: #fff;
+      font-family: 'Inter', Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 600px;
+      margin: 4em auto 0 auto;
+      background: #2c2f33;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px #0008;
+      padding: 2.5em 2em 2em 2em;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 0.5em;
+      font-size: 2em;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .logout-btn {
+      position: fixed;
+      top: 1.2em;
+      right: 1.2em;
+      background: #36393f;
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      font-size: 0.98em;
+      font-weight: 500;
+      padding: 0.45em 1.1em;
+      cursor: pointer;
+      box-shadow: 0 1px 6px #0003;
+      z-index: 1000;
+      opacity: 0.85;
+      transition: background 0.18s, opacity 0.18s;
+    }
+    .logout-btn:hover {
+      background: #e74c3c;
+      opacity: 1;
+    }
+    .spinner {
+      display: inline-block;
+      width: 2.5em;
+      height: 2.5em;
+      border: 4px solid #5865f2;
+      border-top: 4px solid #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 2em auto 1.2em auto;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .guild-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.2em;
+      justify-content: center;
+      margin-top: 2em;
+    }
+    .guild-card {
+      background: #23272a;
+      border-radius: 8px;
+      box-shadow: 0 1px 6px #0004;
+      padding: 1.2em 1.2em 1em 1.2em;
+      min-width: 140px;
+      max-width: 180px;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+      text-align: center;
+      position: relative;
+      opacity: 0;
+      transform: translateY(30px) scale(0.98);
+      animation: fadeInUp 0.5s cubic-bezier(.23,1.01,.32,1) forwards;
+      animation-delay: var(--delay, 0ms);
+    }
+    @keyframes fadeInUp {
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+    .guild-card:hover {
+      background: #36393f;
+      transform: translateY(-4px) scale(1.04);
+      box-shadow: 0 4px 16px #5865f288;
+    }
+    .guild-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #444;
+      margin-bottom: 0.7em;
+      object-fit: cover;
+      border: 2px solid #5865f2;
+    }
+    .guild-name {
+      font-size: 1.08em;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 0.2em;
+      word-break: break-word;
+    }
+    .guild-btn {
+      display: block;
+      width: 100%;
+      margin-top: 1em;
+      padding: 0.7em 0;
+      border: none;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      background: #5865f2;
+      color: #fff;
+      transition: background 0.18s, transform 0.18s;
+      box-shadow: 0 1px 6px #5865f244;
+    }
+    .guild-btn:hover {
+      background: #4752c4;
+      transform: scale(1.04);
+    }
+    .invite-btn {
+      background: #43b581;
+    }
+    .invite-btn:hover {
+      background: #2ecc71;
+    }
+    .error {
+      color: #ff5555;
+      margin-top: 2em;
+    }
+    /* Modal styles */
+    .modal-bg {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(30,32,34,0.85);
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeInModalBg 0.25s;
+    }
+    @keyframes fadeInModalBg {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+    .modal {
+      background: #23272a;
+      border-radius: 10px;
+      box-shadow: 0 2px 16px #000a;
+      padding: 2em 2.5em 1.5em 2.5em;
+      min-width: 340px;
+      max-width: 95vw;
+      text-align: center;
+      animation: fadeInModal 0.3s cubic-bezier(.23,1.01,.32,1);
+    }
+    @keyframes fadeInModal {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-title {
+      font-size: 1.2em;
+      font-weight: 700;
+      margin-bottom: 0.5em;
+    }
+    .modal-guild-id {
+      color: #aaa;
+      font-size: 0.98em;
+      margin-bottom: 1.2em;
+    }
+    .modal-close {
+      margin-top: 1.2em;
+      background: #36393f;
+      color: #fff;
+      border: none;
+      border-radius: 50px;
+      font-size: 0.98em;
+      font-weight: 500;
+      padding: 0.45em 1.1em;
+      cursor: pointer;
+      opacity: 0.85;
+      transition: background 0.18s, opacity 0.18s;
+    }
+    .modal-close:hover {
+      background: #e74c3c;
+      opacity: 1;
+    }
+    .boost-label {
+      display: block;
+      margin: 1.1em 0 0.3em 0;
+      font-weight: 500;
+      text-align: left;
+    }
+    .boost-textarea {
+      width: 100%;
+      min-height: 70px;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #181a1b;
+      color: #fff;
+      font-size: 1em;
+      padding: 0.7em;
+      margin-bottom: 0.5em;
+      resize: vertical;
+      font-family: inherit;
+      transition: border 0.18s;
+    }
+    .boost-textarea:focus {
+      border: 1.5px solid #5865f2;
+      outline: none;
+    }
+    .boost-color {
+      margin: 0.5em 0 1em 0;
+      width: 40px;
+      height: 40px;
+      border: none;
+      border-radius: 8px;
+      background: #181a1b;
+      cursor: pointer;
+      box-shadow: 0 1px 6px #0003;
+      vertical-align: middle;
+    }
+    .boost-preview {
+      background: #181a1b;
+      border-radius: 8px;
+      padding: 1em 1.2em;
+      margin: 1.2em 0 0.7em 0;
+      color: #fff;
+      text-align: left;
+      border-left: 6px solid var(--boost-color, #5865f2);
+      min-height: 40px;
+      font-size: 1.05em;
+      box-shadow: 0 1px 6px #0002;
+      transition: border-color 0.18s;
+    }
+    .boost-save {
+      margin-top: 1.2em;
+      background: #5865f2;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: 600;
+      padding: 0.7em 2.2em;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.18s;
+      box-shadow: 0 1px 6px #5865f244;
+    }
+    .boost-save:hover {
+      background: #4752c4;
+      transform: scale(1.04);
+    }
+    .boost-error {
+      color: #ff5555;
+      margin-top: 0.7em;
+      font-size: 0.98em;
+    }
+    /* New styles for boost modal */
+    .boost-modal {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5em;
+      max-width: 900px;
+      width: 95%;
+    }
+    .boost-tabs {
+      display: flex;
+      gap: 0.5em;
+      margin-bottom: 1.5em;
+      border-bottom: 1px solid #444;
+    }
+    .boost-tab {
+      padding: 0.8em 1.5em;
+      border: none;
+      border-radius: 8px 8px 0 0;
+      background: #36393f;
+      color: #fff;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s, opacity 0.18s;
+      opacity: 0.7;
+    }
+    .boost-tab.active {
+      background: #23272a;
+      opacity: 1;
+    }
+    .boost-modal-body {
+      display: flex;
+      gap: 2em;
+      flex-wrap: wrap;
+    }
+    .boost-form-col, .boost-preview-col {
+      flex: 1;
+      min-width: 300px;
+    }
+    .boost-section {
+      background: #23272a;
+      border-radius: 10px;
+      padding: 1.5em;
+      box-shadow: 0 2px 12px #0005;
+      margin-bottom: 1.5em;
+    }
+    .boost-section-title {
+      font-size: 1.1em;
+      font-weight: 700;
+      margin-bottom: 1.2em;
+      color: #fff;
+      border-bottom: 1px solid #444;
+      padding-bottom: 0.8em;
+    }
+    .boost-channel-select {
+      width: 100%;
+      padding: 0.7em 1em;
+      border-radius: 6px;
+      border: 1px solid #444;
+      background: #181a1b;
+      color: #fff;
+      font-size: 1em;
+      margin-bottom: 1em;
+      cursor: pointer;
+      transition: border 0.18s;
+    }
+    .boost-channel-select:focus {
+      border: 1.5px solid #5865f2;
+      outline: none;
+    }
+    .boost-test-btn {
+      display: block;
+      width: 100%;
+      padding: 0.7em 0;
+      border: none;
+      border-radius: 6px;
+      font-size: 1em;
+      font-weight: 600;
+      cursor: pointer;
+      background: #43b581;
+      color: #fff;
+      transition: background 0.18s, transform 0.18s;
+      box-shadow: 0 1px 6px #43b58144;
+    }
+    .boost-test-btn:hover {
+      background: #2ecc71;
+      transform: scale(1.04);
+    }
+    .boost-live-preview-title {
+      font-size: 1.1em;
+      font-weight: 700;
+      margin-bottom: 1em;
+      color: #fff;
+      border-bottom: 1px solid #444;
+      padding-bottom: 0.8em;
+    }
+  </style>
+  <script src="auth.js"></script>
+  <script>requireAuth();</script>
+</head>
+<body>
+  <button class="logout-btn" onclick="logout()">Logout</button>
+  <div class="container">
+    <h1>Select a Server</h1>
+    <div id="loading" class="spinner"></div>
+    <div id="guildList" class="guild-list" style="display:none;"></div>
+    <div id="error" class="error"></div>
+  </div>
+  <div id="modalRoot"></div>
+  <script>
+    const BOT_CLIENT_ID = "1385547161269440573"; // Replace with your bot's client ID
+    const DASHBOARD_URL = "/index.html";
+    const MANAGE_GUILD = 0x20;
+
+    function showConfigModal(guild) {
+      const modalRoot = document.getElementById('modalRoot');
+      let channels = [];
+      let channelsLoaded = false;
+      modalRoot.innerHTML = `
+        <div class="modal-bg" onclick="closeModal(event)">
+          <div class="modal boost-modal" onclick="event.stopPropagation()">
+            <div class="boost-tabs">
+              <button class="boost-tab active" data-tab="general">General</button>
+              <button class="boost-tab" data-tab="embed">Embed Style</button>
+              <button class="boost-tab" data-tab="content">Content</button>
+              <button class="boost-tab" data-tab="preview">Preview & Save</button>
+            </div>
+            <div class="boost-modal-body">
+              <div class="boost-form-col">
+                <form id="boostForm" autocomplete="off">
+                  <div class="boost-section" data-tab-content="general">
+                    <div class="boost-section-title">General Settings</div>
+                    <label class="boost-label" for="boostChannel">Channel</label>
+                    <select id="boostChannel" class="boost-channel-select"><option>Loading...</option></select>
+                    <button type="button" class="boost-test-btn" id="boostTestBtn" disabled>Test message</button>
+                    <label class="boost-label" style="margin-top:1.2em;">Embed <input type="checkbox" id="boostEmbedToggle" style="margin-left:0.7em;transform:scale(1.3);vertical-align:middle;"></label>
+                  </div>
+                  <div class="boost-section" data-tab-content="embed" style="display:none;">
+                    <div class="boost-section-title">Embed Style</div>
+                    <label class="boost-label" for="boostColor">Embed Color</label>
+                    <input type="color" id="boostColor" class="boost-color" value="#5865f2">
+                    <input type="text" id="boostColorHex" maxlength="7" style="width:80px; margin-left:1em; background:#181a1b; color:#fff; border:1px solid #444; border-radius:5px; padding:0.3em 0.5em; font-size:1em;" value="#5865f2">
+                  </div>
+                  <div class="boost-section" data-tab-content="content" style="display:none;">
+                    <div class="boost-section-title">Content & Variables</div>
+                    <label class="boost-label" for="boostMsg">Boost Message</label>
+                    <textarea id="boostMsg" class="boost-textarea" maxlength="300" placeholder="Thank you for boosting, {user}!" required></textarea>
+                    <div style="margin-bottom:0.5em; text-align:left; font-size:0.97em; color:#aaa;">
+                      Placeholders: <code>{user}</code> <code>{server}</code> <code>{count}</code> <code>{boosters}</code>
+                    </div>
+                    <div style="margin:0.7em 0 0.2em 0; text-align:left; font-size:0.97em; color:#aaa;">Emoji Picker: <span id="emojiPicker" style="cursor:pointer;">🎉</span></div>
+                  </div>
+                  <div class="boost-section" data-tab-content="preview" style="display:none;">
+                    <div class="boost-section-title">Preview & Save</div>
+                    <div class="boost-preview" id="boostPreview" style="--boost-color: #5865f2;">Thank you for boosting, {user}!</div>
+                    <button type="submit" class="boost-save">Save</button>
+                    <div class="boost-error" id="boostError"></div>
+                  </div>
+                </form>
+                <button class="modal-close" onclick="closeModal(event)">Close</button>
+              </div>
+              <div class="boost-preview-col">
+                <div class="boost-live-preview-title">Live Preview</div>
+                <div class="boost-preview" id="boostLivePreview" style="--boost-color: #5865f2;">Thank you for boosting, {user}!</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      // Tab logic
+      const tabs = document.querySelectorAll('.boost-tab');
+      const sections = document.querySelectorAll('.boost-section');
+      tabs.forEach(tab => {
+        tab.onclick = function() {
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          const tabName = tab.getAttribute('data-tab');
+          sections.forEach(sec => {
+            sec.style.display = sec.getAttribute('data-tab-content') === tabName ? '' : 'none';
+          });
+        };
+      });
+      // Elements
+      const boostMsg = document.getElementById('boostMsg');
+      const boostColor = document.getElementById('boostColor');
+      const boostColorHex = document.getElementById('boostColorHex');
+      const boostPreview = document.getElementById('boostPreview');
+      const boostLivePreview = document.getElementById('boostLivePreview');
+      const boostForm = document.getElementById('boostForm');
+      const boostError = document.getElementById('boostError');
+      const emojiPicker = document.getElementById('emojiPicker');
+      const boostChannel = document.getElementById('boostChannel');
+      const boostTestBtn = document.getElementById('boostTestBtn');
+      const boostEmbedToggle = document.getElementById('boostEmbedToggle');
+      // Emoji picker (basic)
+      const emojis = ['🎉','✨','💎','🚀','🌟','🥳','💖','🔥','🎁','🦄','⭐'];
+      emojiPicker.onclick = function() {
+        const menu = document.createElement('div');
+        menu.style.position = 'absolute';
+        menu.style.background = '#23272a';
+        menu.style.border = '1px solid #444';
+        menu.style.borderRadius = '8px';
+        menu.style.padding = '0.5em 0.7em';
+        menu.style.top = (emojiPicker.getBoundingClientRect().bottom + window.scrollY + 5) + 'px';
+        menu.style.left = (emojiPicker.getBoundingClientRect().left + window.scrollX - 10) + 'px';
+        menu.style.zIndex = 3000;
+        menu.innerHTML = emojis.map(e => `<span style="font-size:1.3em;cursor:pointer;padding:0 0.2em;">${e}</span>`).join('');
+        document.body.appendChild(menu);
+        menu.onclick = function(ev) {
+          if (ev.target.textContent) {
+            boostMsg.value += ev.target.textContent;
+            boostMsg.dispatchEvent(new Event('input'));
+            document.body.removeChild(menu);
+          }
+        };
+        document.addEventListener('click', function handler(ev) {
+          if (!menu.contains(ev.target) && ev.target !== emojiPicker) {
+            document.body.removeChild(menu);
+            document.removeEventListener('click', handler);
+          }
+        });
+      };
+      // Color hex sync
+      function syncColorInputs(from) {
+        if (from === 'color') {
+          boostColorHex.value = boostColor.value;
+        } else {
+          let val = boostColorHex.value;
+          if (!val.startsWith('#')) val = '#' + val;
+          if (/^#[0-9a-fA-F]{6}$/.test(val)) boostColor.value = val;
+        }
+        updatePreview();
+      }
+      boostColor.addEventListener('input', () => syncColorInputs('color'));
+      boostColorHex.addEventListener('input', () => syncColorInputs('hex'));
+      // Live preview and validation
+      function updatePreview() {
+        boostPreview.textContent = boostMsg.value || 'Thank you for boosting, {user}!';
+        boostPreview.style.setProperty('--boost-color', boostColor.value);
+        boostLivePreview.textContent = boostMsg.value || 'Thank you for boosting, {user}!';
+        boostLivePreview.style.setProperty('--boost-color', boostColor.value);
+        boostLivePreview.style.background = boostEmbedToggle.checked ? '#181a1b' : 'transparent';
+        boostLivePreview.style.borderLeft = boostEmbedToggle.checked ? `6px solid ${boostColor.value}` : 'none';
+      }
+      boostMsg.addEventListener('input', updatePreview);
+      boostColor.addEventListener('input', updatePreview);
+      boostColorHex.addEventListener('input', updatePreview);
+      boostEmbedToggle.addEventListener('change', updatePreview);
+      updatePreview();
+      // Load config from backend
+      boostError.textContent = 'Loading...';
+      boostError.style.color = '#aaa';
+      fetch(`/api/guild/${guild.id}/boost-message`).then(r => r.json()).then(cfg => {
+        boostMsg.value = cfg.message || '';
+        boostColor.value = cfg.color || '#5865f2';
+        boostColorHex.value = cfg.color || '#5865f2';
+        updatePreview();
+        boostError.textContent = '';
+      }).catch(() => {
+        boostError.textContent = 'Failed to load config.';
+        boostError.style.color = '#ff5555';
+      });
+      // Fetch channels
+      boostChannel.innerHTML = '<option>Loading...</option>';
+      boostTestBtn.disabled = true;
+      fetch(`/api/guild/${guild.id}/channels`).then(r => r.json()).then(list => {
+        channels = list;
+        channelsLoaded = true;
+        boostChannel.innerHTML = channels.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+        boostTestBtn.disabled = false;
+      }).catch(() => {
+        boostChannel.innerHTML = '<option>Error loading channels</option>';
+        boostTestBtn.disabled = true;
+      });
+      // Save
+      boostForm.onsubmit = function(e) {
+        e.preventDefault();
+        boostError.textContent = '';
+        boostError.style.color = '#ff5555';
+        if (!boostMsg.value.trim()) {
+          boostError.textContent = 'Boost message cannot be empty.';
+          return;
+        }
+        if (boostMsg.value.length > 300) {
+          boostError.textContent = 'Boost message is too long (max 300 chars).';
+          return;
+        }
+        if (!/^#[0-9a-fA-F]{6}$/.test(boostColor.value)) {
+          boostError.textContent = 'Invalid color.';
+          return;
+        }
+        boostError.textContent = 'Saving...';
+        boostError.style.color = '#aaa';
+        fetch(`/api/guild/${guild.id}/boost-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: boostMsg.value, color: boostColor.value })
+        }).then(r => r.json()).then(resp => {
+          if (resp.success) {
+            boostError.style.color = '#43b581';
+            boostError.textContent = 'Saved!';
+            setTimeout(() => closeModal(e), 1200);
+          } else {
+            boostError.textContent = resp.error || 'Failed to save.';
+            boostError.style.color = '#ff5555';
+          }
+        }).catch(() => {
+          boostError.textContent = 'Failed to save.';
+          boostError.style.color = '#ff5555';
+        });
+      };
+      // Test message
+      boostTestBtn.onclick = function() {
+        if (!channelsLoaded) return;
+        boostTestBtn.disabled = true;
+        boostError.style.color = '#aaa';
+        boostError.textContent = 'Sending test message...';
+        fetch(`/api/guild/${guild.id}/boost-test`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: boostMsg.value,
+            color: boostColor.value,
+            channelId: boostChannel.value,
+            embed: boostEmbedToggle.checked
+          })
+        }).then(r => r.json()).then(resp => {
+          if (resp.success) {
+            boostError.style.color = '#43b581';
+            boostError.textContent = 'Test message sent!';
+          } else {
+            boostError.style.color = '#ff5555';
+            boostError.textContent = resp.error || 'Failed to send test message.';
+          }
+        }).catch(() => {
+          boostError.style.color = '#ff5555';
+          boostError.textContent = 'Failed to send test message.';
+        }).finally(() => {
+          boostTestBtn.disabled = false;
+          setTimeout(() => boostError.textContent = '', 1800);
+        });
+      };
+    }
+    function closeModal(e) {
+      e.preventDefault();
+      document.getElementById('modalRoot').innerHTML = '';
+    }
+    async function fetchGuilds() {
+      const token = localStorage.getItem('asylum_token');
+      if (!token) return [];
+      try {
+        const [userGuildsRes, botGuildsRes] = await Promise.all([
+          fetch('/api/user-guilds', { headers: { Authorization: 'Bearer ' + token } }),
+          fetch('/api/bot-guilds')
+        ]);
+        if (userGuildsRes.status === 401) {
+          // Session expired or unauthorized, log out and redirect
+          localStorage.removeItem('asylum_token');
+          window.location.href = 'login.html';
+          return [];
+        }
+        if (!userGuildsRes.ok) throw new Error('Failed to fetch user guilds');
+        if (!botGuildsRes.ok) throw new Error('Failed to fetch bot guilds');
+        const userGuilds = await userGuildsRes.json();
+        const botGuilds = await botGuildsRes.json();
+        return { userGuilds, botGuilds };
+      } catch (e) {
+        document.getElementById('error').textContent = 'Failed to load servers. Please try again.';
+        return { userGuilds: [], botGuilds: [] };
+      }
+    }
+    function hasManageGuild(permissions) {
+      // permissions is a string or number
+      return (BigInt(permissions) & BigInt(MANAGE_GUILD)) !== 0n;
+    }
+    function renderGuilds(userGuilds, botGuilds) {
+      const list = document.getElementById('guildList');
+      list.innerHTML = '';
+      const botGuildIds = new Set(botGuilds.map(g => g.id));
+      let shown = 0;
+      userGuilds.forEach((guild, i) => {
+        if (!hasManageGuild(guild.permissions)) return;
+        shown++;
+        const card = document.createElement('div');
+        card.className = 'guild-card';
+        card.style.setProperty('--delay', (i * 80) + 'ms');
+        const iconUrl = guild.icon ?
+          `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128` :
+          'https://cdn.discordapp.com/embed/avatars/0.png';
+        card.innerHTML = `<img class=\"guild-icon\" src=\"${iconUrl}\" alt=\"icon\"><div class=\"guild-name\">${guild.name}</div>`;
+        if (botGuildIds.has(guild.id)) {
+          const btn = document.createElement('button');
+          btn.className = 'guild-btn';
+          btn.textContent = 'Configure';
+          btn.onclick = e => {
+            e.stopPropagation();
+            window.location.href = `dashboard.html?guild=${guild.id}`;
+          };
+          card.appendChild(btn);
+        } else {
+          const inviteUrl = `https://discord.com/oauth2/authorize?client_id=${BOT_CLIENT_ID}&scope=bot+applications.commands&permissions=8&guild_id=${guild.id}&redirect_uri=${encodeURIComponent(window.location.origin + DASHBOARD_URL)}&response_type=code`;
+          const btn = document.createElement('button');
+          btn.className = 'guild-btn invite-btn';
+          btn.textContent = 'Invite Bot';
+          btn.onclick = e => {
+            e.stopPropagation();
+            window.open(inviteUrl, '_blank');
+          };
+          card.appendChild(btn);
+        }
+        list.appendChild(card);
+      });
+      if (shown === 0) {
+        document.getElementById('error').textContent = 'No servers found where you have Manage Server permission.';
+      }
+    }
+    (async function() {
+      const { userGuilds, botGuilds } = await fetchGuilds();
+      document.getElementById('loading').style.display = 'none';
+      if (userGuilds && userGuilds.length > 0) {
+        document.getElementById('guildList').style.display = '';
+        renderGuilds(userGuilds, botGuilds);
+      } else {
+        document.getElementById('error').textContent = 'No servers found or you do not have access.';
+      }
+    })();
+  </script>
+</body>
+</html> 

@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYL Bot Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      background: #181a20;
+      color: #fff;
+      font-family: 'Montserrat', 'Inter', Arial, sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+    }
+    .sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 48px;
+      height: 100vh;
+      background: #23273a;
+      box-shadow: 2px 0 16px #0004;
+      display: flex;
+      flex-direction: column;
+      z-index: 2000;
+      padding-top: 0;
+      transition: width 0.22s cubic-bezier(.23,1.01,.32,1);
+      width: 48px;
+      min-width: 48px;
+      max-width: 260px;
+      overflow-x: hidden;
+    }
+    .sidebar:hover {
+      width: 220px;
+      min-width: 120px;
+      max-width: 260px;
+      transition: width 0.32s cubic-bezier(.23,1.01,.32,1);
+      box-shadow: 4px 0 32px #0008;
+    }
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+      padding: 1.1em 0.7em 0.7em 0.7em;
+      border-bottom: 1.5px solid #23273a;
+      min-height: 56px;
+      background: rgba(36, 40, 54, 0.98);
+      position: sticky;
+      top: 0;
+      z-index: 101;
+      transition: padding 0.2s, min-height 0.2s;
+    }
+    .sidebar-header span {
+      transition: opacity 0.32s, width 0.32s;
+      white-space: nowrap;
+    }
+    .sidebar-header:not(:hover) .sidebar-header span {
+      opacity: 0;
+      width: 0;
+      transition: opacity 0.22s, width 0.22s;
+    }
+    .server-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: #444;
+      object-fit: cover;
+      border: 2px solid #6c7fff;
+      box-shadow: 0 2px 8px #6c7fff33;
+      display: block;
+    }
+    #sidebarTitle {
+      font-size: 1em;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: 0.01em;
+      word-break: break-word;
+      max-width: 90px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: inline-block;
+    }
+    .sidebar-link {
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+      padding: 0.7em 1em;
+      border-radius: 8px;
+      color: #b0b8c1;
+      font-size: 0.98em;
+      font-weight: 500;
+      text-decoration: none;
+      transition: background 0.18s, color 0.18s;
+      cursor: pointer;
+      justify-content: flex-start;
+      white-space: nowrap;
+    }
+    .sidebar-link .icon {
+      font-size: 1.1em;
+      width: 1.2em;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .sidebar-link span:not(.icon) {
+      display: none;
+      opacity: 0;
+      transition: opacity 0.18s, width 0.18s;
+      width: 0;
+    }
+    .sidebar:hover .sidebar-link span:not(.icon) {
+      display: inline;
+      opacity: 1;
+      width: auto;
+      margin-left: 0.5em;
+    }
+    .sidebar-link.active, .sidebar-link:hover {
+      background: #36393f;
+      color: #6c7fff;
+    }
+    .sidebar-nav {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2em;
+      padding: 0.7em 0.2em 0.7em 0.2em;
+      overflow-y: auto;
+      justify-content: flex-start;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .sidebar-footer {
+      padding: 1.2em 1.2em;
+      font-size: 0.98em;
+      color: #888;
+      text-align: center;
+      border-top: 1.5px solid #23273a;
+      background: rgba(36, 40, 54, 0.98);
+    }
+    .sidebar:not(:hover) .sidebar-footer {
+      opacity: 0;
+      width: 0;
+      padding: 0;
+      font-size: 0;
+      transition: opacity 0.22s, width 0.22s, padding 0.22s, font-size 0.22s;
+    }
+    .main {
+      margin-left: 48px;
+      padding: 2.5em 2em 2em 2em;
+      min-height: 100vh;
+      background: #23272a;
+      transition: margin-left 0.22s cubic-bezier(.23,1.01,.32,1);
+    }
+    .sidebar:hover ~ .main {
+      margin-left: 220px;
+    }
+    @media (max-width: 900px) {
+      .sidebar {
+        width: 48px !important;
+      }
+      .sidebar:hover {
+        width: 120px !important;
+      }
+      .sidebar-header {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 0.7em 0.2em 0.7em 0.2em;
+        min-height: 48px;
+      }
+      #sidebarTitle,
+      .server-icon,
+      .sidebar-footer {
+        display: none !important;
+      }
+      .sidebar-nav {
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        gap: 0.7em;
+      }
+      .sidebar-link {
+        justify-content: center;
+        padding: 0.7em 0.2em;
+        font-size: 1.1em;
+      }
+      .sidebar-link span:not(.icon) {
+        display: none !important;
+      }
+      .main {
+        margin-left: 48px;
+      }
+    }
+    .main-header {
+      padding: 2.2em 2.5em 1.2em 2.5em;
+      font-size: 2.1em;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.01em;
+      border-bottom: 1px solid #23272a;
+      font-family: inherit;
+      transition: font-size 0.32s;
+    }
+    .main-breadcrumb {
+      color: #b0b8c1;
+      font-size: 1em;
+      margin: 1.2em 2.5em 0 2.5em;
+      letter-spacing: 0.01em;
+      font-family: inherit;
+      transition: font-size 0.32s;
+    }
+    .main-content {
+      flex: 1;
+      padding: 2.5em 2.5em 2em 2.5em;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2em;
+      font-family: inherit;
+    }
+    .dashboard-card {
+      background: #23273a;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px #0003;
+      padding: 2.2em 2em 2em 2em;
+      min-width: 320px;
+      max-width: 700px;
+      width: 100%;
+      transition: box-shadow 0.18s, background 0.18s;
+      font-family: inherit;
+      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
+      display: flex;
+      flex-direction: column;
+      gap: 1.5em;
+    }
+    @keyframes fadeInCard {
+      from { opacity: 0; transform: translateY(30px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .dashboard-card-title {
+      font-size: 1.3em;
+      font-weight: 700;
+      margin-bottom: 0.5em;
+      color: #fff;
+      font-family: inherit;
+      letter-spacing: 0.01em;
+      transition: font-size 0.32s;
+    }
+    .dashboard-card-desc {
+      color: #b0b8c1;
+      font-size: 1.08em;
+      margin-bottom: 1.5em;
+      font-family: inherit;
+      transition: font-size 0.32s;
+    }
+    .dashboard-stats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 2em;
+      width: 100%;
+      margin-top: 1.2em;
+      font-family: inherit;
+      justify-content: flex-start;
+    }
+    #greeting {
+      margin-left: auto;
+      font-size: 1.1em;
+      font-weight: 600;
+      color: #6c7fff;
+      text-align: right;
+      flex-shrink: 0;
+      min-width: 180px;
+    }
+    .dashboard-stat {
+      background: #20232b;
+      border-radius: 10px;
+      padding: 1.2em 2em;
+      min-width: 160px;
+      text-align: left;
+      box-shadow: 0 1px 6px #0002;
+      margin-bottom: 1em;
+      transition: box-shadow 0.18s, background 0.18s;
+      font-family: inherit;
+      animation: fadeInStat 0.7s cubic-bezier(.23,1.01,.32,1);
+      flex: 1 1 160px;
+      max-width: 220px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    @keyframes fadeInStat {
+      from { opacity: 0; transform: translateY(20px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .dashboard-stat:hover {
+      background: #23273a;
+      box-shadow: 0 2px 12px #5865f244;
+    }
+    .stat-label {
+      color: #b0b8c1;
+      font-size: 1.02em;
+      margin-bottom: 0.5em;
+      font-weight: 500;
+      font-family: inherit;
+      transition: font-size 0.32s;
+    }
+    .stat-value {
+      font-size: 1.5em;
+      font-weight: 700;
+      color: #6c7fff;
+      margin-bottom: 0.2em;
+      font-family: inherit;
+      transition: font-size 0.32s;
+    }
+    .stat-status {
+      display: inline-block;
+      background: #1f7a3a;
+      color: #b6f7c1;
+      font-size: 0.98em;
+      font-weight: 600;
+      border-radius: 20px;
+      padding: 0.2em 1.1em;
+      margin-top: 0.2em;
+      font-family: inherit;
+      transition: background 0.32s, color 0.32s;
+    }
+    .error {
+      color: #ff5555;
+      margin-top: 2em;
+      font-size: 1.1em;
+      font-family: inherit;
+    }
+    .server-name {
+      font-size: 1.2em;
+      font-weight: 700;
+      margin-left: 0.5em;
+      color: #fff;
+      letter-spacing: 0.01em;
+      font-family: inherit;
+    }
+    .server-meta {
+      color: #b0b8c1;
+      font-size: 1em;
+      margin-left: 0.5em;
+      margin-top: 0.2em;
+      font-family: inherit;
+    }
+    .module-grid-styled {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 2.5em 2.5em;
+      margin-top: 1.5em;
+      width: 100%;
+      max-width: 1400px;
+      margin-left: auto;
+      margin-right: auto;
+      align-items: stretch;
+    }
+    .module-card-styled {
+      background: rgba(36, 40, 54, 0.92);
+      border-radius: 18px;
+      box-shadow: 0 4px 32px #0005, 0 1.5px 8px #6c7fff22;
+      padding: 2.2em 2em 1.5em 2em;
+      min-width: 320px;
+      max-width: 420px;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+      transition: box-shadow 0.22s, background 0.22s, transform 0.22s;
+      border: 1.5px solid #23273a;
+      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .module-card-styled:hover {
+      background: rgba(60, 70, 120, 0.98);
+      box-shadow: 0 8px 32px #6c7fff55, 0 2px 12px #23273a;
+      transform: translateY(-6px) scale(1.025);
+      border-color: #6c7fff;
+    }
+    .module-icon {
+      font-size: 2.3em;
+      margin-bottom: 0.7em;
+      color: #6c7fff;
+      filter: drop-shadow(0 0 8px #6c7fff44);
+      display: inline-block;
+      background: rgba(60, 70, 120, 0.18);
+      border-radius: 12px;
+      padding: 0.4em 0.6em;
+      /* Remove emoji, use minimal SVG or Unicode if needed */
+    }
+    .module-title-styled {
+      font-size: 1.18em;
+      font-weight: 700;
+      margin-bottom: 0.3em;
+      color: #fff;
+      letter-spacing: 0.01em;
+    }
+    .module-desc-styled {
+      color: #b0b8c1;
+      font-size: 1.01em;
+      margin-bottom: 1.3em;
+      min-height: 2.5em;
+    }
+    .module-btn-styled {
+      background: linear-gradient(
+        270deg,
+        #6c7fff 0%,
+        #43b581 20%,
+        #ffb347 40%,
+        #ff6f91 60%,
+        #8e54e9 80%,
+        #6c7fff 95%,
+        #6c7fff 100%
+      );
+      background-size: 600% 600%;
+      background-position: 0% 50%;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      padding: 0.7em 2.2em;
+      cursor: pointer;
+      box-shadow: 0 1px 6px #6c7fff44;
+      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+      justify-content: center;
+      margin-top: 1.2em;
+      position: relative;
+      overflow: hidden;
+      animation: flowing-gradient-5c 14s linear infinite;
+    }
+    .module-btn-styled:hover, .module-btn-styled.enabled:hover {
+      animation: flowing-gradient-5c 14s linear infinite;
+      background: linear-gradient(
+        270deg,
+        #6c7fff 0%,
+        #43b581 20%,
+        #ffb347 40%,
+        #ff6f91 60%,
+        #8e54e9 80%,
+        #6c7fff 95%,
+        #6c7fff 100%
+      );
+      background-size: 600% 600%;
+      background-position: 100% 50%;
+      transform: scale(1.045);
+      box-shadow: 0 2px 12px #43b58144;
+    }
+    @keyframes flowing-gradient-5c {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
+    }
+    .module-btn-styled.enabled {
+      background: linear-gradient(90deg, #43b581 60%, #6c7fff 100%);
+      background-size: 200% 200%;
+      background-position: 0% 50%;
+      color: #fff;
+      box-shadow: 0 2px 12px #43b58144;
+      animation: none;
+    }
+    @keyframes btnPop {
+      0% { transform: scale(1); }
+      60% { transform: scale(1.12); }
+      100% { transform: scale(1.045); }
+    }
+    .module-btn-styled.disable-btn {
+      background: linear-gradient(90deg,#23273a 60%,#ff5555 100%);
+      color: #fff;
+      margin-top: 0.7em;
+      border: none;
+      border-radius: 8px;
+      font-size: 1em;
+      font-weight: 600;
+      padding: 0.7em 2.2em;
+      cursor: pointer;
+      box-shadow: 0 1px 6px #ff555544;
+      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 0.7em;
+      justify-content: center;
+      animation: btnPop 0.4s cubic-bezier(.23,1.01,.32,1);
+    }
+    .module-btn-styled.disable-btn:hover {
+      background: linear-gradient(90deg,#ff5555 60%,#23273a 100%);
+      transform: scale(1.045);
+      box-shadow: 0 2px 12px #ff555544;
+    }
+    .dashboard-row {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: space-between;
+      width: 100%;
+      gap: 2em;
+      margin-bottom: 2em;
+    }
+    .greeting-card {
+      background: #23273a;
+      border-radius: 14px;
+      box-shadow: 0 2px 12px #0003;
+      padding: 2.2em 2.5em;
+      min-width: 220px;
+      max-width: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.18em;
+      font-weight: 700;
+      color: #6c7fff;
+      margin-left: auto;
+      margin-right: 0;
+      height: 100%;
+      text-align: center;
+      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
+    }
+    @media (max-width: 900px) {
+      .dashboard-row {
+        flex-direction: column;
+        gap: 1.2em;
+      }
+      .greeting-card {
+        margin-left: 0;
+        margin-right: 0;
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+      }
+      .dashboard-card {
+        max-width: 100%;
+      }
+      .dashboard-stats {
+        flex-direction: column;
+        gap: 1em;
+      }
+    }
+  </style>
+  <script src="auth.js"></script>
+  <script>requireAuth();</script>
+</head>
+<body>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header" id="sidebarHeader">
+      <img src="" alt="icon" class="server-icon" id="serverIcon">
+      <span id="sidebarTitle">SYL Bot</span>
+    </div>
+    <div class="sidebar-nav" id="sidebarNav">
+      <a class="sidebar-link" data-section="modules"><span class="icon"><svg width="20" height="20" fill="none" stroke="#6c7fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="3"/><path d="M10 8v4M8 10h4"/></svg></span><span>Modules</span></a>
+      <a class="sidebar-link active" data-section="boost"><span class="icon"><svg width="20" height="20" fill="none" stroke="#6c7fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="3"/><path d="M10 8v4M8 10h4"/></svg></span><span>Boost Message</span></a>
+      <a class="sidebar-link" data-section="help"><span class="icon"><svg width="20" height="20" fill="none" stroke="#b0b8c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><path d="M9.09 9a3 3 0 1 1 1.82 2.83V14"/><circle cx="10" cy="17" r="1"/></svg></span><span>Help</span></a>
+    </div>
+  </div>
+  <div class="main">
+    <div class="main-breadcrumb" id="mainBreadcrumb">Dashboard &gt; <b>Dashboard</b></div>
+    <div class="main-header" id="mainHeader">Dashboard</div>
+    <div class="main-content" id="mainContent">
+      <div class="dashboard-row">
+        <div class="dashboard-card" id="dashboardCard">
+          <div class="dashboard-card-title">Welcome to SYL Bot Dashboard</div>
+          <div class="dashboard-card-desc">Configure your bot settings using the sidebar navigation.</div>
+          <div class="dashboard-stats">
+            <div class="dashboard-stat">
+              <div class="stat-label">Server Status</div>
+              <div class="stat-status" id="serverStatus">Online</div>
+            </div>
+            <div class="dashboard-stat">
+              <div class="stat-label">Active Users</div>
+              <div class="stat-value" id="activeUsers">-</div>
+            </div>
+            <div class="dashboard-stat">
+              <div class="stat-label">Channels</div>
+              <div class="stat-value" id="channelCount">-</div>
+            </div>
+            <div class="dashboard-stat">
+              <div class="stat-label">Roles</div>
+              <div class="stat-value" id="roleCount">-</div>
+            </div>
+          </div>
+        </div>
+        <div class="greeting-card" id="greetingCard">
+          <span id="greeting">Good evening, there!</span>
+        </div>
+      </div>
+      <div class="module-grid-styled" id="moduleGridStyled">
+        <div class="module-card-styled">
+          <span class="module-icon"><svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="20" height="20" rx="6"/><path d="M16 12v8M12 16h8"/></svg></span>
+          <div class="module-title-styled">Boost Message</div>
+          <div class="module-desc-styled">Send a custom message when a member boosts your server. Configure message, channel, and style.</div>
+          <button class="module-btn-styled" onclick="window.location.href='module.html?guild='+guildId+'&module=boost'">Configure</button>
+        </div>
+      </div>
+      <div id="error" class="error"></div>
+    </div>
+  </div>
+  <div id="modalRoot"></div>
+  <script>
+    // --- Get guild ID from URL ---
+    function getGuildId() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('guild');
+    }
+    const guildId = getGuildId();
+    // --- Sidebar navigation logic ---
+    const links = document.querySelectorAll('.sidebar-link');
+    const mainHeader = document.getElementById('mainHeader');
+    const mainBreadcrumb = document.getElementById('mainBreadcrumb');
+    const mainContent = document.getElementById('mainContent');
+    if (links && links.length) {
+      links.forEach(link => {
+        if (!link) return;
+        link.onclick = function(e) {
+          e.preventDefault();
+          links.forEach(l => l.classList.remove('active'));
+          link.classList.add('active');
+          const section = link.getAttribute('data-section');
+          mainHeader.textContent = link.textContent.trim();
+          mainBreadcrumb.innerHTML = `Dashboard &gt; <b>${link.textContent.trim()}</b>`;
+          if (section === 'modules') {
+            window.location.href = window.location.pathname + window.location.search;
+            return;
+          }
+          renderSection(section);
+        };
+      });
+    }
+    // --- Render sections ---
+    function renderSection(section) {
+      if (section === 'boost') {
+        document.getElementById('dashboardCard').style.display = 'none';
+        document.getElementById('greetingCard').style.display = 'none';
+        document.getElementById('moduleGridStyled').style.display = '';
+        mainContent.innerHTML = document.getElementById('moduleGridStyled').outerHTML;
+      } else if (section === 'help') {
+        mainContent.innerHTML = `<div class='dashboard-card'><div class='dashboard-card-title'>Help & Support</div><div class='dashboard-card-desc'>Find answers to common questions about using the SYL Bot Dashboard and the Boost Message module.</div><ul style='color:#b0b8c1;font-size:1.08em;line-height:1.7em;padding-left:1.2em;'><li><b>How do I configure the Boost Message?</b><br>Click the 'Configure' button on the Boost Message card to set your custom message, channel, and style.</li><li><b>Why don't I see other modules?</b><br>Currently, only the Boost Message module is available. More modules will be added soon!</li><li><b>How do I invite the bot to my server?</b><br>Use the invite link on the main dashboard or ask your server admin to invite SYL Bot.</li><li><b>Who can use the dashboard?</b><br>Only users with the 'Manage Server' permission can configure modules for their server.</li><li><b>Need more help?</b><br>Contact support via the official Discord server or email (see documentation for details).</li></ul></div>`;
+      }
+    }
+    // --- Fetch and display real server info ---
+    let loggedInUser = null;
+    async function fetchUser() {
+      try {
+        const token = localStorage.getItem('asylum_token');
+        console.log('fetchUser: Attempting fetch with token:', token);
+        const res = await fetch('http://localhost:4000/api/user', { headers: { Authorization: 'Bearer ' + token } });
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error('fetchUser 401:', res.status, errText, 'Token:', token, 'Response:', res);
+          if (res.status === 401) {
+            console.error('fetchUser: 401 Unauthorized. Token may be expired or missing in backend DB.');
+          }
+        }
+        if (res.ok) {
+          loggedInUser = await res.json();
+        }
+      } catch (e) {
+        console.error('fetchUser error:', e);
+      }
+      setGreeting(loggedInUser);
+    }
+    fetchUser();
+    function setGreeting(user) {
+      const greetingEl = document.getElementById('greeting');
+      if (!greetingEl) return;
+      const now = new Date();
+      const hour = now.getHours();
+      let greeting = 'Hello';
+      if (hour < 12) greeting = 'Good morning';
+      else if (hour < 18) greeting = 'Good afternoon';
+      else greeting = 'Good evening';
+      greetingEl.textContent = `${greeting}, ${user && user.username ? user.username : 'there'}!`;
+    }
+    function showError(msg) {
+      document.getElementById('error').textContent = msg;
+      if (msg && msg.toLowerCase().includes('unauthorized')) {
+        const token = localStorage.getItem('asylum_token');
+        console.error('showError:', msg, 'Token:', token, 'Context: showError called due to unauthorized response.');
+      }
+    }
+    if (!guildId) {
+      showError('No server selected. Please return to the main dashboard and select a server.');
+    } else {
+      fetch(`http://localhost:4000/api/guild/${guildId}/info`).then(async r => {
+        if (!r.ok) {
+          showError('Failed to load server info.');
+          return;
+        }
+        const info = await r.json();
+        setServerInfo(info);
+      }).catch(() => {
+        showError('Failed to load server info.');
+      });
+      // Removed sample data setServerInfo({ ... })
+    }
+    function setServerInfo(info) {
+      if (info.icon) {
+        document.getElementById('serverIcon').src = info.icon;
+        document.getElementById('serverIcon').style.display = '';
+      } else {
+        document.getElementById('serverIcon').style.display = 'none';
+      }
+      document.getElementById('sidebarTitle').textContent = info.name || 'SYL Bot';
+      mainHeader.textContent = 'Dashboard';
+      mainBreadcrumb.innerHTML = `Dashboard &gt; <b>Dashboard</b>`;
+      document.getElementById('activeUsers').textContent = info.activeUsers || '-';
+      document.getElementById('channelCount').textContent = info.channels || '-';
+      document.getElementById('roleCount').textContent = info.roles || '-';
+      document.getElementById('serverStatus').textContent = info.status || 'Online';
+      document.getElementById('serverStatus').style.background = info.status === 'Online' ? '#1f7a3a' : '#7a1f1f';
+      document.getElementById('serverStatus').style.color = info.status === 'Online' ? '#b6f7c1' : '#f7b6b6';
+    }
+    // --- Module list for styled grid ---
+    const modulesStyled = [
+      {
+        key: 'achievements',
+        title: 'Achievements',
+        desc: 'Let your members hunt achievements for rewards',
+        icon: '<svg width="32" height="32" fill="none" stroke="#ffb347" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="20" height="8" rx="2"/><path d="M10 12v6a6 6 0 0 0 12 0v-6"/><circle cx="16" cy="24" r="2"/></svg>',
+        badge: 'New',
+        badgeType: 'new'
+      },
+      {
+        key: 'automations',
+        title: 'Automations',
+        desc: 'Automate bot actions in response to server events like messages, reactions, and role changes.',
+        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="28 8 28 16 20 16"/><polyline points="4 24 4 16 12 16"/><path d="M6.5 11A12 12 0 0 1 24.5 8.5L28 16M4 16l3.5 7.5A12 12 0 0 0 25.5 21"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      },
+      {
+        key: 'welcome',
+        title: 'Welcome & Goodbye',
+        desc: 'Automatically send messages and give roles to your new members and send a message when a members lea…',
+        icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20c1.5 2 4.5 2 6 0l8-12"/><path d="M8 20V8a4 4 0 0 1 8 0v12"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      },
+      {
+        key: 'welcomechannel',
+        title: 'Welcome Channel',
+        desc: 'A dedicated place to welcome new members and share essential informations',
+        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12" width="24" height="8" rx="4"/><path d="M28 16v-2a4 4 0 0 0-4-4H8"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      },
+      {
+        key: 'customcmd',
+        title: 'Custom Commands',
+        desc: 'Create your own text commands and commands that give specific roles',
+        icon: '<svg width="32" height="32" fill="none" stroke="#b0b8c1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="24" height="16" rx="4"/><path d="M8 16h16"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      },
+      {
+        key: 'reactionroles',
+        title: 'Reaction Roles',
+        desc: 'Let your members get roles by reacting to a message',
+        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="12"/><path d="M10 14c1 2 5 2 6 0"/><path d="M18 18c1 2 5 2 6 0"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      },
+      {
+        key: 'invites',
+        title: 'Invite Tracker',
+        desc: 'Track how many people your members invite to your community and rank them in a leaderboard',
+        icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="12" r="6"/><path d="M4 28v-2a8 8 0 0 1 16 0v2"/></svg>',
+        badge: 'New',
+        badgeType: 'new'
+      },
+      {
+        key: 'tickets',
+        title: 'Ticketing',
+        desc: 'Allow your members to submit tickets for support, reports and requests.',
+        icon: '<svg width="32" height="32" fill="none" stroke="#b0b8c1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="10" width="20" height="12" rx="4"/><path d="M10 16h12"/></svg>',
+        badge: 'Premium',
+        badgeType: 'premium'
+      }
+    ];
+    function showConfirmDialog(message, onConfirm) {
+      const modalRoot = document.getElementById('modalRoot');
+      modalRoot.innerHTML = `
+        <div class="modal-bg" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="closeModal(event)">
+          <div class="modal" style="background:#23273a;padding:2em 2.5em;border-radius:14px;box-shadow:0 2px 16px #0008;min-width:320px;max-width:90vw;position:relative;z-index:10000;" onclick="event.stopPropagation()">
+            <div style="font-size:1.15em;font-weight:600;margin-bottom:1.2em;">${message}</div>
+            <div style="display:flex;gap:1em;justify-content:flex-end;">
+              <button id="confirmNo" style="background:#36393f;color:#fff;border:none;border-radius:8px;padding:0.6em 1.5em;font-size:1em;font-weight:500;cursor:pointer;">Cancel</button>
+              <button id="confirmYes" style="background:linear-gradient(90deg,#ff5555 60%,#23273a 100%);color:#fff;border:none;border-radius:8px;padding:0.6em 1.5em;font-size:1em;font-weight:600;cursor:pointer;">Disable</button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.getElementById('confirmNo').onclick = () => { modalRoot.innerHTML = ''; };
+      document.getElementById('confirmYes').onclick = () => { modalRoot.innerHTML = ''; onConfirm(); };
+    }
+    function closeModal(e) {
+      if (e.target.id === 'modalRoot' || e.target.classList.contains('modal-bg')) {
+        document.getElementById('modalRoot').innerHTML = '';
+      }
+    }
+    function renderModuleGridStyled() {
+      const grid = document.getElementById('moduleGridStyled');
+      grid.innerHTML = '';
+      const guildId = getGuildId();
+      // Fetch activation state from backend
+      fetch(`http://localhost:4000/api/guild/${guildId}/modules`).then(r => r.json()).then(moduleState => {
+        modulesStyled.forEach((mod, i) => {
+          const card = document.createElement('div');
+          card.className = 'module-card-styled';
+          card.style.setProperty('--delay', (i * 80) + 'ms');
+          const enabled = !!moduleState[mod.key];
+          card.innerHTML = `
+            <div class="module-icon">${mod.icon}</div>
+            <div class="module-title-styled">${mod.title}</div>
+            <div class="module-desc-styled">${mod.desc}</div>
+            <button class="module-btn-styled${enabled ? ' enabled' : ''}"><span class="plus">${enabled ? '⚙️' : '+'}</span>${enabled ? 'Configure' : 'Enable'}</button>
+            <button class="module-btn-styled disable-btn" style="display:${enabled ? '' : 'none'};margin-top:0.7em;background:linear-gradient(90deg,#23273a 60%,#ff5555 100%);color:#fff;" title="Disable">Disable</button>
+          `;
+          if (enabled) {
+            card.classList.add('module-enabled');
+          }
+          // Enable/Configure button logic
+          const btn = card.querySelector('.module-btn-styled:not(.disable-btn)');
+          btn.onclick = function() {
+            if (!enabled) {
+              btn.disabled = true;
+              fetch(`http://localhost:4000/api/guild/${guildId}/modules`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ moduleKey: mod.key, enabled: true })
+              }).then(r => r.json()).then(resp => {
+                if (resp.success) {
+                  btn.innerHTML = '<span class="plus">⚙️</span>Configure';
+                  btn.classList.add('enabled');
+                  card.classList.add('module-enabled');
+                  card.querySelector('.disable-btn').style.display = '';
+                  card.animate([
+                    { boxShadow: '0 4px 32px #0005, 0 1.5px 8px #6c7fff22' },
+                    { boxShadow: '0 0 32px 8px #43b58188, 0 1.5px 8px #6c7fff22' },
+                    { boxShadow: '0 8px 32px #6c7fff55, 0 2px 12px #23273a' }
+                  ], { duration: 600, fill: 'forwards' });
+                }
+              }).finally(() => { btn.disabled = false; });
+            } else {
+              window.location.href = `module.html?guild=${guildId}&module=${mod.key}`;
+            }
+          };
+          // Disable button logic
+          const disableBtn = card.querySelector('.disable-btn');
+          disableBtn.onclick = function() {
+            showConfirmDialog(`Are you sure you want to disable the <b>${mod.title}</b> module?`, () => {
+              disableBtn.disabled = true;
+              fetch(`http://localhost:4000/api/guild/${guildId}/modules`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ moduleKey: mod.key, enabled: false })
+              }).then(r => r.json()).then(resp => {
+                if (resp.success) {
+                  btn.innerHTML = '<span class="plus">+</span>Enable';
+                  btn.classList.remove('enabled');
+                  card.classList.remove('module-enabled');
+                  disableBtn.style.display = 'none';
+                  card.animate([
+                    { boxShadow: '0 8px 32px #6c7fff55, 0 2px 12px #23273a' },
+                    { boxShadow: '0 4px 32px #0005, 0 1.5px 8px #6c7fff22' }
+                  ], { duration: 600, fill: 'forwards' });
+                }
+              }).finally(() => { disableBtn.disabled = false; });
+            });
+          };
+          grid.appendChild(card);
+        });
+      });
+    }
+    renderModuleGridStyled();
+    // Sidebar toggle logic
+    const sidebar = document.getElementById('sidebar');
+    const sidebarToggle = document.getElementById('sidebarToggle');
+    function setSidebarCollapsed(collapsed) {
+      if (collapsed) {
+        sidebar.classList.add('collapsed');
+        localStorage.setItem('sidebar_collapsed', '1');
+      } else {
+        sidebar.classList.remove('collapsed');
+        localStorage.setItem('sidebar_collapsed', '0');
+      }
+    }
+    if (sidebarToggle) {
+      sidebarToggle.onclick = () => {
+        setSidebarCollapsed(!sidebar.classList.contains('collapsed'));
+      };
+      // Show toggle button on desktop
+      if (window.innerWidth > 900) {
+        sidebarToggle.style.display = 'inline-block';
+      }
+      // Restore sidebar state
+      if (localStorage.getItem('sidebar_collapsed') === '1' || window.innerWidth <= 900) {
+        setSidebarCollapsed(true);
+      }
+      window.addEventListener('resize', () => {
+        if (window.innerWidth <= 900) {
+          setSidebarCollapsed(true);
+          sidebarToggle.style.display = 'none';
+        } else {
+          sidebarToggle.style.display = 'inline-block';
+          if (localStorage.getItem('sidebar_collapsed') !== '1') setSidebarCollapsed(false);
+        }
+      });
+    }
+  </script>
+</body>
+</html> 

@@ -1,12 +1,24 @@
-# React + Vite
+# Asylum Bot Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This dashboard is a modern React + Vite + Tailwind CSS web UI for managing your Asylum Discord Bot configuration in real time.
 
-Currently, two official plugins are available:
+- **Live Sync:** Connects directly to your Supabase backend for real-time config updates.
+- **Bot Integration:** The dashboard is served by a dedicated Discord bot cog (`dashboard.js`), so it loads automatically when the bot is deployed.
+- **Features:**
+  - Boost message editor (WYSIWYG, embed/markdown preview)
+  - Ticket system config
+  - Welcome/goodbye message config
+  - Command management (enable/disable, prefix, etc)
+  - Starboard, logging, and more
+- **Auth:** Supabase Auth (Discord OAuth or email)
+- **Extensible:** Easily add new config pages for any bot feature.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Getting Started
 
-## Expanding the ESLint configuration
+1. `npm install`
+2. `npm run dev` (for local dev)
+3. Deploy the bot with the new `dashboard.js` cog to serve the dashboard in production.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+---
+
+**Note:** This dashboard is designed to replace or supplement the Discord modal setup flows, providing a more powerful and user-friendly experience for server admins.

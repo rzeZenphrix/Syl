@@ -147,6 +147,9 @@ async function isOwnerOrCoOwner(member) {
 
 module.exports = {
   isAdmin,
+  isCommandEnabled,
+  isBotProtected,
   isCoOwner,
-  isOwnerOrCoOwner
+  isOwnerOrCoOwner,
+  // Add any other exports as needed
 };

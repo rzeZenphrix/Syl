@@ -2209,7 +2209,6 @@ prefixCommands.watchword = async (msg, args) => {
 
 // Slash command: /watchword add/remove/list/show/warn/delete/log
 if (slashCommands && Array.isArray(slashCommands)) {
-  const { SlashCommandBuilder } = require('discord.js');
   slashCommands.push(
     new SlashCommandBuilder()
       .setName('watchword')
@@ -2431,7 +2430,6 @@ prefixCommands.blacklistword = async (msg, args) => {
 
 // Slash command: /blacklistword add/remove/list/show/warn/delete/log
 if (slashCommands && Array.isArray(slashCommands)) {
-  const { SlashCommandBuilder } = require('discord.js');
   slashCommands.push(
     new SlashCommandBuilder()
       .setName('blacklistword')
@@ -3584,6 +3582,7 @@ slashHandlers.boostsetup = async (interaction) => {
       new ActionRowBuilder().addComponents(embedInput)
     );
     await interaction.showModal(modal);
+    // Do NOT reply or defer here!
   } catch (err) {
     console.error('Error in /boostsetup:', err);
     if (!interaction.replied && !interaction.deferred) {
@@ -3605,7 +3604,30 @@ modalHandlers.boostsetup_general = async (interaction) => {
       rateLimit: interaction.fields.getTextInputValue('boost_rate_limit'),
       sendEmbed: interaction.fields.getTextInputValue('boost_send_embed'),
     };
-    // Show next modal: Embed Style (placeholder for next step)
+    // Reply with a button to continue to the next step
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_embed')
+        .setLabel('Continue to Embed Style')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'General settings saved! Click below to continue to Embed Style settings.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_general modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_embed
+buttonHandlers.boostsetup_continue_embed = async (interaction) => {
+  try {
+    // Show next modal: Embed Style
     const modal = new ModalBuilder()
       .setCustomId('boostsetup_embed')
       .setTitle('Boost Message Setup: Embed Style');
@@ -3648,13 +3670,582 @@ modalHandlers.boostsetup_general = async (interaction) => {
     );
     await interaction.showModal(modal);
   } catch (err) {
-    console.error('Error in boostsetup_general modal handler:', err);
+    console.error('Error in boostsetup_continue_embed button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+// ... existing code ...
+
+// --- BOOST SETUP MODAL HANDLERS (MULTI-STEP) ---
+
+// Modal handler for boostsetup_embed (step 2)
+modalHandlers.boostsetup_embed = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].embed = {
+      color: interaction.fields.getTextInputValue('boost_embed_color'),
+      border: interaction.fields.getTextInputValue('boost_embed_border'),
+      borderWidth: interaction.fields.getTextInputValue('boost_embed_border_width'),
+      fontFamily: interaction.fields.getTextInputValue('boost_embed_font_family'),
+      fontSize: interaction.fields.getTextInputValue('boost_embed_font_size'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_content')
+        .setLabel('Continue to Content & Variables')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'Embed style saved! Click below to continue to Content & Variables.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_embed modal handler:', err);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
     }
   }
 };
+
+// Button handler for boostsetup_continue_content
+buttonHandlers.boostsetup_continue_content = async (interaction) => {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_content')
+      .setTitle('Boost Message Setup: Content & Variables');
+    const messageInput = new TextInputBuilder()
+      .setCustomId('boost_content_message')
+      .setLabel('Message Content (use {user}, {tier}, etc.)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Congrats {user} for boosting to Tier {tier}!')
+      .setRequired(true);
+    const titleInput = new TextInputBuilder()
+      .setCustomId('boost_content_title')
+      .setLabel('Embed Title (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Server Boosted!')
+      .setRequired(false);
+    const descInput = new TextInputBuilder()
+      .setCustomId('boost_content_description')
+      .setLabel('Embed Description (optional)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('Thank you for boosting!')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(messageInput),
+      new ActionRowBuilder().addComponents(titleInput),
+      new ActionRowBuilder().addComponents(descInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_continue_content button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Modal handler for boostsetup_content (step 3)
+modalHandlers.boostsetup_content = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].content = {
+      message: interaction.fields.getTextInputValue('boost_content_message'),
+      title: interaction.fields.getTextInputValue('boost_content_title'),
+      description: interaction.fields.getTextInputValue('boost_content_description'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_multimedia')
+        .setLabel('Continue to Multimedia')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'Content & variables saved! Click below to continue to Multimedia.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_content modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_multimedia
+buttonHandlers.boostsetup_continue_multimedia = async (interaction) => {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_multimedia')
+      .setTitle('Boost Message Setup: Multimedia');
+    const thumbnailInput = new TextInputBuilder()
+      .setCustomId('boost_multimedia_thumbnail')
+      .setLabel('Thumbnail URL (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://...')
+      .setRequired(false);
+    const imageInput = new TextInputBuilder()
+      .setCustomId('boost_multimedia_image')
+      .setLabel('Image URL (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://...')
+      .setRequired(false);
+    const fieldsInput = new TextInputBuilder()
+      .setCustomId('boost_multimedia_fields')
+      .setLabel('Custom Fields (JSON, optional)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('[{"name":"Field 1","value":"Value"}]')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(thumbnailInput),
+      new ActionRowBuilder().addComponents(imageInput),
+      new ActionRowBuilder().addComponents(fieldsInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_continue_multimedia button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Modal handler for boostsetup_multimedia (step 4)
+modalHandlers.boostsetup_multimedia = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].multimedia = {
+      thumbnail: interaction.fields.getTextInputValue('boost_multimedia_thumbnail'),
+      image: interaction.fields.getTextInputValue('boost_multimedia_image'),
+      fields: interaction.fields.getTextInputValue('boost_multimedia_fields'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_actions')
+        .setLabel('Continue to Actions & Buttons')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'Multimedia settings saved! Click below to continue to Actions & Buttons.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_multimedia modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_actions
+buttonHandlers.boostsetup_continue_actions = async (interaction) => {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_actions')
+      .setTitle('Boost Message Setup: Actions & Buttons');
+    const labelInput = new TextInputBuilder()
+      .setCustomId('boost_actions_label')
+      .setLabel('Button Label (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Celebrate!')
+      .setRequired(false);
+    const urlInput = new TextInputBuilder()
+      .setCustomId('boost_actions_url')
+      .setLabel('Button URL (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://...')
+      .setRequired(false);
+    const emojiInput = new TextInputBuilder()
+      .setCustomId('boost_actions_emoji')
+      .setLabel('Button Emoji (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('🎉')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(labelInput),
+      new ActionRowBuilder().addComponents(urlInput),
+      new ActionRowBuilder().addComponents(emojiInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_continue_actions button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Modal handler for boostsetup_actions (step 5)
+modalHandlers.boostsetup_actions = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].actions = {
+      label: interaction.fields.getTextInputValue('boost_actions_label'),
+      url: interaction.fields.getTextInputValue('boost_actions_url'),
+      emoji: interaction.fields.getTextInputValue('boost_actions_emoji'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_footer')
+        .setLabel('Continue to Footer & Timestamp')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'Actions & buttons saved! Click below to continue to Footer & Timestamp.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_actions modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_footer
+buttonHandlers.boostsetup_continue_footer = async (interaction) => {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_footer')
+      .setTitle('Boost Message Setup: Footer & Timestamp');
+    const footerTextInput = new TextInputBuilder()
+      .setCustomId('boost_footer_text')
+      .setLabel('Footer Text (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Thank you for boosting!')
+      .setRequired(false);
+    const footerIconInput = new TextInputBuilder()
+      .setCustomId('boost_footer_icon')
+      .setLabel('Footer Icon URL (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('https://...')
+      .setRequired(false);
+    const timestampInput = new TextInputBuilder()
+      .setCustomId('boost_footer_timestamp')
+      .setLabel('Show Timestamp? (yes/no)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('yes')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(footerTextInput),
+      new ActionRowBuilder().addComponents(footerIconInput),
+      new ActionRowBuilder().addComponents(timestampInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_continue_footer button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Modal handler for boostsetup_footer (step 6)
+modalHandlers.boostsetup_footer = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].footer = {
+      text: interaction.fields.getTextInputValue('boost_footer_text'),
+      icon: interaction.fields.getTextInputValue('boost_footer_icon'),
+      timestamp: interaction.fields.getTextInputValue('boost_footer_timestamp'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_role')
+        .setLabel('Continue to Role & Permission Hooks')
+        .setStyle(ButtonStyle.Primary)
+    );
+    await interaction.reply({
+      content: 'Footer & timestamp saved! Click below to continue to Role & Permission Hooks.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_footer modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_role
+buttonHandlers.boostsetup_continue_role = async (interaction) => {
+  try {
+    const modal = new ModalBuilder()
+      .setCustomId('boostsetup_role')
+      .setTitle('Boost Message Setup: Role & Permission Hooks');
+    const autoRoleInput = new TextInputBuilder()
+      .setCustomId('boost_role_auto')
+      .setLabel('Auto-Assign Role ID (optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('Role ID')
+      .setRequired(false);
+    const mentionRolesInput = new TextInputBuilder()
+      .setCustomId('boost_role_mentions')
+      .setLabel('Mention Role IDs (comma-separated)') // <= 45 chars
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('123,456')
+      .setRequired(false);
+    const permCheckInput = new TextInputBuilder()
+      .setCustomId('boost_role_permcheck')
+      .setLabel('Permission Check (yes/no, optional)')
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder('no')
+      .setRequired(false);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(autoRoleInput),
+      new ActionRowBuilder().addComponents(mentionRolesInput),
+      new ActionRowBuilder().addComponents(permCheckInput)
+    );
+    await interaction.showModal(modal);
+  } catch (err) {
+    console.error('Error in boostsetup_continue_role button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while opening the next step. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Modal handler for boostsetup_role (step 7)
+modalHandlers.boostsetup_role = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    global.boostSetup[userId] = global.boostSetup[userId] || {};
+    global.boostSetup[userId].role = {
+      auto: interaction.fields.getTextInputValue('boost_role_auto'),
+      mentions: interaction.fields.getTextInputValue('boost_role_mentions'),
+      permCheck: interaction.fields.getTextInputValue('boost_role_permcheck'),
+    };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_continue_preview')
+        .setLabel('Preview & Save')
+        .setStyle(ButtonStyle.Success)
+    );
+    await interaction.reply({
+      content: 'Role & permission hooks saved! Click below to preview and save your boost message setup.',
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_role modal handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while processing your input. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_continue_preview
+buttonHandlers.boostsetup_continue_preview = async (interaction) => {
+  try {
+    // Show a summary of all collected data and a Save button
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    const data = global.boostSetup[userId] || {};
+    // Build a preview string (truncate for brevity)
+    let preview = 'Here is a summary of your boost message setup:\n';
+    for (const [step, values] of Object.entries(data)) {
+      preview += `**${step.charAt(0).toUpperCase() + step.slice(1)}:**\n`;
+      for (const [k, v] of Object.entries(values)) {
+        preview += `- ${k}: ${v ? (v.length > 100 ? v.slice(0, 100) + '...' : v) : 'None'}\n`;
+      }
+    }
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('boostsetup_save')
+        .setLabel('Save Boost Message Setup')
+        .setStyle(ButtonStyle.Success)
+    );
+    await interaction.reply({
+      content: preview,
+      components: [row],
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Error in boostsetup_continue_preview button handler:', err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: 'An error occurred while showing the preview. Please try again.', ephemeral: true });
+    }
+  }
+};
+
+// Button handler for boostsetup_save
+buttonHandlers.boostsetup_save = async (interaction) => {
+  try {
+    const userId = interaction.user.id;
+    global.boostSetup = global.boostSetup || {};
+    const data = global.boostSetup[userId] || {};
+    // Flatten the collected data
+    const config = {
+      guild_id: interaction.guild.id,
+      // General
+      channel: data.general?.channel || null,
+      minTier: data.general?.minTier || null,
+      rateLimit: data.general?.rateLimit || null,
+      sendEmbed: data.general?.sendEmbed ?? true,
+      // Embed
+      color: data.embed?.color || null,
+      border: data.embed?.border || null,
+      borderWidth: data.embed?.borderWidth || null,
+      fontFamily: data.embed?.fontFamily || null,
+      fontSize: data.embed?.fontSize || null,
+      // Content
+      message: data.content?.message || null,
+      title: data.content?.title || null,
+      description: data.content?.description || null,
+      // Multimedia
+      thumbnail: data.multimedia?.thumbnail || null,
+      image: data.multimedia?.image || null,
+      fields: data.multimedia?.fields ? JSON.stringify(data.multimedia.fields) : null,
+      // Actions
+      buttonLabel: data.actions?.buttonLabel || null,
+      buttonUrl: data.actions?.buttonUrl || null,
+      buttonEmoji: data.actions?.buttonEmoji || null,
+      // Footer
+      footer: data.footer?.footer || null,
+      footer_icon: data.footer?.footer_icon || null,
+      timestamp: data.footer?.timestamp ?? false,
+      // Role
+      autoRole: data.role?.autoRole || null,
+      mentions: data.role?.mentions || null,
+      permCheck: data.role?.permCheck || null
+    };
+    // Save to database
+    const { error } = await require('../utils/supabase').supabase
+      .from('boost_configs')
+      .upsert(config, { onConflict: ['guild_id'] });
+    if (error) {
+      console.error('Error saving boost config:', error);
+      return interaction.reply({
+        content: '❌ Failed to save boost message setup. Please try again later or contact support.',
+        ephemeral: true
+      });
+    }
+    // Success
+    await interaction.reply({
+      content: '✅ Your boost message setup has been saved! Use `/testboost` to preview it.',
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error('Critical error in boostsetup_save:', err);
+    try {
+      await interaction.reply({
+        content: '❌ An unexpected error occurred while saving your boost message. Please try again or contact support.',
+        ephemeral: true
+      });
+    } catch {}
+  }
+};
+
+// --- TEST BOOST MESSAGE SLASH COMMAND ---
+slashHandlers.testboost = async (interaction) => {
+  try {
+    // Fetch boost config for this guild
+    const { data: config, error } = await require('../utils/supabase').supabase
+      .from('boost_configs')
+      .select('*')
+      .eq('guild_id', interaction.guild.id)
+      .single();
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error loading boost config:', error);
+      return interaction.reply({
+        content: '❌ Failed to load boost message config. Please try again later or contact support.',
+        ephemeral: true
+      });
+    }
+    if (!config) {
+      return interaction.reply({
+        content: 'No boost message config found. Use `/boostsetup` to create one first.',
+        ephemeral: true
+      });
+    }
+    // Show only the actual boost message preview
+    if (config.sendEmbed) {
+      // Build the embed
+      const embed = new EmbedBuilder()
+        .setTitle(config.title || 'Thank you for boosting!')
+        .setDescription(config.description || 'Your boost helps our community grow!')
+        .setColor(config.color || 0xf47fff)
+        .setThumbnail(config.thumbnail || interaction.guild.iconURL())
+        .setFooter({ text: config.footer || 'Server Boost', iconURL: config.footer_icon || interaction.guild.iconURL() });
+      if (config.image) embed.setImage(config.image);
+      if (config.timestamp) embed.setTimestamp();
+      // Add custom fields if present and valid JSON
+      if (config.fields) {
+        try {
+          const fieldsArr = typeof config.fields === 'string' ? JSON.parse(config.fields) : config.fields;
+          if (Array.isArray(fieldsArr)) {
+            for (const f of fieldsArr) {
+              if (f.name && f.value) embed.addFields({ name: f.name, value: f.value });
+            }
+          }
+        } catch {}
+      }
+      // Add button if present
+      let components = [];
+      if (config.buttonLabel && config.buttonUrl) {
+        components = [
+          new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setLabel(config.buttonLabel)
+              .setStyle(ButtonStyle.Link)
+              .setURL(config.buttonUrl)
+              .setEmoji(config.buttonEmoji || undefined)
+          )
+        ];
+      }
+      return interaction.reply({ embeds: [embed], components, ephemeral: true });
+    } else {
+      // Plain message
+      let msg = config.message || 'Thank you for boosting!';
+      if (config.title) msg = `**${config.title}**\n${msg}`;
+      if (config.description) msg += `\n${config.description}`;
+      // Add image/thumbnail as links if present
+      if (config.thumbnail) msg += `\n[Thumbnail](${config.thumbnail})`;
+      if (config.image) msg += `\n[Image](${config.image})`;
+      // Add button as a link if present
+      if (config.buttonLabel && config.buttonUrl) {
+        msg += `\n[${config.buttonLabel}](${config.buttonUrl})`;
+      }
+      return interaction.reply({ content: msg, ephemeral: true });
+    }
+  } catch (err) {
+    console.error('Critical error in /testboost:', err);
+    try {
+      await interaction.reply({
+        content: '❌ An unexpected error occurred while showing the boost message preview. Please try again or contact support.',
+        ephemeral: true
+      });
+    } catch {}
+  }
+};
 // ... existing code ...
+
+// Ensure /testboost is always present in slashCommands
+if (!slashCommands.find(cmd => cmd.name === 'testboost')) {
+  slashCommands.push(
+    new SlashCommandBuilder()
+      .setName('testboost')
+      .setDescription('Send a test boost message to preview the current boost message style')
+  );
+}
 
 module.exports = {
   name: 'utility',
