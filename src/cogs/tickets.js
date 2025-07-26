@@ -685,7 +685,7 @@ const buttonHandlers = {
       // Send deletion notification
       const embed = new EmbedBuilder()
         .setTitle('🗑️ Ticket Deletion')
-        .setDescription(`This ticket will be deleted <t:1722000005:R>.\n\nThank you for using our ticket system.`)
+        .setDescription(`This ticket will be deleted <t:${Math.floor(Date.now() / 1000) + 5}:R>.\n\nThank you for using our ticket system.`)
         .setColor(0xFF0000)
         .setFooter({
           text: `Ticket #${ticketNumber} • Deleted by: ${interaction.user.tag}`
