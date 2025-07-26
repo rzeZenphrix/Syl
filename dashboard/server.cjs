@@ -331,5 +331,5 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.LOGIN_SERVER_PORT || 5174;
 app.listen(PORT, () => {
-  console.log(`Login server running at http://localhost:${PORT}`);
+  console.log(`Login server running at https://syl-2a38.onrender.com:${PORT}`);
 }); 
