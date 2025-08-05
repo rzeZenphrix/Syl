@@ -2,25 +2,15 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const crypto = require('crypto');
+const { createClient } = require('@supabase/supabase-js');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database('./guild_modules.db');
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS guild_modules (
-    guild_id TEXT NOT NULL,
-    module_key TEXT NOT NULL,
-    enabled INTEGER NOT NULL,
-    PRIMARY KEY (guild_id, module_key)
-  )`);
-  db.run(`CREATE TABLE IF NOT EXISTS user_tokens (
-    user_id TEXT PRIMARY KEY,
-    access_token TEXT NOT NULL
-  )`);
-});
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 // Serve the OAuth URL from the environment
 app.get('/api/oauth-url', (req, res) => {
@@ -31,10 +21,6 @@ app.get('/api/oauth-url', (req, res) => {
     res.status(500).json({ error: 'OAuth URL not configured.' });
   }
 });
-
-// Add Supabase client for user token storage
-const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 // OAuth callback endpoint
 app.post('/api/oauth-callback', async (req, res) => {
@@ -69,10 +55,32 @@ app.post('/api/oauth-callback', async (req, res) => {
     // For demo, return a fake token (in production, use JWT/session)
     const fakeToken = 'discord-' + user.id;
     // Store the access token in Supabase for this user
+    // Get or create Supabase user
+    let { data: authUser } = await supabase.auth.getUser(tokenData.access_token);
+    
+    if (!authUser) {
+      const { data: newUser, error: signUpError } = await supabase.auth.signUp({
+        email: `${user.id}@discord.user`,
+        password: crypto.randomBytes(20).toString('hex')
+      });
+      if (signUpError) {
+        console.error('Failed to create Supabase user:', signUpError);
+        return res.status(500).json({ error: 'Failed to create user account' });
+      }
+      authUser = newUser;
+    }
+
     const { error } = await supabase
       .from('user_tokens')
-      .upsert({ user_id: user.id, access_token: tokenData.access_token });
-    if (error) console.error('Failed to store user token in Supabase:', error);
+      .upsert({ 
+        user_id: authUser.id,
+        access_token: tokenData.access_token 
+      });
+    
+    if (error) {
+      console.error('Failed to store user token in Supabase:', error);
+      return res.status(500).json({ error: 'Failed to store user token' });
+    }
     res.json({ token: fakeToken, user });
   } catch (e) {
     res.status(500).json({ error: 'OAuth callback failed', details: e.message });
@@ -176,37 +184,48 @@ app.post('/api/guild/:guildId/boost-message', express.json(), (req, res) => {
 const moduleActivation = {};
 
 // Get module activation state (persistent)
-app.get('/api/guild/:guildId/modules', (req, res) => {
+app.get('/api/guild/:guildId/modules', async (req, res) => {
   const { guildId } = req.params;
-  db.all('SELECT module_key, enabled FROM guild_modules WHERE guild_id = ?', [guildId], (err, rows) => {
-    if (err) return res.status(500).json({ error: 'DB error' });
-    const state = {};
-    rows.forEach(row => { state[row.module_key] = !!row.enabled; });
-    res.json(state);
-  });
+  const { data, error } = await supabase
+    .from('guild_modules')
+    .select('module_key, enabled')
+    .eq('guild_id', guildId);
+
+  if (error) return res.status(500).json({ error: 'Database error', details: error.message });
+  
+  const state = {};
+  (data || []).forEach(row => { state[row.module_key] = !!row.enabled; });
+  res.json(state);
 });
+
 // Set module activation state (persistent)
-app.post('/api/guild/:guildId/modules', express.json(), (req, res) => {
+app.post('/api/guild/:guildId/modules', express.json(), async (req, res) => {
   const { guildId } = req.params;
   const { moduleKey, enabled } = req.body;
+  
   if (!moduleKey || typeof enabled !== 'boolean') {
     return res.status(400).json({ error: 'Invalid moduleKey or enabled' });
   }
-  db.run('INSERT INTO guild_modules (guild_id, module_key, enabled) VALUES (?, ?, ?) ON CONFLICT(guild_id, module_key) DO UPDATE SET enabled = excluded.enabled',
-    [guildId, moduleKey, enabled ? 1 : 0],
-    function(err) {
-      if (err) return res.status(500).json({ error: 'DB error' });
-      res.json({ success: true });
+
+  const { error } = await supabase
+    .from('guild_modules')
+    .upsert({
+      guild_id: guildId,
+      module_key: moduleKey,
+      enabled: enabled
     });
+
+  if (error) return res.status(500).json({ error: 'Database error', details: error.message });
+  res.json({ success: true });
 });
 
 // Simulate fetching text channels for a guild
 app.get('/api/guild/:guildId/channels', async (req, res) => {
   const { guildId } = req.params;
-  if (!BOT_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
   try {
     const apiRes = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
-      headers: { Authorization: `Bot ${BOT_TOKEN}` }
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` }
     });
     if (apiRes.status === 403 || apiRes.status === 404) {
       return res.status(404).json({ error: 'Bot is not in this server or cannot access channels.' });
@@ -227,7 +246,7 @@ app.get('/api/guild/:guildId/channels', async (req, res) => {
 app.post('/api/guild/:guildId/boost-test', express.json(), async (req, res) => {
   const { guildId } = req.params;
   const { message, color, channelId, embed } = req.body;
-  if (!BOT_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
   if (!channelId) return res.status(400).json({ error: 'Missing channelId' });
   try {
     let body;
@@ -241,7 +260,7 @@ app.post('/api/guild/:guildId/boost-test', express.json(), async (req, res) => {
     const apiRes = await fetch(`https://discord.com/api/channels/${channelId}/messages`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bot ${BOT_TOKEN}`,
+        'Authorization': `Bot ${process.env.DISCORD_TOKEN}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(body)
@@ -261,7 +280,7 @@ app.get('/api/guild/:guildId/info', async (req, res) => {
   const { guildId } = req.params;
   try {
     const apiRes = await fetch(`https://discord.com/api/guilds/${guildId}`, {
-      headers: { 'Authorization': `Bot ${BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
     if (!apiRes.ok) return res.status(404).json({ error: 'Guild not found or bot not in guild' });
     const guild = await apiRes.json();
@@ -300,12 +319,11 @@ app.get('/api/guild/:guildId/info', async (req, res) => {
   }
 });
 
-// Use DISCORD_TOKEN from .env for the bot token
-const BOT_TOKEN = process.env.DISCORD_TOKEN;
+// Cache for bot guilds
 let botGuildsCache = { guilds: [], fetchedAt: 0 };
 
 app.get('/api/bot-guilds', async (req, res) => {
-  if (!BOT_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
   const now = Date.now();
   // Cache for 60 seconds
   if (botGuildsCache.guilds.length > 0 && now - botGuildsCache.fetchedAt < 60000) {
@@ -313,7 +331,7 @@ app.get('/api/bot-guilds', async (req, res) => {
   }
   try {
     const botRes = await fetch('https://discord.com/api/users/@me/guilds', {
-      headers: { Authorization: `Bot ${BOT_TOKEN}` }
+      headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` }
     });
     if (!botRes.ok) {
       return res.status(500).json({ error: 'Failed to fetch bot guilds from Discord' });
@@ -331,5 +349,5 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.LOGIN_SERVER_PORT || 5174;
 app.listen(PORT, () => {
-  console.log(`Login server running at https://syl-2a38.onrender.com:${PORT}`);
+  console.log(`Login server running at https://syl-2a38.onrender.com`);
 }); 

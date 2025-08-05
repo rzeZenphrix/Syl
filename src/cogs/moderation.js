@@ -1160,7 +1160,7 @@ const prefixCommands = {
       return msg.reply(`Sticker added as \`${name}\``);
     } catch (e) {
       console.error('Steal sticker error:', e);
-      return msg.reply('Failed to steal sticker. Make sure the bot has Manage Stickers permission and the sticker is a standard Discord sticker.');
+      return msg.reply('Server has reached the maximum number of stickers.');
     }
   },
 };
@@ -2017,7 +2017,7 @@ const slashHandlers = {
         .setTitle('Anonymous Feedback')
         .setDescription(feedback)
         .addFields(
-          { name: 'Submitted by', value: 'Anonymous', inline: true },
+          { name: 'Submitted by', value: interaction.user.id, inline: true },
           { name: 'Channel', value: interaction.channel.name, inline: true },
           { name: 'Timestamp', value: new Date().toLocaleString(), inline: true }
         )
@@ -2298,7 +2298,7 @@ const slashHandlers = {
       return interaction.reply(`Sticker added as \`${name}\``);
     } catch (e) {
       console.error('Steal sticker error:', e);
-      return interaction.reply('Failed to steal sticker. Make sure the bot has Manage Stickers permission and the sticker is a standard Discord sticker.');
+      return interaction.reply('Server has reached the maximum number of stickers.');
     }
   },
 };
@@ -2882,7 +2882,7 @@ prefixCommands.warn = async (msg, args) => {
     try {
       const embed = new EmbedBuilder()
         .setTitle('You have been WARNED')
-        .setDescription(`You have been **warned** in **${msg.guild.name}**.`)
+        .setDescription(`**${msg.guild.name}**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Moderator', value: msg.author.tag, inline: false },
@@ -2913,7 +2913,7 @@ prefixCommands.kick = async (msg, args) => {
     try {
       const embed = new EmbedBuilder()
         .setTitle('You have been KICKED')
-        .setDescription(`You have been **kicked** from **${msg.guild.name}**.`)
+        .setDescription(`**${msg.guild.name}**.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Moderator', value: msg.author.tag, inline: false }
@@ -2946,7 +2946,7 @@ prefixCommands.mute = async (msg, args) => {
     try {
       const embed = new EmbedBuilder()
         .setTitle('You have been MUTED')
-        .setDescription(`You have been **muted** in **${msg.guild.name}** for ${durationStr}.`)
+        .setDescription(`**${msg.guild.name}** for ${durationStr}.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Moderator', value: msg.author.tag, inline: false }
@@ -2978,7 +2978,7 @@ prefixCommands.timeout = async (msg, args) => {
     try {
       const embed = new EmbedBuilder()
         .setTitle('You have been TIMED OUT')
-        .setDescription(`You have been **timed out** in **${msg.guild.name}** for ${durationStr}.`)
+        .setDescription(`**${msg.guild.name}** for ${durationStr}.`)
         .addFields(
           { name: 'Reason', value: reason, inline: false },
           { name: 'Moderator', value: msg.author.tag, inline: false }
@@ -3012,7 +3012,7 @@ prefixCommands.ban = async (msg, args) => {
       if (user) {
         const embed = new EmbedBuilder()
           .setTitle('You have been BANNED')
-          .setDescription(`You have been **banned** from **${msg.guild.name}**.`)
+          .setDescription(`from **${msg.guild.name}**.`)
           .addFields(
             { name: 'Reason', value: reason, inline: false },
             { name: 'Moderator', value: msg.author.tag, inline: false }
