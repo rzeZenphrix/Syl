@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SYL Bot Dashboard</title>
+  <title>Dashboard</title>
   <link rel="stylesheet" href="/css/theme.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
@@ -540,7 +540,7 @@
     <div class="sidebar-header">
       <img src="" alt="Server icon" class="server-icon" id="serverIcon">
       <div class="server-info">
-        <div class="server-name" id="serverName">SYL Bot</div>
+        <div class="server-name" id="serverName">Dashboard</div>
         <div class="server-status">
           <div class="status-indicator" id="statusIndicator"></div>
           <span id="serverStatus">Online</span>
@@ -613,7 +613,7 @@
       <div id="helpSection" style="display: none;">
         <div class="card">
           <h2>Help & Support</h2>
-          <p>Find answers to common questions about using the SYL Bot Dashboard.</p>
+          <p>Find answers to common questions about using the Dashboard.</p>
           
           <div class="mt-lg">
             <h3>Getting Started</h3>
@@ -839,7 +839,7 @@
         serverIcon.style.display = 'none';
       }
 
-      serverName.textContent = currentGuild.name || 'SYL Bot';
+              serverName.textContent = currentGuild.name || 'Dashboard';
       serverStatus.textContent = currentGuild.status || 'Online';
       
       if (currentGuild.status === 'Online') {
@@ -986,7 +986,7 @@
         helpSection.style.display = 'none';
       } else if (section === 'help') {
         pageTitle.textContent = 'Help & Support';
-        pageSubtitle.textContent = 'Get help with SYL Bot';
+        pageSubtitle.textContent = 'Get help with the Dashboard';
         dashboardSection.style.display = 'none';
         helpSection.style.display = 'block';
       }

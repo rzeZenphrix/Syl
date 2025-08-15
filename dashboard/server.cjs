@@ -36,9 +36,9 @@ app.get('/api/oauth', (req, res) => {
   res.redirect(oauthUrl);
 });
 
-// OAuth callback endpoint
-app.post('/api/oauth-callback', async (req, res) => {
-  const code = req.body.code;
+// OAuth callback endpoint (GET for Discord redirect)
+app.get('/api/oauth-callback', async (req, res) => {
+  const code = req.query.code;
   if (!code) return res.status(400).json({ error: 'Missing code' });
 
   const params = new URLSearchParams();
@@ -79,11 +79,14 @@ app.post('/api/oauth-callback', async (req, res) => {
     
     if (error) {
       console.error('Failed to store user token in Supabase:', error);
-      return res.status(500).json({ error: 'Failed to store user token' });
+      return res.redirect('/callback.html?error=Failed to store user token');
     }
-    res.json({ token: fakeToken, user });
+    
+    // Redirect to frontend with token
+    res.redirect(`/callback.html?token=${encodeURIComponent(fakeToken)}&user=${encodeURIComponent(JSON.stringify(user))}`);
   } catch (e) {
-    res.status(500).json({ error: 'OAuth callback failed', details: e.message });
+    console.error('OAuth callback error:', e);
+    res.redirect('/callback.html?error=OAuth callback failed');
   }
 });
 

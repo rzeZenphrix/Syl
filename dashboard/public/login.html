@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/theme.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Login page specific styles */
+    /* Minimalistic login page styles */
     body {
       background: var(--bg-primary);
       color: var(--text-primary);
@@ -17,91 +17,61 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: var(--space-xl);
+      padding: var(--space-lg);
     }
 
     .login-container {
-      max-width: 400px;
+      max-width: 320px;
       width: 100%;
     }
 
     .login-card {
       background: var(--bg-card);
-      border-radius: var(--radius-xl);
-      border: 1px solid var(--border-primary);
-      padding: var(--space-2xl);
-      text-align: center;
-      box-shadow: var(--shadow-lg);
-      animation: fadeInScale 0.5s ease-out;
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-md);
-      margin-bottom: var(--space-xl);
-    }
-
-    .logo-icon {
-      width: 64px;
-      height: 64px;
       border-radius: var(--radius-lg);
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .logo-icon svg {
-      width: 32px;
-      height: 32px;
-      color: white;
-    }
-
-    .logo-text {
-      font-size: var(--font-size-2xl);
-      font-weight: 700;
-      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-xl);
+      text-align: center;
+      box-shadow: var(--shadow-md);
+      animation: fadeIn 0.4s ease-out;
     }
 
     .welcome-title {
-      font-size: var(--font-size-xl);
-      font-weight: 700;
+      font-size: var(--font-size-lg);
+      font-weight: 600;
       color: var(--text-primary);
       margin-bottom: var(--space-sm);
     }
 
     .welcome-subtitle {
       color: var(--text-secondary);
-      font-size: var(--font-size-base);
+      font-size: var(--font-size-sm);
       margin-bottom: var(--space-xl);
-      line-height: 1.6;
+      line-height: 1.5;
     }
 
     .login-btn {
       width: 100%;
-      padding: var(--space-lg);
-      background: linear-gradient(135deg, var(--accent-primary), #5a6bff);
+      padding: var(--space-md) var(--space-lg);
+      background: #5865f2;
       color: white;
       border: none;
-      border-radius: var(--radius-lg);
+      border-radius: var(--radius-md);
       font-family: inherit;
       font-size: var(--font-size-base);
-      font-weight: 600;
+      font-weight: 500;
       cursor: pointer;
       transition: all var(--transition-normal);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: var(--space-md);
+      gap: var(--space-sm);
       text-decoration: none;
     }
 
     .login-btn:hover {
-      background: linear-gradient(135deg, #5a6bff, var(--accent-primary));
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-lg), var(--shadow-glow);
+      background: #4752c4;
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
     }
 
     .login-btn:active {
@@ -109,45 +79,8 @@
     }
 
     .discord-icon {
-      width: 24px;
-      height: 24px;
-    }
-
-    .features {
-      margin-top: var(--space-2xl);
-      padding-top: var(--space-xl);
-      border-top: 1px solid var(--border-primary);
-    }
-
-    .features-title {
-      font-size: var(--font-size-lg);
-      font-weight: 600;
-      color: var(--text-primary);
-      margin-bottom: var(--space-lg);
-    }
-
-    .feature-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-md);
-    }
-
-    .feature-item {
-      display: flex;
-      align-items: center;
-      gap: var(--space-md);
-      color: var(--text-secondary);
-      font-size: var(--font-size-sm);
-    }
-
-    .feature-icon {
-      width: 20px;
-      height: 20px;
-      color: var(--accent-success);
-      flex-shrink: 0;
+      width: 18px;
+      height: 18px;
     }
 
     .error-message {
@@ -178,16 +111,15 @@
     /* Responsive */
     @media (max-width: 480px) {
       body {
-        padding: var(--space-lg);
+        padding: var(--space-md);
       }
 
       .login-card {
-        padding: var(--space-xl);
+        padding: var(--space-lg);
       }
 
-      .logo {
-        flex-direction: column;
-        gap: var(--space-sm);
+      .login-container {
+        max-width: 280px;
       }
     }
 
@@ -222,20 +154,9 @@
 <body>
   <div class="login-container">
     <div class="login-card">
-      <!-- Logo -->
-      <div class="logo">
-        <div class="logo-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="4" y="4" width="16" height="16" rx="2"/>
-            <path d="M8 12h8M12 8v8"/>
-          </svg>
-        </div>
-        <div class="logo-text">SYL Bot</div>
-      </div>
-
       <!-- Welcome -->
-      <h1 class="welcome-title">Welcome to SYL Bot</h1>
-      <p class="welcome-subtitle">Manage your Discord server with powerful moderation tools and automation features</p>
+      <h1 class="welcome-title">Welcome</h1>
+      <p class="welcome-subtitle">Sign in to manage your Discord servers</p>
 
       <!-- Error Message -->
       <div class="error-message" id="errorMessage"></div>
@@ -251,40 +172,7 @@
       <!-- Loading State -->
       <div class="loading" id="loadingState">
         <div class="loading-spinner"></div>
-        <span>Connecting to Discord...</span>
-      </div>
-
-      <!-- Features -->
-      <div class="features animate-slide-in">
-        <h2 class="features-title">What you can do</h2>
-        <ul class="feature-list">
-          <li class="feature-item">
-            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8Z"/>
-            </svg>
-            Advanced moderation tools
-          </li>
-          <li class="feature-item">
-            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
-              <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
-            </svg>
-            Welcome & goodbye messages
-          </li>
-          <li class="feature-item">
-            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="6" y="10" width="20" height="12" rx="4"/>
-              <path d="M10 16h12"/>
-            </svg>
-            Support ticket system
-          </li>
-          <li class="feature-item">
-            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 10a6 6 0 1 0-9 5M3 12a13 13 0 1 0 5-10"/>
-            </svg>
-            Server backup & restore
-          </li>
-        </ul>
+        <span>Connecting...</span>
       </div>
     </div>
   </div>

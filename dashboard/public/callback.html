@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/theme.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Callback page specific styles */
+    /* Minimalistic callback page styles */
     body {
       background: var(--bg-primary);
       color: var(--text-primary);
@@ -17,52 +17,22 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: var(--space-xl);
+      padding: var(--space-lg);
     }
 
     .callback-container {
-      max-width: 400px;
+      max-width: 320px;
       width: 100%;
     }
 
     .callback-card {
       background: var(--bg-card);
-      border-radius: var(--radius-xl);
-      border: 1px solid var(--border-primary);
-      padding: var(--space-2xl);
-      text-align: center;
-      box-shadow: var(--shadow-lg);
-      animation: fadeInScale 0.5s ease-out;
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-md);
-      margin-bottom: var(--space-xl);
-    }
-
-    .logo-icon {
-      width: 64px;
-      height: 64px;
       border-radius: var(--radius-lg);
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .logo-icon svg {
-      width: 32px;
-      height: 32px;
-      color: white;
-    }
-
-    .logo-text {
-      font-size: var(--font-size-2xl);
-      font-weight: 700;
-      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-xl);
+      text-align: center;
+      box-shadow: var(--shadow-md);
+      animation: fadeIn 0.4s ease-out;
     }
 
     .status-title {
@@ -192,17 +162,6 @@
 <body>
   <div class="callback-container">
     <div class="callback-card">
-      <!-- Logo -->
-      <div class="logo">
-        <div class="logo-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="4" y="4" width="16" height="16" rx="2"/>
-            <path d="M8 12h8M12 8v8"/>
-          </svg>
-        </div>
-        <div class="logo-text">SYL Bot</div>
-      </div>
-
       <!-- Status -->
       <div class="spinner-container" id="spinnerContainer">
         <div class="spinner" id="spinner"></div>
@@ -214,7 +173,7 @@
         </svg>
       </div>
 
-      <h1 class="status-title" id="statusTitle">Connecting to Discord...</h1>
+      <h1 class="status-title" id="statusTitle">Connecting...</h1>
       <p class="status-message" id="statusMessage">Please wait while we authenticate your account</p>
 
       <!-- Error Message -->
@@ -230,13 +189,13 @@
     function getUrlParams() {
       const params = new URLSearchParams(window.location.search);
       return {
-        code: params.get('code'),
-        error: params.get('error'),
-        state: params.get('state')
+        token: params.get('token'),
+        user: params.get('user'),
+        error: params.get('error')
       };
     }
 
-    const { code, error, state } = getUrlParams();
+    const { token, user, error } = getUrlParams();
 
     // Update UI elements
     function updateUI(status, message, showError = false) {
@@ -283,43 +242,32 @@
         return;
       }
 
-      if (!code) {
-        updateUI('Error', 'No authorization code received');
-        showError('Missing authorization code from Discord');
+      if (!token) {
+        updateUI('Error', 'No token received');
+        showError('Missing authentication token');
         return;
       }
 
       try {
-        updateUI('Connecting...', 'Exchanging authorization code for access token');
-
-        const response = await fetch('/api/oauth-callback', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ code, state })
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || 'Failed to authenticate');
+        updateUI('Success!', 'Successfully connected to Discord');
+        
+        // Store the token
+        localStorage.setItem('asylum_token', token);
+        
+        // Store user info if available
+        if (user) {
+          try {
+            const userData = JSON.parse(decodeURIComponent(user));
+            localStorage.setItem('asylum_user', JSON.stringify(userData));
+          } catch (e) {
+            console.warn('Failed to parse user data:', e);
+          }
         }
-
-        const data = await response.json();
-
-        if (data.token) {
-          // Store the token
-          localStorage.setItem('asylum_token', data.token);
-          
-          updateUI('Success!', 'Successfully connected to Discord');
-          
-          // Redirect to server selection after a short delay
-          setTimeout(() => {
-            window.location.href = 'index.html';
-          }, 1500);
-        } else {
-          throw new Error('No token received from server');
-        }
+        
+        // Redirect to server selection after a short delay
+        setTimeout(() => {
+          window.location.href = 'index.html';
+        }, 1500);
       } catch (error) {
         console.error('Authentication error:', error);
         updateUI('Error', 'Failed to complete authentication');

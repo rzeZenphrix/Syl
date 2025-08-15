@@ -33,31 +33,9 @@
       justify-content: space-between;
     }
 
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: var(--space-md);
-    }
-
-    .logo-icon {
-      width: 48px;
-      height: 48px;
-      border-radius: var(--radius-lg);
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .logo-icon svg {
-      width: 24px;
-      height: 24px;
-      color: white;
-    }
-
-    .logo-text {
-      font-size: var(--font-size-2xl);
-      font-weight: 700;
+    .page-title {
+      font-size: var(--font-size-xl);
+      font-weight: 600;
       color: var(--text-primary);
     }
 
@@ -292,15 +270,7 @@
   <!-- Header -->
   <header class="header">
     <div class="header-content">
-      <div class="logo">
-        <div class="logo-icon">
-          <svg fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="4" y="4" width="16" height="16" rx="2"/>
-            <path d="M8 12h8M12 8v8"/>
-          </svg>
-        </div>
-        <div class="logo-text">SYL Bot</div>
-      </div>
+      <h1 class="page-title">Dashboard</h1>
       
       <div class="user-info" id="userInfo">
         <img src="" alt="User avatar" class="user-avatar" id="userAvatar">
@@ -314,8 +284,8 @@
   <main class="main">
     <div class="container">
       <div class="welcome-card animate-fade-in">
-        <h1 class="welcome-title">Welcome to SYL Bot</h1>
-        <p class="welcome-subtitle">Select a server to manage your bot settings and configure modules</p>
+        <h1 class="welcome-title">Select a Server</h1>
+        <p class="welcome-subtitle">Choose a server to manage your bot settings</p>
       </div>
 
       <div id="content">
