@@ -15,5 +15,13 @@ services:
         value: 1385547161269440573
       - key: DISCORD_REDIRECT_URI
         value: https://syl-cuiw.onrender.com/api/oauth-callback
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: DISCORD_CLIENT_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
     autoDeploy: true
  

@@ -180,6 +180,23 @@
       font-weight: 500;
     }
 
+    /* Modules Header */
+    .modules-header {
+      margin-bottom: var(--space-2xl);
+    }
+
+    .modules-header h2 {
+      font-size: var(--font-size-2xl);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
+    }
+
+    .modules-header p {
+      color: var(--text-secondary);
+      font-size: var(--font-size-base);
+    }
+
     /* Module Grid */
     .module-grid {
       display: grid;
@@ -609,6 +626,18 @@
         </div>
       </div>
 
+      <!-- Modules Section -->
+      <div id="modulesSection" style="display: none;">
+        <div class="modules-header">
+          <h2>Module Configuration</h2>
+          <p>Enable and configure modules for your server. Only enabled modules will be active.</p>
+        </div>
+        
+        <div class="module-grid" id="modulesGrid">
+          <!-- Modules will be dynamically loaded here -->
+        </div>
+      </div>
+
       <!-- Help Section -->
       <div id="helpSection" style="display: none;">
         <div class="card">
@@ -630,10 +659,13 @@
           <div class="mt-lg">
             <h3>Available Modules</h3>
             <ul>
-              <li><strong>Welcome & Goodbye:</strong> Send custom messages when members join or leave</li>
+              <li><strong>Welcome Messages:</strong> Send custom welcome messages when new members join</li>
+              <li><strong>Goodbye Messages:</strong> Send custom goodbye messages when members leave</li>
               <li><strong>Tickets:</strong> Create a support ticket system for your server</li>
               <li><strong>Backup:</strong> Backup and restore your server structure</li>
               <li><strong>Setup:</strong> Configure server roles, channels, and bot preferences</li>
+              <li><strong>Moderation:</strong> Advanced moderation tools including warnings, mutes, and bans</li>
+              <li><strong>Utility:</strong> Helpful utility commands for server management</li>
             </ul>
           </div>
         </div>
@@ -698,8 +730,19 @@
     const availableModules = [
       {
         key: 'welcome',
-        title: 'Welcome & Goodbye',
-        description: 'Send custom messages when members join or leave your server',
+        title: 'Welcome Messages',
+        description: 'Send custom welcome messages when new members join your server',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
+          <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
+        </svg>`,
+        badge: 'Core',
+        badgeType: 'core'
+      },
+      {
+        key: 'goodbye',
+        title: 'Goodbye Messages',
+        description: 'Send custom goodbye messages when members leave your server',
         icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
           <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
           <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
@@ -735,6 +778,27 @@
         icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 2v4M20 2v4M4 10h24"/>
           <rect x="6" y="12" width="20" height="16" rx="3"/>
+        </svg>`,
+        badge: 'Core',
+        badgeType: 'core'
+      },
+      {
+        key: 'moderation',
+        title: 'Moderation',
+        description: 'Advanced moderation tools including warnings, mutes, and bans',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>`,
+        badge: 'Core',
+        badgeType: 'core'
+      },
+      {
+        key: 'utility',
+        title: 'Utility Commands',
+        description: 'Helpful utility commands for server management and information',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 12l2 2 4-4"/>
+          <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
         </svg>`,
         badge: 'Core',
         badgeType: 'core'
@@ -864,12 +928,19 @@
     // Render modules
     function renderModules() {
       const moduleGrid = document.getElementById('moduleGrid');
+      const modulesGrid = document.getElementById('modulesGrid');
+      
+      // Clear both grids
       moduleGrid.innerHTML = '';
+      modulesGrid.innerHTML = '';
 
       availableModules.forEach((module, index) => {
         const isEnabled = !!moduleStates[module.key];
         const card = createModuleCard(module, isEnabled, index);
-        moduleGrid.appendChild(card);
+        
+        // Add to both grids
+        moduleGrid.appendChild(card.cloneNode(true));
+        modulesGrid.appendChild(card);
       });
     }
 
@@ -972,22 +1043,26 @@
       const pageTitle = document.getElementById('pageTitle');
       const pageSubtitle = document.getElementById('pageSubtitle');
       const dashboardSection = document.getElementById('dashboardSection');
+      const modulesSection = document.getElementById('modulesSection');
       const helpSection = document.getElementById('helpSection');
 
       if (section === 'dashboard') {
         pageTitle.textContent = 'Dashboard';
-        pageSubtitle.textContent = 'Welcome to your server dashboard';
+        pageSubtitle.textContent = 'Server overview and quick actions';
         dashboardSection.style.display = 'block';
+        modulesSection.style.display = 'none';
         helpSection.style.display = 'none';
       } else if (section === 'modules') {
         pageTitle.textContent = 'Modules';
         pageSubtitle.textContent = 'Configure your server modules';
-        dashboardSection.style.display = 'block';
+        dashboardSection.style.display = 'none';
+        modulesSection.style.display = 'block';
         helpSection.style.display = 'none';
       } else if (section === 'help') {
         pageTitle.textContent = 'Help & Support';
         pageSubtitle.textContent = 'Get help with the Dashboard';
         dashboardSection.style.display = 'none';
+        modulesSection.style.display = 'none';
         helpSection.style.display = 'block';
       }
     }
