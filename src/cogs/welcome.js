@@ -2,6 +2,21 @@ const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, Butt
 const { supabase } = require('../utils/supabase');
 const { isModuleEnabled } = require('../utils/modules');
 
+// Helper function to create module disabled embed
+function createModuleDisabledEmbed(moduleName) {
+  const dashboardUrl = process.env.DASHBOARD_URL || `http://localhost:4000/`;
+  return new EmbedBuilder()
+    .setTitle('Module Disabled')
+    .setDescription(`The ${moduleName} module is currently disabled.`)
+    .addFields({
+      name: '🔧 Enable Module',
+      value: `[Click here to enable in the dashboard](${dashboardUrl})`,
+      inline: false
+    })
+    .setColor(0xe74c3c)
+    .setFooter({ text: 'You need "Manage Server" permission to access the dashboard' });
+}
+
 // Helper function to validate image URLs
 function isValidImageUrl(url) {
   if (!url) return true; // No image is valid, so it's "correct"
@@ -71,7 +86,7 @@ const prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
     if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [createModuleDisabledEmbed('Welcome')] });
     }
     const channel = msg.mentions.channels.first();
     if (!channel) {
@@ -114,7 +129,7 @@ const prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
     if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [createModuleDisabledEmbed('Welcome')] });
     }
     const channel = msg.mentions.channels.first();
     if (!channel) {
@@ -154,7 +169,7 @@ const prefixCommands = {
 
   viewwelcome: async (msg) => {
     if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [createModuleDisabledEmbed('Welcome')] });
     }
     const { data, error } = await supabase.from('welcome_configs').select('*').eq('guild_id', msg.guild.id).single();
     if (error || !data) {
@@ -176,7 +191,7 @@ const prefixCommands = {
 
   viewgoodbye: async (msg) => {
     if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+      return msg.reply({ embeds: [createModuleDisabledEmbed('Welcome')] });
     }
     const { data, error } = await supabase.from('goodbye_configs').select('*').eq('guild_id', msg.guild.id).single();
     if (error || !data) {
@@ -234,7 +249,7 @@ const slashHandlers = {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
     if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
-      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+      return interaction.reply({ embeds: [createModuleDisabledEmbed('Welcome')], ephemeral: true });
     }
     
     const channel = interaction.options.getChannel('channel');
@@ -282,7 +297,7 @@ const slashHandlers = {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
     if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
-      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+      return interaction.reply({ embeds: [createModuleDisabledEmbed('Welcome')], ephemeral: true });
     }
     
     const channel = interaction.options.getChannel('channel');
@@ -348,7 +363,7 @@ const slashHandlers = {
 
   viewwelcome: async (interaction) => {
     if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
-      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+      return interaction.reply({ embeds: [createModuleDisabledEmbed('Welcome')], ephemeral: true });
     }
     const { data, error } = await supabase.from('welcome_configs').select('*').eq('guild_id', interaction.guild.id).single();
     if (error || !data) {
@@ -370,7 +385,7 @@ const slashHandlers = {
 
   viewgoodbye: async (interaction) => {
     if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
-      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+      return interaction.reply({ embeds: [createModuleDisabledEmbed('Welcome')], ephemeral: true });
     }
     const { data, error } = await supabase.from('goodbye_configs').select('*').eq('guild_id', interaction.guild.id).single();
     if (error || !data) {

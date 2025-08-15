@@ -22,6 +22,20 @@ app.get('/api/oauth-url', (req, res) => {
   }
 });
 
+// OAuth redirect endpoint
+app.get('/api/oauth', (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirectUri = process.env.DISCORD_REDIRECT_URI;
+  const scope = 'identify guilds';
+  
+  if (!clientId || !redirectUri) {
+    return res.status(500).json({ error: 'OAuth not configured properly.' });
+  }
+  
+  const oauthUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  res.redirect(oauthUrl);
+});
+
 // OAuth callback endpoint
 app.post('/api/oauth-callback', async (req, res) => {
   const code = req.body.code;

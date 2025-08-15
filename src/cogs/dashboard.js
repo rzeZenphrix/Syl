@@ -33,9 +33,33 @@ module.exports = {
   ],
   slashHandlers: {
     dashboard: async (interaction) => {
-      const url = process.env.DASHBOARD_URL || `http://localhost:${DASHBOARD_PORT}/`;
+      const dashboardUrl = process.env.DASHBOARD_URL || `http://localhost:${DASHBOARD_PORT}/`;
+      const botInviteUrl = "https://discord.com/oauth2/authorize?client_id=1385547161269440573";
+      
+      const embed = {
+        color: 0x5865f2,
+        title: '🌐 SYL Bot Dashboard',
+        description: 'Manage your server settings and configure modules through our web dashboard.',
+        fields: [
+          {
+            name: '📊 Dashboard',
+            value: `[Click here to open the dashboard](${dashboardUrl})`,
+            inline: true
+          },
+          {
+            name: '🤖 Invite Bot',
+            value: `[Add SYL Bot to your server](${botInviteUrl})`,
+            inline: true
+          }
+        ],
+        footer: {
+          text: 'You need "Manage Server" permission to access the dashboard'
+        },
+        timestamp: new Date().toISOString()
+      };
+      
       await interaction.reply({
-        content: `🌐 Dashboard: ${url}\nYou can manage your server config and preview boost messages here!`,
+        embeds: [embed],
         ephemeral: true
       });
     }

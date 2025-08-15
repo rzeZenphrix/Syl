@@ -450,7 +450,18 @@ const prefixCommands = {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
     if (!await isModuleEnabled(msg.guild.id, 'tickets')) {
-      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Tickets module is disabled in the dashboard.').setColor(0xe74c3c)] });
+      const dashboardUrl = process.env.DASHBOARD_URL || `http://localhost:4000/`;
+      const embed = new EmbedBuilder()
+        .setTitle('Module Disabled')
+        .setDescription('The Tickets module is currently disabled.')
+        .addFields({
+          name: '🔧 Enable Module',
+          value: `[Click here to enable in the dashboard](${dashboardUrl})`,
+          inline: false
+        })
+        .setColor(0xe74c3c)
+        .setFooter({ text: 'You need "Manage Server" permission to access the dashboard' });
+      return msg.reply({ embeds: [embed] });
     }
     
     const channel = msg.mentions.channels.first();
@@ -521,7 +532,18 @@ const slashHandlers = {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
     if (!await isModuleEnabled(interaction.guild.id, 'tickets')) {
-      return interaction.reply({ content: 'The Tickets module is disabled in the dashboard.', ephemeral: true });
+      const dashboardUrl = process.env.DASHBOARD_URL || `http://localhost:4000/`;
+      const embed = new EmbedBuilder()
+        .setTitle('Module Disabled')
+        .setDescription('The Tickets module is currently disabled.')
+        .addFields({
+          name: '🔧 Enable Module',
+          value: `[Click here to enable in the dashboard](${dashboardUrl})`,
+          inline: false
+        })
+        .setColor(0xe74c3c)
+        .setFooter({ text: 'You need "Manage Server" permission to access the dashboard' });
+      return interaction.reply({ embeds: [embed], ephemeral: true });
     }
     
     const channel = interaction.options.getChannel('channel');
