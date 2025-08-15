@@ -3,127 +3,341 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Login - SYL Bot</title>
+  <title>SYL Bot - Login</title>
   <link rel="stylesheet" href="/css/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Login page specific styles */
     body {
-      background: #fff;
-      min-height: 100vh;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-family);
       margin: 0;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-family: 'Inter', Arial, sans-serif;
-      overflow: hidden;
+      padding: var(--space-xl);
     }
-    .card {
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 2px 16px #0001;
-      padding: 2.5em 2.5em 2em 2.5em;
+
+    .login-container {
       max-width: 400px;
       width: 100%;
-      text-align: center;
-      border: 1px solid #f0f0f0;
-      opacity: 0;
-      transform: translateY(40px) scale(0.98);
-      animation: fadeInUp 0.8s cubic-bezier(.23,1.01,.32,1) 0.1s forwards;
     }
-    @keyframes fadeInUp {
-      to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
+
+    .login-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-2xl);
+      text-align: center;
+      box-shadow: var(--shadow-lg);
+      animation: fadeInScale 0.5s ease-out;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-xl);
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 32px;
+      height: 32px;
+      color: white;
+    }
+
+    .logo-text {
+      font-size: var(--font-size-2xl);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .welcome-title {
+      font-size: var(--font-size-xl);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
+    }
+
+    .welcome-subtitle {
+      color: var(--text-secondary);
+      font-size: var(--font-size-base);
+      margin-bottom: var(--space-xl);
+      line-height: 1.6;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: var(--space-lg);
+      background: linear-gradient(135deg, var(--accent-primary), #5a6bff);
+      color: white;
+      border: none;
+      border-radius: var(--radius-lg);
+      font-family: inherit;
+      font-size: var(--font-size-base);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+      text-decoration: none;
+    }
+
+    .login-btn:hover {
+      background: linear-gradient(135deg, #5a6bff, var(--accent-primary));
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg), var(--shadow-glow);
+    }
+
+    .login-btn:active {
+      transform: translateY(0);
+    }
+
+    .discord-icon {
+      width: 24px;
+      height: 24px;
+    }
+
+    .features {
+      margin-top: var(--space-2xl);
+      padding-top: var(--space-xl);
+      border-top: 1px solid var(--border-primary);
+    }
+
+    .features-title {
+      font-size: var(--font-size-lg);
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: var(--space-lg);
+    }
+
+    .feature-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-md);
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: var(--space-md);
+      color: var(--text-secondary);
+      font-size: var(--font-size-sm);
+    }
+
+    .feature-icon {
+      width: 20px;
+      height: 20px;
+      color: var(--accent-success);
+      flex-shrink: 0;
+    }
+
+    .error-message {
+      background: rgba(255, 85, 85, 0.1);
+      border: 1px solid var(--accent-danger);
+      color: var(--accent-danger);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-lg);
+      font-size: var(--font-size-sm);
+      display: none;
+    }
+
+    .loading {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      color: var(--text-secondary);
+      font-size: var(--font-size-sm);
+    }
+
+    .loading-spinner {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      body {
+        padding: var(--space-lg);
+      }
+
+      .login-card {
+        padding: var(--space-xl);
+      }
+
+      .logo {
+        flex-direction: column;
+        gap: var(--space-sm);
       }
     }
-    h1 {
-      font-size: 1.7em;
-      font-weight: 700;
-      margin: 0 0 0.5em 0;
-      color: #23272a;
-      letter-spacing: 0.01em;
+
+    /* Animations */
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
-    .subtitle {
-      color: #6b7280;
-      font-size: 1.05em;
-      margin-bottom: 2em;
+
+    @keyframes slideInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
-    .discord-btn {
-      display: block;
-      background: #5865f2;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1.1em;
-      font-weight: 600;
-      padding: 0.9em 0;
-      width: 100%;
-      cursor: pointer;
-      margin-bottom: 1.2em;
-      transition: background 0.2s, transform 0.18s cubic-bezier(.23,1.01,.32,1);
-      box-shadow: 0 2px 8px #5865f222;
-      outline: none;
-    }
-    .discord-btn:hover, .discord-btn:focus {
-      background: #4752c4;
-      transform: scale(1.045);
-    }
-    .discord-btn:active {
-      transform: scale(0.98);
-    }
-    .terms {
-      color: #b0b0b0;
-      font-size: 0.95em;
-      margin-top: 0.5em;
-    }
-    .loading {
-      opacity: 0.7;
-      pointer-events: none;
-    }
-    .spinner {
-      display: inline-block;
-      width: 1.2em;
-      height: 1.2em;
-      border: 2.5px solid #fff;
-      border-top: 2.5px solid #5865f2;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-      vertical-align: middle;
-      margin-right: 0.7em;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
+
+    .animate-slide-in {
+      animation: slideInUp 0.5s ease-out;
     }
   </style>
 </head>
 <body>
-  <div class="card" id="loginCard">
-    <h1>Welcome to SYL</h1>
-    <div class="subtitle">Connect your Discord account to get started with our SYL bot features</div>
-    <button class="discord-btn" id="loginBtn">
-      Login with Discord
-    </button>
-    <div class="terms">By logging in, you agree to our terms of service and privacy policy</div>
+  <div class="login-container">
+    <div class="login-card">
+      <!-- Logo -->
+      <div class="logo">
+        <div class="logo-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+            <path d="M8 12h8M12 8v8"/>
+          </svg>
+        </div>
+        <div class="logo-text">SYL Bot</div>
+      </div>
+
+      <!-- Welcome -->
+      <h1 class="welcome-title">Welcome to SYL Bot</h1>
+      <p class="welcome-subtitle">Manage your Discord server with powerful moderation tools and automation features</p>
+
+      <!-- Error Message -->
+      <div class="error-message" id="errorMessage"></div>
+
+      <!-- Login Button -->
+      <a href="/api/oauth" class="login-btn" id="loginBtn">
+        <svg class="discord-icon" fill="currentColor" viewBox="0 0 24 24">
+          <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.956-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419c0-1.333.955-2.419 2.157-2.419c1.21 0 2.176 1.096 2.157 2.42c0 1.333-.946 2.418-2.157 2.418z"/>
+        </svg>
+        Continue with Discord
+      </a>
+
+      <!-- Loading State -->
+      <div class="loading" id="loadingState">
+        <div class="loading-spinner"></div>
+        <span>Connecting to Discord...</span>
+      </div>
+
+      <!-- Features -->
+      <div class="features animate-slide-in">
+        <h2 class="features-title">What you can do</h2>
+        <ul class="feature-list">
+          <li class="feature-item">
+            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 15v2m-6 4h12a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm10-10V7a4 4 0 0 0-8 0v4h8Z"/>
+            </svg>
+            Advanced moderation tools
+          </li>
+          <li class="feature-item">
+            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
+              <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
+            </svg>
+            Welcome & goodbye messages
+          </li>
+          <li class="feature-item">
+            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="6" y="10" width="20" height="12" rx="4"/>
+              <path d="M10 16h12"/>
+            </svg>
+            Support ticket system
+          </li>
+          <li class="feature-item">
+            <svg class="feature-icon" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 10a6 6 0 1 0-9 5M3 12a13 13 0 1 0 5-10"/>
+            </svg>
+            Server backup & restore
+          </li>
+        </ul>
+      </div>
+    </div>
   </div>
+
   <script>
-    const loginBtn = document.getElementById('loginBtn');
-    loginBtn.addEventListener('click', async function() {
-      loginBtn.classList.add('loading');
-      loginBtn.innerHTML = '<span class="spinner"></span>Redirecting...';
-      try {
-        const res = await fetch('/api/oauth-url');
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-        } else {
-          loginBtn.classList.remove('loading');
-          loginBtn.textContent = 'Login with Discord';
-          alert('Failed to get OAuth URL.');
-        }
-      } catch (e) {
-        loginBtn.classList.remove('loading');
-        loginBtn.textContent = 'Login with Discord';
-        alert('Network error. Please try again.');
+    // Check if user is already logged in
+    function checkAuth() {
+      const token = localStorage.getItem('asylum_token');
+      if (token) {
+        // Redirect to server selection
+        window.location.href = 'index.html';
       }
+    }
+
+    // Show error message
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+    }
+
+    // Show loading state
+    function showLoading() {
+      document.getElementById('loginBtn').style.display = 'none';
+      document.getElementById('loadingState').style.display = 'flex';
+    }
+
+    // Handle login button click
+    document.getElementById('loginBtn').addEventListener('click', function(e) {
+      e.preventDefault();
+      showLoading();
+      
+      // The actual redirect will happen via the href
+      // This is just for visual feedback
+      setTimeout(() => {
+        window.location.href = this.href;
+      }, 500);
+    });
+
+    // Check for URL parameters that might indicate an error
+    function checkUrlParams() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const error = urlParams.get('error');
+      
+      if (error) {
+        showError(decodeURIComponent(error));
+      }
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+      checkAuth();
+      checkUrlParams();
     });
   </script>
 </body>

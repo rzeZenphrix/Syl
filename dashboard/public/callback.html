@@ -1,79 +1,337 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Logging in...</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SYL Bot - Connecting...</title>
   <link rel="stylesheet" href="/css/theme.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Callback page specific styles */
     body {
-      background: #23272a;
-      color: #fff;
-      font-family: 'Inter', Arial, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-family);
+      margin: 0;
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      margin: 0;
+      padding: var(--space-xl);
     }
-    .card {
-      background: #2c2f33;
-      border-radius: 12px;
-      box-shadow: 0 2px 16px #0008;
-      padding: 2.5em 2em;
+
+    .callback-container {
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .callback-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-2xl);
       text-align: center;
-      min-width: 320px;
+      box-shadow: var(--shadow-lg);
+      animation: fadeInScale 0.5s ease-out;
     }
-    .spinner { margin-bottom: 1.2em; }
-    h2 {
-      margin: 0.5em 0 0.2em 0;
+
+    .logo {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-xl);
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 32px;
+      height: 32px;
+      color: white;
+    }
+
+    .logo-text {
+      font-size: var(--font-size-2xl);
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .status-title {
+      font-size: var(--font-size-xl);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
+    }
+
+    .status-message {
+      color: var(--text-secondary);
+      font-size: var(--font-size-base);
+      margin-bottom: var(--space-xl);
+      line-height: 1.6;
+    }
+
+    .spinner-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-xl);
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border-primary);
+      border-top: 3px solid var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    .success-icon {
+      width: 32px;
+      height: 32px;
+      color: var(--accent-success);
+      display: none;
+    }
+
+    .error-icon {
+      width: 32px;
+      height: 32px;
+      color: var(--accent-danger);
+      display: none;
+    }
+
+    .error-message {
+      background: rgba(255, 85, 85, 0.1);
+      border: 1px solid var(--accent-danger);
+      color: var(--accent-danger);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      margin-bottom: var(--space-lg);
+      font-size: var(--font-size-sm);
+      display: none;
+    }
+
+    .retry-btn {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-primary);
+      color: var(--text-primary);
+      padding: var(--space-md) var(--space-lg);
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: var(--font-size-sm);
       font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-normal);
+      display: none;
     }
-    .error {
-      color: #ff5555;
-      margin-top: 1em;
+
+    .retry-btn:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-secondary);
+      transform: translateY(-1px);
+    }
+
+    /* Animations */
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.5s ease-out;
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      body {
+        padding: var(--space-lg);
+      }
+
+      .callback-card {
+        padding: var(--space-xl);
+      }
+
+      .logo {
+        flex-direction: column;
+        gap: var(--space-sm);
+      }
     }
   </style>
-  <script>
-    (async function() {
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      const error = params.get('error');
-      const errorDesc = params.get('error_description');
-      if (error) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('msg').innerHTML = '<span class="error">' + (errorDesc || error) + '</span>';
-        return;
-      }
-      if (!code) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('msg').innerHTML = '<span class="error">Missing code from Discord.</span>';
-        return;
-      }
-      try {
-        const res = await fetch('/api/oauth-callback', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code })
-        });
-        const data = await res.json();
-        if (data.token) {
-          localStorage.setItem('asylum_token', data.token);
-          window.location.href = '/index.html';
-        } else {
-          document.getElementById('spinner').style.display = 'none';
-          document.getElementById('msg').innerHTML = '<span class="error">Login failed: ' + (data.error || 'Unknown error') + '</span>';
-        }
-      } catch (e) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('msg').innerHTML = '<span class="error">Network error. Please try again.</span>';
-      }
-    })();
-  </script>
 </head>
 <body>
-  <div class="card">
-    <div class="spinner" id="spinner"></div>
-    <h2 id="msg">Logging you in...</h2>
+  <div class="callback-container">
+    <div class="callback-card">
+      <!-- Logo -->
+      <div class="logo">
+        <div class="logo-icon">
+          <svg fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+            <path d="M8 12h8M12 8v8"/>
+          </svg>
+        </div>
+        <div class="logo-text">SYL Bot</div>
+      </div>
+
+      <!-- Status -->
+      <div class="spinner-container" id="spinnerContainer">
+        <div class="spinner" id="spinner"></div>
+        <svg class="success-icon" id="successIcon" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+        <svg class="error-icon" id="errorIcon" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </div>
+
+      <h1 class="status-title" id="statusTitle">Connecting to Discord...</h1>
+      <p class="status-message" id="statusMessage">Please wait while we authenticate your account</p>
+
+      <!-- Error Message -->
+      <div class="error-message" id="errorMessage"></div>
+
+      <!-- Retry Button -->
+      <button class="retry-btn" id="retryBtn" onclick="retryAuth()">Try Again</button>
+    </div>
   </div>
+
+  <script>
+    // Get URL parameters
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        code: params.get('code'),
+        error: params.get('error'),
+        state: params.get('state')
+      };
+    }
+
+    const { code, error, state } = getUrlParams();
+
+    // Update UI elements
+    function updateUI(status, message, showError = false) {
+      const statusTitle = document.getElementById('statusTitle');
+      const statusMessage = document.getElementById('statusMessage');
+      const spinner = document.getElementById('spinner');
+      const successIcon = document.getElementById('successIcon');
+      const errorIcon = document.getElementById('errorIcon');
+      const retryBtn = document.getElementById('retryBtn');
+
+      statusTitle.textContent = status;
+      statusMessage.textContent = message;
+
+      if (status === 'Success!') {
+        spinner.style.display = 'none';
+        successIcon.style.display = 'block';
+        successIcon.classList.add('fade-in');
+      } else if (status === 'Error') {
+        spinner.style.display = 'none';
+        errorIcon.style.display = 'block';
+        errorIcon.classList.add('fade-in');
+        retryBtn.style.display = 'inline-block';
+      }
+    }
+
+    // Show error message
+    function showError(message) {
+      const errorDiv = document.getElementById('errorMessage');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      errorDiv.classList.add('fade-in');
+    }
+
+    // Retry authentication
+    function retryAuth() {
+      window.location.href = 'login.html';
+    }
+
+    // Handle OAuth callback
+    async function handleCallback() {
+      if (error) {
+        updateUI('Error', 'Authentication failed');
+        showError(`Authentication error: ${error}`);
+        return;
+      }
+
+      if (!code) {
+        updateUI('Error', 'No authorization code received');
+        showError('Missing authorization code from Discord');
+        return;
+      }
+
+      try {
+        updateUI('Connecting...', 'Exchanging authorization code for access token');
+
+        const response = await fetch('/api/oauth-callback', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ code, state })
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to authenticate');
+        }
+
+        const data = await response.json();
+
+        if (data.token) {
+          // Store the token
+          localStorage.setItem('asylum_token', data.token);
+          
+          updateUI('Success!', 'Successfully connected to Discord');
+          
+          // Redirect to server selection after a short delay
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 1500);
+        } else {
+          throw new Error('No token received from server');
+        }
+      } catch (error) {
+        console.error('Authentication error:', error);
+        updateUI('Error', 'Failed to complete authentication');
+        showError(error.message || 'An unexpected error occurred');
+      }
+    }
+
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+      // Start the authentication process
+      handleCallback();
+    });
+  </script>
 </body>
 </html> 

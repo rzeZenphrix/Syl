@@ -3,925 +3,1005 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SYL - Server Dashboard</title>
+  <title>SYL Bot Dashboard</title>
   <link rel="stylesheet" href="/css/theme.css">
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    /* Dashboard-specific styles */
     body {
-      background: #181a20;
-      color: #fff;
-      font-family: 'Montserrat', 'Inter', Arial, sans-serif;
-      margin: 0;
-      min-height: 100vh;
       display: flex;
+      background: var(--bg-primary);
     }
+
+    /* Sidebar */
     .sidebar {
       position: fixed;
       top: 0;
       left: 0;
-      width: 48px;
+      width: 280px;
       height: 100vh;
-      background: #23273a;
-      box-shadow: 2px 0 16px #0004;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border-primary);
       display: flex;
       flex-direction: column;
-      z-index: 2000;
-      padding-top: 0;
-      transition: width 0.22s cubic-bezier(.23,1.01,.32,1);
-      width: 48px;
-      min-width: 48px;
-      max-width: 260px;
-      overflow-x: hidden;
+      z-index: var(--z-fixed);
+      transition: transform var(--transition-normal);
     }
-    .sidebar:hover {
-      width: 220px;
-      min-width: 120px;
-      max-width: 260px;
-      transition: width 0.32s cubic-bezier(.23,1.01,.32,1);
-      box-shadow: 4px 0 32px #0008;
-    }
+
     .sidebar-header {
+      padding: var(--space-xl);
+      border-bottom: 1px solid var(--border-primary);
       display: flex;
       align-items: center;
-      gap: 0.7em;
-      padding: 1.1em 0.7em 0.7em 0.7em;
-      border-bottom: 1.5px solid #23273a;
-      min-height: 56px;
-      background: rgba(36, 40, 54, 0.98);
-      position: sticky;
-      top: 0;
-      z-index: 101;
-      transition: padding 0.2s, min-height 0.2s;
+      gap: var(--space-md);
     }
-    .sidebar-header span {
-      transition: opacity 0.32s, width 0.32s;
-      white-space: nowrap;
-    }
-    .sidebar-header:not(:hover) .sidebar-header span {
-      opacity: 0;
-      width: 0;
-      transition: opacity 0.22s, width 0.22s;
-    }
+
     .server-icon {
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: #444;
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-tertiary);
       object-fit: cover;
-      border: 2px solid #6c7fff;
-      box-shadow: 0 2px 8px #6c7fff33;
-      display: block;
+      border: 2px solid var(--accent-primary);
+      box-shadow: var(--shadow-glow);
     }
-    #sidebarTitle {
-      font-size: 1em;
+
+    .server-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .server-name {
+      font-size: var(--font-size-lg);
       font-weight: 700;
-      color: #fff;
-      letter-spacing: 0.01em;
-      word-break: break-word;
-      max-width: 90px;
+      color: var(--text-primary);
+      margin-bottom: var(--space-xs);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      display: inline-block;
     }
-    .sidebar-link {
+
+    .server-status {
       display: flex;
       align-items: center;
-      gap: 0.7em;
-      padding: 0.7em 1em;
-      border-radius: 8px;
-      color: #b0b8c1;
-      font-size: 0.98em;
-      font-weight: 500;
-      text-decoration: none;
-      transition: background 0.18s, color 0.18s;
-      cursor: pointer;
-      justify-content: flex-start;
-      white-space: nowrap;
+      gap: var(--space-xs);
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
     }
-    .sidebar-link .icon {
-      font-size: 1.1em;
-      width: 1.2em;
-      text-align: center;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-success);
+      animation: pulse 2s infinite;
     }
-    .sidebar-link span:not(.icon) {
-      display: none;
-      opacity: 0;
-      transition: opacity 0.18s, width 0.18s;
-      width: 0;
-    }
-    .sidebar:hover .sidebar-link span:not(.icon) {
-      display: inline;
-      opacity: 1;
-      width: auto;
-      margin-left: 0.5em;
-    }
-    .sidebar-link.active, .sidebar-link:hover {
-      background: #36393f;
-      color: #6c7fff;
-    }
+
     .sidebar-nav {
       flex: 1;
+      padding: var(--space-lg);
       display: flex;
       flex-direction: column;
-      gap: 0.2em;
-      padding: 0.7em 0.2em 0.7em 0.2em;
-      overflow-y: auto;
-      justify-content: flex-start;
-      align-items: stretch;
-      min-height: 0;
+      gap: var(--space-sm);
     }
-    .sidebar-footer {
-      padding: 1.2em 1.2em;
-      font-size: 0.98em;
-      color: #888;
-      text-align: center;
-      border-top: 1.5px solid #23273a;
-      background: rgba(36, 40, 54, 0.98);
-    }
-    .sidebar:not(:hover) .sidebar-footer {
-      opacity: 0;
-      width: 0;
-      padding: 0;
-      font-size: 0;
-      transition: opacity 0.22s, width 0.22s, padding 0.22s, font-size 0.22s;
-    }
-    .main {
-      margin-left: 48px;
-      padding: 2.5em 2em 2em 2em;
-      min-height: 100vh;
-      background: #23272a;
-      transition: margin-left 0.22s cubic-bezier(.23,1.01,.32,1);
-    }
-    .sidebar:hover ~ .main {
-      margin-left: 220px;
-    }
-    @media (max-width: 900px) {
-      .sidebar {
-        width: 48px !important;
-      }
-      .sidebar:hover {
-        width: 120px !important;
-      }
-      .sidebar-header {
-        flex-direction: column;
-        align-items: flex-start;
-        padding: 0.7em 0.2em 0.7em 0.2em;
-        min-height: 48px;
-      }
-      #sidebarTitle,
-      .server-icon,
-      .sidebar-footer {
-        display: none !important;
-      }
-      .sidebar-nav {
-        align-items: center;
-        justify-content: center;
-        padding: 0;
-        gap: 0.7em;
-      }
-      .sidebar-link {
-        justify-content: center;
-        padding: 0.7em 0.2em;
-        font-size: 1.1em;
-      }
-      .sidebar-link span:not(.icon) {
-        display: none !important;
-      }
-      .main {
-        margin-left: 48px;
-      }
-    }
-    .main-header {
-      padding: 2.2em 2.5em 1.2em 2.5em;
-      font-size: 2.1em;
-      font-weight: 800;
-      color: #fff;
-      letter-spacing: 0.01em;
-      border-bottom: 1px solid #23272a;
-      font-family: inherit;
-      transition: font-size 0.32s;
-    }
-    .main-breadcrumb {
-      color: #b0b8c1;
-      font-size: 1em;
-      margin: 1.2em 2.5em 0 2.5em;
-      letter-spacing: 0.01em;
-      font-family: inherit;
-      transition: font-size 0.32s;
-    }
-    .main-content {
-      flex: 1;
-      padding: 2.5em 2.5em 2em 2.5em;
+
+    .nav-item {
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2em;
-      font-family: inherit;
-    }
-    .dashboard-card {
-      background: #23273a;
-      border-radius: 14px;
-      box-shadow: 0 2px 12px #0003;
-      padding: 2.2em 2em 2em 2em;
-      min-width: 320px;
-      max-width: 700px;
-      width: 100%;
-      transition: box-shadow 0.18s, background 0.18s;
-      font-family: inherit;
-      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
-      display: flex;
-      flex-direction: column;
-      gap: 1.5em;
-    }
-    @keyframes fadeInCard {
-      from { opacity: 0; transform: translateY(30px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    .dashboard-card-title {
-      font-size: 1.3em;
-      font-weight: 700;
-      margin-bottom: 0.5em;
-      color: #fff;
-      font-family: inherit;
-      letter-spacing: 0.01em;
-      transition: font-size 0.32s;
-    }
-    .dashboard-card-desc {
-      color: #b0b8c1;
-      font-size: 1.08em;
-      margin-bottom: 1.5em;
-      font-family: inherit;
-      transition: font-size 0.32s;
-    }
-    .dashboard-stats {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2em;
-      width: 100%;
-      margin-top: 1.2em;
-      font-family: inherit;
-      justify-content: flex-start;
-    }
-    #greeting {
-      margin-left: auto;
-      font-size: 1.1em;
-      font-weight: 600;
-      color: #6c7fff;
-      text-align: right;
-      flex-shrink: 0;
-      min-width: 180px;
-    }
-    .dashboard-stat {
-      background: #20232b;
-      border-radius: 10px;
-      padding: 1.2em 2em;
-      min-width: 160px;
-      text-align: left;
-      box-shadow: 0 1px 6px #0002;
-      margin-bottom: 1em;
-      transition: box-shadow 0.18s, background 0.18s;
-      font-family: inherit;
-      animation: fadeInStat 0.7s cubic-bezier(.23,1.01,.32,1);
-      flex: 1 1 160px;
-      max-width: 220px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-    @keyframes fadeInStat {
-      from { opacity: 0; transform: translateY(20px) scale(0.98); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
-    }
-    .dashboard-stat:hover {
-      background: #23273a;
-      box-shadow: 0 2px 12px #5865f244;
-    }
-    .stat-label {
-      color: #b0b8c1;
-      font-size: 1.02em;
-      margin-bottom: 0.5em;
+      align-items: center;
+      gap: var(--space-md);
+      padding: var(--space-md);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      text-decoration: none;
       font-weight: 500;
-      font-family: inherit;
-      transition: font-size 0.32s;
+      transition: all var(--transition-normal);
+      cursor: pointer;
     }
-    .stat-value {
-      font-size: 1.5em;
+
+    .nav-item:hover {
+      background: var(--bg-sidebar-hover);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--accent-primary);
+      color: white;
+    }
+
+    .nav-icon {
+      width: 20px;
+      height: 20px;
+      flex-shrink: 0;
+    }
+
+    /* Main Content */
+    .main {
+      flex: 1;
+      margin-left: 280px;
+      min-height: 100vh;
+      background: var(--bg-primary);
+    }
+
+    .main-header {
+      padding: var(--space-xl);
+      border-bottom: 1px solid var(--border-primary);
+      background: var(--bg-secondary);
+    }
+
+    .page-title {
+      font-size: var(--font-size-2xl);
       font-weight: 700;
-      color: #6c7fff;
-      margin-bottom: 0.2em;
-      font-family: inherit;
-      transition: font-size 0.32s;
+      color: var(--text-primary);
+      margin-bottom: var(--space-sm);
     }
-    .stat-status {
-      display: inline-block;
-      background: #1f7a3a;
-      color: #b6f7c1;
-      font-size: 0.98em;
-      font-weight: 600;
-      border-radius: 20px;
-      padding: 0.2em 1.1em;
-      margin-top: 0.2em;
-      font-family: inherit;
-      transition: background 0.32s, color 0.32s;
+
+    .page-subtitle {
+      color: var(--text-secondary);
+      font-size: var(--font-size-base);
     }
-    .error {
-      color: #ff5555;
-      margin-top: 2em;
-      font-size: 1.1em;
-      font-family: inherit;
+
+    .main-content {
+      padding: var(--space-xl);
     }
-    .server-name {
-      font-size: 1.2em;
-      font-weight: 700;
-      margin-left: 0.5em;
-      color: #fff;
-      letter-spacing: 0.01em;
-      font-family: inherit;
-    }
-    .server-meta {
-      color: #b0b8c1;
-      font-size: 1em;
-      margin-left: 0.5em;
-      margin-top: 0.2em;
-      font-family: inherit;
-    }
-    .module-grid-styled {
+
+    /* Dashboard Cards */
+    .dashboard-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-      gap: 2.5em 2.5em;
-      margin-top: 1.5em;
-      width: 100%;
-      max-width: 1400px;
-      margin-left: auto;
-      margin-right: auto;
-      align-items: stretch;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: var(--space-xl);
+      margin-bottom: var(--space-2xl);
     }
-    .module-card-styled {
-      background: rgba(36, 40, 54, 0.92);
-      border-radius: 18px;
-      box-shadow: 0 4px 32px #0005, 0 1.5px 8px #6c7fff22;
-      padding: 2.2em 2em 1.5em 2em;
-      min-width: 320px;
-      max-width: 420px;
-      text-align: left;
+
+    .stats-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-xl);
+      transition: all var(--transition-normal);
+    }
+
+    .stats-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-secondary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .stats-value {
+      font-size: var(--font-size-3xl);
+      font-weight: 700;
+      color: var(--accent-primary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .stats-label {
+      color: var(--text-secondary);
+      font-size: var(--font-size-sm);
+      font-weight: 500;
+    }
+
+    /* Module Grid */
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: var(--space-xl);
+    }
+
+    .module-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-primary);
+      padding: var(--space-xl);
+      transition: all var(--transition-normal);
       position: relative;
       overflow: hidden;
-      transition: box-shadow 0.22s, background 0.22s, transform 0.22s;
-      border: 1.5px solid #23273a;
-      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
+    }
+
+    .module-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+      transform: scaleX(0);
+      transition: transform var(--transition-normal);
+    }
+
+    .module-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-secondary);
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg), var(--shadow-glow);
+    }
+
+    .module-card:hover::before {
+      transform: scaleX(1);
+    }
+
+    .module-card.enabled {
+      border-color: var(--accent-success);
+    }
+
+    .module-card.enabled::before {
+      background: linear-gradient(90deg, var(--accent-success), var(--accent-secondary));
+      transform: scaleX(1);
+    }
+
+    .module-header {
       display: flex;
-      flex-direction: column;
-      justify-content: space-between;
+      align-items: center;
+      gap: var(--space-md);
+      margin-bottom: var(--space-lg);
     }
-    .module-card-styled:hover {
-      background: rgba(60, 70, 120, 0.98);
-      box-shadow: 0 8px 32px #6c7fff55, 0 2px 12px #23273a;
-      transform: translateY(-6px) scale(1.025);
-      border-color: #6c7fff;
-    }
+
     .module-icon {
-      font-size: 2.3em;
-      margin-bottom: 0.7em;
-      color: #6c7fff;
-      filter: drop-shadow(0 0 8px #6c7fff44);
-      display: inline-block;
-      background: rgba(60, 70, 120, 0.18);
-      border-radius: 12px;
-      padding: 0.4em 0.6em;
-      /* Remove emoji, use minimal SVG or Unicode if needed */
-    }
-    .module-title-styled {
-      font-size: 1.18em;
-      font-weight: 700;
-      margin-bottom: 0.3em;
-      color: #fff;
-      letter-spacing: 0.01em;
-    }
-    .module-desc-styled {
-      color: #b0b8c1;
-      font-size: 1.01em;
-      margin-bottom: 1.3em;
-      min-height: 2.5em;
-    }
-    .module-btn-styled {
-      background: linear-gradient(
-        270deg,
-        #6c7fff 0%,
-        #43b581 33%,
-        #ffb347 66%,
-        #6c7fff 100%
-      );
-      background-size: 300% 300%;
-      background-position: 0% 50%;
-      color: #fff;
-      border: none;
-      border-radius: 10px;
-      padding: 0.75em 1.15em;
-      font-weight: 700;
-      cursor: pointer;
-      transition: box-shadow 0.22s, background 0.22s, transform 0.22s;
-      border: 1.5px solid #23273a;
-      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-tertiary);
       display: flex;
-      flex-direction: column;
-      gap: 0.7em;
+      align-items: center;
       justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .module-icon svg {
+      width: 24px;
+      height: 24px;
+      color: var(--accent-primary);
+    }
+
+    .module-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .module-title {
+      font-size: var(--font-size-lg);
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: var(--space-xs);
+    }
+
+    .module-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-xs);
+    }
+
+    .module-description {
+      color: var(--text-secondary);
+      font-size: var(--font-size-sm);
+      line-height: 1.5;
+      margin-bottom: var(--space-lg);
+    }
+
+    .module-actions {
+      display: flex;
+      gap: var(--space-md);
+    }
+
+    .module-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-sm);
+      padding: var(--space-md);
+      border: none;
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: var(--font-size-sm);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-normal);
       position: relative;
       overflow: hidden;
-      will-change: background-position;
-      animation: flowing-gradient-5c 12s linear infinite;
     }
-    .module-btn-styled:hover, .module-btn-styled.enabled:hover {
-      animation: flowing-gradient-5c 12s linear infinite;
-      background: linear-gradient(
-        270deg,
-        #6c7fff 0%,
-        #43b581 33%,
-        #ffb347 66%,
-        #6c7fff 100%
-      );
-      background-size: 300% 300%;
-      transform: scale(1.045);
-      box-shadow: 0 2px 12px #43b58144;
+
+    .module-btn-primary {
+      background: linear-gradient(135deg, var(--accent-primary), #5a6bff);
+      color: white;
     }
-    @keyframes flowing-gradient-5c {
-      0% { background-position: 0% 50%; }
-      100% { background-position: 200% 50%; }
+
+    .module-btn-primary:hover {
+      background: linear-gradient(135deg, #5a6bff, var(--accent-primary));
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md), var(--shadow-glow);
     }
-    .module-btn-styled.enabled {
-      background: linear-gradient(90deg, #43b581 60%, #6c7fff 100%);
-      background-size: 200% 200%;
-      background-position: 0% 50%;
-      color: #fff;
-      box-shadow: 0 2px 12px #43b58144;
-      animation: none;
+
+    .module-btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      border: 1px solid var(--border-primary);
     }
-    @keyframes btnPop {
-      0% { transform: scale(1); }
-      60% { transform: scale(1.12); }
-      100% { transform: scale(1.045); }
+
+    .module-btn-secondary:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-secondary);
+      transform: translateY(-1px);
     }
-    .module-btn-styled.disable-btn {
-      background: linear-gradient(90deg,#23273a 60%,#ff5555 100%);
-      color: #fff;
-      margin-top: 0.7em;
-      border: none;
-      border-radius: 8px;
-      font-size: 1em;
-      font-weight: 600;
-      padding: 0.7em 2.2em;
+
+    .module-btn-danger {
+      background: linear-gradient(135deg, var(--accent-danger), #e74c3c);
+      color: white;
+    }
+
+    .module-btn-danger:hover {
+      background: linear-gradient(135deg, #e74c3c, var(--accent-danger));
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md), 0 0 20px rgba(255, 85, 85, 0.3);
+    }
+
+    /* Mobile Sidebar */
+    .sidebar-toggle {
+      display: none;
+      position: fixed;
+      top: var(--space-md);
+      left: var(--space-md);
+      z-index: var(--z-fixed);
+      background: var(--bg-card);
+      border: 1px solid var(--border-primary);
+      border-radius: var(--radius-md);
+      padding: var(--space-sm);
       cursor: pointer;
-      box-shadow: 0 1px 6px #ff555544;
-      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
-      display: flex;
-      align-items: center;
-      gap: 0.7em;
-      justify-content: center;
-      animation: btnPop 0.4s cubic-bezier(.23,1.01,.32,1);
+      transition: all var(--transition-normal);
     }
-    .module-btn-styled.disable-btn:hover {
-      background: linear-gradient(90deg,#ff5555 60%,#23273a 100%);
-      transform: scale(1.045);
-      box-shadow: 0 2px 12px #ff555544;
+
+    .sidebar-toggle:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-secondary);
     }
-    .dashboard-row {
-      display: flex;
-      flex-direction: row;
-      align-items: flex-start;
-      justify-content: space-between;
-      width: 100%;
-      gap: 2em;
-      margin-bottom: 2em;
-    }
-    .greeting-card {
-      background: #23273a;
-      border-radius: 14px;
-      box-shadow: 0 2px 12px #0003;
-      padding: 2.2em 2.5em;
-      min-width: 220px;
-      max-width: 320px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.18em;
-      font-weight: 700;
-      color: #6c7fff;
-      margin-left: auto;
-      margin-right: 0;
-      height: 100%;
-      text-align: center;
-      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
-    }
-    @media (max-width: 900px) {
-      .dashboard-row {
-        flex-direction: column;
-        gap: 1.2em;
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .sidebar {
+        transform: translateX(-100%);
       }
-      .greeting-card {
+
+      .sidebar.open {
+        transform: translateX(0);
+      }
+
+      .main {
         margin-left: 0;
-        margin-right: 0;
-        min-width: 0;
-        width: 100%;
-        max-width: 100%;
       }
-      .dashboard-card {
-        max-width: 100%;
+
+      .sidebar-toggle {
+        display: block;
       }
-      .dashboard-stats {
-        flex-direction: column;
-        gap: 1em;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard-grid {
+        grid-template-columns: 1fr;
       }
+
+      .module-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .main-header,
+      .main-content {
+        padding: var(--space-lg);
+      }
+    }
+
+    /* Loading Animation */
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: var(--z-modal);
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border-primary);
+      border-top: 4px solid var(--accent-primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    /* Success Animation */
+    @keyframes successPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    .success-animation {
+      animation: successPulse 0.6s ease-out;
     }
   </style>
-  <script src="auth.js"></script>
-  <script>requireAuth();</script>
 </head>
 <body>
+  <!-- Mobile Sidebar Toggle -->
+  <button class="sidebar-toggle" id="sidebarToggle">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 12h18M3 6h18M3 18h18"/>
+    </svg>
+  </button>
+
+  <!-- Sidebar -->
   <div class="sidebar" id="sidebar">
-    <div class="sidebar-header" id="sidebarHeader">
+    <div class="sidebar-header">
       <img src="" alt="Server icon" class="server-icon" id="serverIcon">
-      <span id="sidebarTitle">SYL Bot</span>
+      <div class="server-info">
+        <div class="server-name" id="serverName">SYL Bot</div>
+        <div class="server-status">
+          <div class="status-indicator" id="statusIndicator"></div>
+          <span id="serverStatus">Online</span>
+        </div>
+      </div>
     </div>
-    <div class="sidebar-nav" id="sidebarNav">
-      <a class="sidebar-link" data-section="modules"><span class="icon"><svg width="20" height="20" fill="none" stroke="#6c7fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="3"/><path d="M10 8v4M8 10h4"/></svg></span><span>Modules</span></a>
-      <a class="sidebar-link active" data-section="boost"><span class="icon"><svg width="20" height="20" fill="none" stroke="#6c7fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="12" height="12" rx="3"/><path d="M10 8v4M8 10h4"/></svg></span><span>Boost Message</span></a>
-      <a class="sidebar-link" data-section="help"><span class="icon"><svg width="20" height="20" fill="none" stroke="#b0b8c1" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="10" r="9"/><path d="M9.09 9a3 3 0 1 1 1.82 2.83V14"/><circle cx="10" cy="17" r="1"/></svg></span><span>Help</span></a>
-    </div>
+    
+    <nav class="sidebar-nav">
+      <a class="nav-item active" data-section="dashboard">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+          <circle cx="9" cy="9" r="2"/>
+          <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+        </svg>
+        Dashboard
+      </a>
+      <a class="nav-item" data-section="modules">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="4" y="4" width="16" height="16" rx="2"/>
+          <path d="M8 12h8M12 8v8"/>
+        </svg>
+        Modules
+      </a>
+      <a class="nav-item" data-section="help">
+        <svg class="nav-icon" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+          <path d="M12 17h.01"/>
+        </svg>
+        Help
+      </a>
+    </nav>
   </div>
+
+  <!-- Main Content -->
   <div class="main">
-    <div class="main-breadcrumb" id="mainBreadcrumb">Dashboard &gt; <b>Dashboard</b></div>
-    <div class="main-header" id="mainHeader">Dashboard</div>
-    <div class="main-content" id="mainContent">
-      <div class="dashboard-row">
-        <div class="dashboard-card" id="dashboardCard">
-          <div class="dashboard-card-title">Welcome to SYL Bot Dashboard</div>
-          <div class="dashboard-card-desc">Configure your bot settings using the sidebar navigation.</div>
-          <div class="dashboard-stats">
-            <div class="dashboard-stat">
-              <div class="stat-label">Server Status</div>
-              <div class="stat-status" id="serverStatus">Online</div>
-            </div>
-            <div class="dashboard-stat">
-              <div class="stat-label">Active Users</div>
-              <div class="stat-value" id="activeUsers">-</div>
-            </div>
-            <div class="dashboard-stat">
-              <div class="stat-label">Channels</div>
-              <div class="stat-value" id="channelCount">-</div>
-            </div>
-            <div class="dashboard-stat">
-              <div class="stat-label">Roles</div>
-              <div class="stat-value" id="roleCount">-</div>
-            </div>
+    <header class="main-header">
+      <h1 class="page-title" id="pageTitle">Dashboard</h1>
+      <p class="page-subtitle" id="pageSubtitle">Welcome to your server dashboard</p>
+    </header>
+
+    <main class="main-content" id="mainContent">
+      <!-- Dashboard Section -->
+      <div id="dashboardSection">
+        <div class="dashboard-grid">
+          <div class="stats-card">
+            <div class="stats-value" id="memberCount">-</div>
+            <div class="stats-label">Members</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-value" id="channelCount">-</div>
+            <div class="stats-label">Channels</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-value" id="roleCount">-</div>
+            <div class="stats-label">Roles</div>
+          </div>
+          <div class="stats-card">
+            <div class="stats-value" id="moduleCount">-</div>
+            <div class="stats-label">Active Modules</div>
           </div>
         </div>
-        <div class="greeting-card" id="greetingCard">
-          <span id="greeting">Good evening, there!</span>
+
+        <div class="module-grid" id="moduleGrid">
+          <!-- Modules will be dynamically loaded here -->
         </div>
       </div>
-      <div class="module-grid-styled" id="moduleGridStyled">
-        <div class="module-card-styled">
-          <span class="module-icon"><svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="20" height="20" rx="6"/><path d="M16 12v8M12 16h8"/></svg></span>
-          <div class="module-title-styled">Boost Message</div>
-          <div class="module-desc-styled">Send a custom message when a member boosts your server. Configure message, channel, and style.</div>
-          <button class="module-btn-styled" onclick="window.location.href='module.html?guild='+guildId+'&module=boost'">Configure</button>
+
+      <!-- Help Section -->
+      <div id="helpSection" style="display: none;">
+        <div class="card">
+          <h2>Help & Support</h2>
+          <p>Find answers to common questions about using the SYL Bot Dashboard.</p>
+          
+          <div class="mt-lg">
+            <h3>Getting Started</h3>
+            <ul>
+              <li><strong>How do I configure modules?</strong><br>
+                Click the "Configure" button on any module card to access its settings.</li>
+              <li><strong>Why don't I see all modules?</strong><br>
+                Only modules that are currently implemented in the bot are shown.</li>
+              <li><strong>Who can use the dashboard?</strong><br>
+                Only users with "Manage Server" permission can configure modules.</li>
+            </ul>
+          </div>
+
+          <div class="mt-lg">
+            <h3>Available Modules</h3>
+            <ul>
+              <li><strong>Welcome & Goodbye:</strong> Send custom messages when members join or leave</li>
+              <li><strong>Tickets:</strong> Create a support ticket system for your server</li>
+              <li><strong>Backup:</strong> Backup and restore your server structure</li>
+              <li><strong>Setup:</strong> Configure server roles, channels, and bot preferences</li>
+            </ul>
+          </div>
         </div>
       </div>
-      <div id="error" class="error"></div>
-    </div>
+    </main>
   </div>
-  <div id="modalRoot"></div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <script src="auth.js"></script>
   <script>
-    // --- Get guild ID from URL ---
+    // Authentication check
+    requireAuth();
+
+    // Global variables
+    let currentUser = null;
+    let currentGuild = null;
+    let moduleStates = {};
+
+    // Get guild ID from URL
     function getGuildId() {
       const params = new URLSearchParams(window.location.search);
       return params.get('guild');
     }
+
     const guildId = getGuildId();
-    // --- Sidebar navigation logic ---
-    const links = document.querySelectorAll('.sidebar-link');
-    const mainHeader = document.getElementById('mainHeader');
-    const mainBreadcrumb = document.getElementById('mainBreadcrumb');
-    const mainContent = document.getElementById('mainContent');
-    if (links && links.length) {
-      links.forEach(link => {
-        if (!link) return;
-        link.onclick = function(e) {
-          e.preventDefault();
-          links.forEach(l => l.classList.remove('active'));
-          link.classList.add('active');
-          const section = link.getAttribute('data-section');
-          mainHeader.textContent = link.textContent.trim();
-          mainBreadcrumb.innerHTML = `Dashboard &gt; <b>${link.textContent.trim()}</b>`;
-          if (section === 'modules') {
-            window.location.href = window.location.pathname + window.location.search;
-            return;
-          }
-          renderSection(section);
-        };
-      });
-    }
-    // --- Render sections ---
-    function renderSection(section) {
-      if (section === 'boost') {
-        document.getElementById('dashboardCard').style.display = 'none';
-        document.getElementById('greetingCard').style.display = 'none';
-        document.getElementById('moduleGridStyled').style.display = '';
-        mainContent.innerHTML = document.getElementById('moduleGridStyled').outerHTML;
-      } else if (section === 'help') {
-        mainContent.innerHTML = `<div class='dashboard-card'><div class='dashboard-card-title'>Help & Support</div><div class='dashboard-card-desc'>Find answers to common questions about using the SYL Bot Dashboard and the Boost Message module.</div><ul style='color:#b0b8c1;font-size:1.08em;line-height:1.7em;padding-left:1.2em;'><li><b>How do I configure the Boost Message?</b><br>Click the 'Configure' button on the Boost Message card to set your custom message, channel, and style.</li><li><b>Why don't I see other modules?</b><br>Currently, only the Boost Message module is available. More modules will be added soon!</li><li><b>How do I invite the bot to my server?</b><br>Use the invite link on the main dashboard or ask your server admin to invite SYL Bot.</li><li><b>Who can use the dashboard?</b><br>Only users with the 'Manage Server' permission can configure modules for their server.</li><li><b>Need more help?</b><br>Contact support via the official Discord server or email (see documentation for details).</li></ul></div>`;
-      }
-    }
-    // --- Fetch and display real server info ---
-    let loggedInUser = null;
-    async function fetchUser() {
-      try {
-        const token = localStorage.getItem('asylum_token');
-        console.log('fetchUser: Attempting fetch with token:', token);
-        const res = await fetch('/api/user', { headers: { Authorization: 'Bearer ' + token } });
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('fetchUser 401:', res.status, errText, 'Token:', token, 'Response:', res);
-          if (res.status === 401) {
-            console.error('fetchUser: 401 Unauthorized. Token may be expired or missing in backend DB.');
-          }
-        }
-        if (res.ok) {
-          loggedInUser = await res.json();
-        }
-      } catch (e) {
-        console.error('fetchUser error:', e);
-      }
-      setGreeting(loggedInUser);
-    }
-    fetchUser();
-    function setGreeting(user) {
-      const greetingEl = document.getElementById('greeting');
-      if (!greetingEl) return;
-      const now = new Date();
-      const hour = now.getHours();
-      let greeting = 'Hello';
-      if (hour < 12) greeting = 'Good morning';
-      else if (hour < 18) greeting = 'Good afternoon';
-      else greeting = 'Good evening';
-      greetingEl.textContent = `${greeting}, ${user && user.username ? user.username : 'there'}!`;
-    }
-    function showError(msg) {
-      document.getElementById('error').textContent = msg;
-      if (msg && msg.toLowerCase().includes('unauthorized')) {
-        const token = localStorage.getItem('asylum_token');
-        console.error('showError:', msg, 'Token:', token, 'Context: showError called due to unauthorized response.');
-      }
-    }
-    if (!guildId) {
-      showError('No server selected. Please return to the main dashboard and select a server.');
-    } else {
-      fetch(`/api/guild/${guildId}/info`).then(async r => {
-        if (!r.ok) {
-          showError('Failed to load server info.');
-          return;
-        }
-        const info = await r.json();
-        setServerInfo(info);
-      }).catch(() => {
-        showError('Failed to load server info.');
-      });
-      // Removed sample data setServerInfo({ ... })
-    }
-    function setServerInfo(info) {
-      if (info.icon) {
-        document.getElementById('serverIcon').src = info.icon;
-        document.getElementById('serverIcon').style.display = '';
-      } else {
-        document.getElementById('serverIcon').style.display = 'none';
-      }
-      document.getElementById('sidebarTitle').textContent = info.name || 'SYL Bot';
-      mainHeader.textContent = 'Dashboard';
-      mainBreadcrumb.innerHTML = `Dashboard &gt; <b>Dashboard</b>`;
-      document.getElementById('activeUsers').textContent = info.activeUsers || '-';
-      document.getElementById('channelCount').textContent = info.channels || '-';
-      document.getElementById('roleCount').textContent = info.roles || '-';
-      document.getElementById('serverStatus').textContent = info.status || 'Online';
-      document.getElementById('serverStatus').style.background = info.status === 'Online' ? '#1f7a3a' : '#7a1f1f';
-      document.getElementById('serverStatus').style.color = info.status === 'Online' ? '#b6f7c1' : '#f7b6b6';
-    }
-    // --- Module list for styled grid ---
-    const modulesStyled = [
-      {
-        key: 'achievements',
-        title: 'Achievements',
-        desc: 'Let your members hunt achievements for rewards',
-        icon: '<svg width="32" height="32" fill="none" stroke="#ffb347" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="20" height="8" rx="2"/><path d="M10 12v6a6 6 0 0 0 12 0v-6"/><circle cx="16" cy="24" r="2"/></svg>',
-        badge: 'New',
-        badgeType: 'new'
-      },
-      {
-        key: 'automations',
-        title: 'Automations',
-        desc: 'Automate bot actions in response to server events like messages, reactions, and role changes.',
-        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="28 8 28 16 20 16"/><polyline points="4 24 4 16 12 16"/><path d="M6.5 11A12 12 0 0 1 24.5 8.5L28 16M4 16l3.5 7.5A12 12 0 0 0 25.5 21"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
-      },
+
+    // Available modules (only those actually implemented)
+    const availableModules = [
       {
         key: 'welcome',
         title: 'Welcome & Goodbye',
-        desc: 'Automatically send messages and give roles to your new members and send a message when a members lea…',
-        icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20c1.5 2 4.5 2 6 0l8-12"/><path d="M8 20V8a4 4 0 0 1 8 0v12"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
+        description: 'Send custom messages when members join or leave your server',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
+          <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
+        </svg>`,
+        badge: 'Core',
+        badgeType: 'core'
       },
       {
-        key: 'welcomechannel',
-        title: 'Welcome Channel',
-        desc: 'A dedicated place to welcome new members and share essential informations',
-        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="12" width="24" height="8" rx="4"/><path d="M28 16v-2a4 4 0 0 0-4-4H8"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
+        key: 'tickets',
+        title: 'Ticketing System',
+        description: 'Create a support ticket system for your server members',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="6" y="10" width="20" height="12" rx="4"/>
+          <path d="M10 16h12"/>
+        </svg>`,
+        badge: 'Core',
+        badgeType: 'core'
       },
       {
-        key: 'customcmd',
-        title: 'Custom Commands',
-        desc: 'Create your own text commands and commands that give specific roles',
-        icon: '<svg width="32" height="32" fill="none" stroke="#b0b8c1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="24" height="16" rx="4"/><path d="M8 16h16"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
-      },
-      {
-        key: 'reactionroles',
-        title: 'Reaction Roles',
-        desc: 'Let your members get roles by reacting to a message',
-        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="12"/><path d="M10 14c1 2 5 2 6 0"/><path d="M18 18c1 2 5 2 6 0"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
-      },
-      {
-        key: 'invites',
-        title: 'Invite Tracker',
-        desc: 'Track how many people your members invite to your community and rank them in a leaderboard',
-        icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="12" r="6"/><path d="M4 28v-2a8 8 0 0 1 16 0v2"/></svg>',
+        key: 'backup',
+        title: 'Server Backup',
+        description: 'Backup and restore your server roles, channels, and permissions',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10a6 6 0 1 0-9 5M3 12a13 13 0 1 0 5-10"/>
+        </svg>`,
         badge: 'New',
         badgeType: 'new'
       },
       {
         key: 'setup',
-        title: 'Setup',
-        desc: 'Configure server roles, channels, and bot preferences for your community.',
-        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M20 2v4M4 10h24"/><rect x="6" y="12" width="20" height="16" rx="3"/></svg>',
+        title: 'Server Setup',
+        description: 'Configure server roles, channels, and bot preferences',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2v4M20 2v4M4 10h24"/>
+          <rect x="6" y="12" width="20" height="16" rx="3"/>
+        </svg>`,
         badge: 'Core',
-        badgeType: 'new'
-      },
-      {
-        key: 'tickets',
-        title: 'Ticketing',
-        desc: 'Allow your members to submit tickets for support, reports and requests.',
-        icon: '<svg width="32" height="32" fill="none" stroke="#b0b8c1" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="10" width="20" height="12" rx="4"/><path d="M10 16h12"/></svg>',
-        badge: 'Premium',
-        badgeType: 'premium'
-      },
-      {
-        key: 'backup',
-        title: 'Backup',
-        desc: 'Backup and restore server roles, channels, categories, and permissions.',
-        icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10a6 6 0 1 0-9 5M3 12a13 13 0 1 0 5-10"/></svg>',
-        badge: 'New',
-        badgeType: 'new'
+        badgeType: 'core'
       }
     ];
-    function showConfirmDialog(message, onConfirm) {
-      const modalRoot = document.getElementById('modalRoot');
-      modalRoot.innerHTML = `
-        <div class="modal-bg" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.45);z-index:9999;display:flex;align-items:center;justify-content:center;" onclick="closeModal(event)">
-          <div class="modal" style="background:#23273a;padding:2em 2.5em;border-radius:14px;box-shadow:0 2px 16px #0008;min-width:320px;max-width:90vw;position:relative;z-index:10000;" onclick="event.stopPropagation()">
-            <div style="font-size:1.15em;font-weight:600;margin-bottom:1.2em;">${message}</div>
-            <div style="display:flex;gap:1em;justify-content:flex-end;">
-              <button id="confirmNo" style="background:#36393f;color:#fff;border:none;border-radius:8px;padding:0.6em 1.5em;font-size:1em;font-weight:500;cursor:pointer;">Cancel</button>
-              <button id="confirmYes" style="background:linear-gradient(90deg,#ff5555 60%,#23273a 100%);color:#fff;border:none;border-radius:8px;padding:0.6em 1.5em;font-size:1em;font-weight:600;cursor:pointer;">Disable</button>
+
+    // Initialize dashboard
+    async function initDashboard() {
+      if (!guildId) {
+        showError('No server selected. Please return to the main dashboard and select a server.');
+        return;
+      }
+
+      showLoading(true);
+      
+      try {
+        await Promise.all([
+          fetchUser(),
+          fetchGuildInfo(),
+          fetchModuleStates()
+        ]);
+        
+        renderDashboard();
+        setupEventListeners();
+      } catch (error) {
+        console.error('Dashboard initialization failed:', error);
+        showError('Failed to load dashboard data. Please refresh the page.');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // Fetch user data
+    async function fetchUser() {
+      try {
+        const token = localStorage.getItem('asylum_token');
+        const response = await fetch('/api/user', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch user data');
+        }
+        
+        currentUser = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch user:', error);
+        throw error;
+      }
+    }
+
+    // Fetch guild information
+    async function fetchGuildInfo() {
+      try {
+        const response = await fetch(`/api/guild/${guildId}/info`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch guild info');
+        }
+        
+        currentGuild = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch guild info:', error);
+        throw error;
+      }
+    }
+
+    // Fetch module states
+    async function fetchModuleStates() {
+      try {
+        const response = await fetch(`/api/guild/${guildId}/modules`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch module states');
+        }
+        
+        moduleStates = await response.json();
+      } catch (error) {
+        console.error('Failed to fetch module states:', error);
+        throw error;
+      }
+    }
+
+    // Render dashboard
+    function renderDashboard() {
+      renderServerInfo();
+      renderStats();
+      renderModules();
+    }
+
+    // Render server information
+    function renderServerInfo() {
+      if (!currentGuild) return;
+
+      const serverIcon = document.getElementById('serverIcon');
+      const serverName = document.getElementById('serverName');
+      const serverStatus = document.getElementById('serverStatus');
+      const statusIndicator = document.getElementById('statusIndicator');
+
+      if (currentGuild.icon) {
+        serverIcon.src = currentGuild.icon;
+        serverIcon.style.display = 'block';
+      } else {
+        serverIcon.style.display = 'none';
+      }
+
+      serverName.textContent = currentGuild.name || 'SYL Bot';
+      serverStatus.textContent = currentGuild.status || 'Online';
+      
+      if (currentGuild.status === 'Online') {
+        statusIndicator.style.background = 'var(--accent-success)';
+      } else {
+        statusIndicator.style.background = 'var(--accent-danger)';
+      }
+    }
+
+    // Render statistics
+    function renderStats() {
+      if (!currentGuild) return;
+
+      document.getElementById('memberCount').textContent = currentGuild.memberCount || '-';
+      document.getElementById('channelCount').textContent = currentGuild.channelCount || '-';
+      document.getElementById('roleCount').textContent = currentGuild.roleCount || '-';
+      
+      const activeModules = Object.values(moduleStates).filter(Boolean).length;
+      document.getElementById('moduleCount').textContent = activeModules;
+    }
+
+    // Render modules
+    function renderModules() {
+      const moduleGrid = document.getElementById('moduleGrid');
+      moduleGrid.innerHTML = '';
+
+      availableModules.forEach((module, index) => {
+        const isEnabled = !!moduleStates[module.key];
+        const card = createModuleCard(module, isEnabled, index);
+        moduleGrid.appendChild(card);
+      });
+    }
+
+    // Create module card
+    function createModuleCard(module, isEnabled, index) {
+      const card = document.createElement('div');
+      card.className = `module-card ${isEnabled ? 'enabled' : ''}`;
+      card.style.animationDelay = `${index * 100}ms`;
+      card.classList.add('animate-fade-in');
+
+      card.innerHTML = `
+        <div class="module-header">
+          <div class="module-icon">
+            ${module.icon}
+          </div>
+          <div class="module-info">
+            <div class="module-title">${module.title}</div>
+            <div class="module-badge">
+              <span class="badge badge-${module.badgeType}">${module.badge}</span>
             </div>
           </div>
         </div>
+        <div class="module-description">${module.description}</div>
+        <div class="module-actions">
+          <button class="module-btn ${isEnabled ? 'module-btn-secondary' : 'module-btn-primary'}" 
+                  data-module="${module.key}" 
+                  data-action="${isEnabled ? 'configure' : 'enable'}">
+            ${isEnabled ? 'Configure' : 'Enable'}
+          </button>
+          ${isEnabled ? `
+            <button class="module-btn module-btn-danger" 
+                    data-module="${module.key}" 
+                    data-action="disable">
+              Disable
+            </button>
+          ` : ''}
+        </div>
       `;
-      document.getElementById('confirmNo').onclick = () => { modalRoot.innerHTML = ''; };
-      document.getElementById('confirmYes').onclick = () => { modalRoot.innerHTML = ''; onConfirm(); };
+
+      return card;
     }
-    function closeModal(e) {
-      if (e.target.id === 'modalRoot' || e.target.classList.contains('modal-bg')) {
-        document.getElementById('modalRoot').innerHTML = '';
-      }
-    }
-    function renderModuleGridStyled() {
-      const grid = document.getElementById('moduleGridStyled');
-      grid.innerHTML = '';
-      const guildId = getGuildId();
-      // Fetch activation state from backend
-      fetch(`/api/guild/${guildId}/modules`).then(r => r.json()).then(moduleState => {
-        modulesStyled.forEach((mod, i) => {
-          const card = document.createElement('div');
-          card.className = 'module-card-styled';
-          card.style.setProperty('--delay', (i * 80) + 'ms');
-          const enabled = !!moduleState[mod.key];
-          card.innerHTML = `
-            <div class="module-icon">${mod.icon}</div>
-            <div class="module-title-styled">${mod.title}</div>
-            <div class="module-desc-styled">${mod.desc}</div>
-            <button class="module-btn-styled${enabled ? ' enabled' : ''}"><span class="plus">${enabled ? '⚙️' : '+'}</span>${enabled ? 'Configure' : 'Enable'}</button>
-            <button class="module-btn-styled disable-btn" style="display:${enabled ? '' : 'none'};margin-top:0.7em;background:linear-gradient(90deg,#23273a 60%,#ff5555 100%);color:#fff;" title="Disable">Disable</button>
-          `;
-          if (enabled) {
-            card.classList.add('module-enabled');
-          }
-          // Enable/Configure button logic
-          const btn = card.querySelector('.module-btn-styled:not(.disable-btn)');
-          btn.onclick = function() {
-            if (!enabled) {
-              btn.disabled = true;
-              fetch(`/api/guild/${guildId}/modules`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ moduleKey: mod.key, enabled: true })
-              }).then(r => r.json()).then(resp => {
-                if (resp.success) {
-                  btn.innerHTML = '<span class="plus">⚙️</span>Configure';
-                  btn.classList.add('enabled');
-                  card.classList.add('module-enabled');
-                  card.querySelector('.disable-btn').style.display = '';
-                  card.animate([
-                    { boxShadow: '0 4px 32px #0005, 0 1.5px 8px #6c7fff22' },
-                    { boxShadow: '0 0 32px 8px #43b58188, 0 1.5px 8px #6c7fff22' },
-                    { boxShadow: '0 8px 32px #6c7fff55, 0 2px 12px #23273a' }
-                  ], { duration: 600, fill: 'forwards' });
-                }
-              }).finally(() => { btn.disabled = false; });
-            } else {
-              window.location.href = `module.html?guild=${guildId}&module=${mod.key}`;
-            }
-          };
-          // Disable button logic
-          const disableBtn = card.querySelector('.disable-btn');
-          disableBtn.onclick = function() {
-            showConfirmDialog(`Are you sure you want to disable the <b>${mod.title}</b> module?`, () => {
-              disableBtn.disabled = true;
-              fetch(`/api/guild/${guildId}/modules`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ moduleKey: mod.key, enabled: false })
-              }).then(r => r.json()).then(resp => {
-                if (resp.success) {
-                  btn.innerHTML = '<span class="plus">+</span>Enable';
-                  btn.classList.remove('enabled');
-                  card.classList.remove('module-enabled');
-                  disableBtn.style.display = 'none';
-                  card.animate([
-                    { boxShadow: '0 8px 32px #6c7fff55, 0 2px 12px #23273a' },
-                    { boxShadow: '0 4px 32px #0005, 0 1.5px 8px #6c7fff22' }
-                  ], { duration: 600, fill: 'forwards' });
-                }
-              }).finally(() => { disableBtn.disabled = false; });
-            });
-          };
-          grid.appendChild(card);
-        });
+
+    // Setup event listeners
+    function setupEventListeners() {
+      // Navigation
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.addEventListener('click', handleNavigation);
       });
-    }
-    renderModuleGridStyled();
-    // Sidebar toggle logic
-    const sidebar = document.getElementById('sidebar');
-    const sidebarToggle = document.getElementById('sidebarToggle');
-    function setSidebarCollapsed(collapsed) {
-      if (collapsed) {
-        sidebar.classList.add('collapsed');
-        localStorage.setItem('sidebar_collapsed', '1');
-      } else {
-        sidebar.classList.remove('collapsed');
-        localStorage.setItem('sidebar_collapsed', '0');
+
+      // Module buttons
+      document.addEventListener('click', handleModuleAction);
+
+      // Mobile sidebar toggle
+      const sidebarToggle = document.getElementById('sidebarToggle');
+      if (sidebarToggle) {
+        sidebarToggle.addEventListener('click', toggleSidebar);
       }
-    }
-    if (sidebarToggle) {
-      sidebarToggle.onclick = () => {
-        setSidebarCollapsed(!sidebar.classList.contains('collapsed'));
-      };
-      // Show toggle button on desktop
-      if (window.innerWidth > 900) {
-        sidebarToggle.style.display = 'inline-block';
-      }
-      // Restore sidebar state
-      if (localStorage.getItem('sidebar_collapsed') === '1' || window.innerWidth <= 900) {
-        setSidebarCollapsed(true);
-      }
-      window.addEventListener('resize', () => {
-        if (window.innerWidth <= 900) {
-          setSidebarCollapsed(true);
-          sidebarToggle.style.display = 'none';
-        } else {
-          sidebarToggle.style.display = 'inline-block';
-          if (localStorage.getItem('sidebar_collapsed') !== '1') setSidebarCollapsed(false);
+
+      // Close sidebar when clicking outside on mobile
+      document.addEventListener('click', (e) => {
+        if (window.innerWidth <= 1024) {
+          const sidebar = document.getElementById('sidebar');
+          const toggle = document.getElementById('sidebarToggle');
+          
+          if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+            sidebar.classList.remove('open');
+          }
         }
       });
     }
+
+    // Handle navigation
+    function handleNavigation(e) {
+      e.preventDefault();
+      
+      const section = e.currentTarget.dataset.section;
+      
+      // Update active nav item
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      e.currentTarget.classList.add('active');
+
+      // Update page content
+      updatePageContent(section);
+    }
+
+    // Update page content
+    function updatePageContent(section) {
+      const pageTitle = document.getElementById('pageTitle');
+      const pageSubtitle = document.getElementById('pageSubtitle');
+      const dashboardSection = document.getElementById('dashboardSection');
+      const helpSection = document.getElementById('helpSection');
+
+      if (section === 'dashboard') {
+        pageTitle.textContent = 'Dashboard';
+        pageSubtitle.textContent = 'Welcome to your server dashboard';
+        dashboardSection.style.display = 'block';
+        helpSection.style.display = 'none';
+      } else if (section === 'modules') {
+        pageTitle.textContent = 'Modules';
+        pageSubtitle.textContent = 'Configure your server modules';
+        dashboardSection.style.display = 'block';
+        helpSection.style.display = 'none';
+      } else if (section === 'help') {
+        pageTitle.textContent = 'Help & Support';
+        pageSubtitle.textContent = 'Get help with SYL Bot';
+        dashboardSection.style.display = 'none';
+        helpSection.style.display = 'block';
+      }
+    }
+
+    // Handle module actions
+    async function handleModuleAction(e) {
+      const button = e.target.closest('.module-btn');
+      if (!button) return;
+
+      const moduleKey = button.dataset.module;
+      const action = button.dataset.action;
+
+      if (action === 'enable') {
+        await enableModule(moduleKey, button);
+      } else if (action === 'configure') {
+        configureModule(moduleKey);
+      } else if (action === 'disable') {
+        await disableModule(moduleKey, button);
+      }
+    }
+
+    // Enable module
+    async function enableModule(moduleKey, button) {
+      try {
+        button.disabled = true;
+        button.innerHTML = '<div class="spinner"></div> Enabling...';
+
+        const response = await fetch(`/api/guild/${guildId}/modules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moduleKey, enabled: true })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to enable module');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          moduleStates[moduleKey] = true;
+          renderModules(); // Re-render to update all cards
+          showSuccess(`Module enabled successfully!`);
+        } else {
+          throw new Error(result.error || 'Failed to enable module');
+        }
+      } catch (error) {
+        console.error('Failed to enable module:', error);
+        showError('Failed to enable module. Please try again.');
+        button.disabled = false;
+        button.innerHTML = 'Enable';
+      }
+    }
+
+    // Configure module
+    function configureModule(moduleKey) {
+      window.location.href = `module.html?guild=${guildId}&module=${moduleKey}`;
+    }
+
+    // Disable module
+    async function disableModule(moduleKey, button) {
+      if (!confirm(`Are you sure you want to disable the ${moduleKey} module?`)) {
+        return;
+      }
+
+      try {
+        button.disabled = true;
+        button.innerHTML = '<div class="spinner"></div> Disabling...';
+
+        const response = await fetch(`/api/guild/${guildId}/modules`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ moduleKey, enabled: false })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to disable module');
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          moduleStates[moduleKey] = false;
+          renderModules(); // Re-render to update all cards
+          showSuccess(`Module disabled successfully!`);
+        } else {
+          throw new Error(result.error || 'Failed to disable module');
+        }
+      } catch (error) {
+        console.error('Failed to disable module:', error);
+        showError('Failed to disable module. Please try again.');
+        button.disabled = false;
+        button.innerHTML = 'Disable';
+      }
+    }
+
+    // Toggle mobile sidebar
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      sidebar.classList.toggle('open');
+    }
+
+    // Show loading overlay
+    function showLoading(show) {
+      const overlay = document.getElementById('loadingOverlay');
+      overlay.style.display = show ? 'flex' : 'none';
+    }
+
+    // Show success message
+    function showSuccess(message) {
+      // Create a temporary success notification
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--accent-success);
+        color: white;
+        padding: var(--space-md) var(--space-lg);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        z-index: var(--z-modal);
+        animation: slideIn 0.3s ease-out;
+      `;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.remove();
+      }, 3000);
+    }
+
+    // Show error message
+    function showError(message) {
+      const errorDiv = document.createElement('div');
+      errorDiv.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: var(--accent-danger);
+        color: white;
+        padding: var(--space-md) var(--space-lg);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        z-index: var(--z-modal);
+        animation: slideIn 0.3s ease-out;
+      `;
+      errorDiv.textContent = message;
+      
+      document.body.appendChild(errorDiv);
+      
+      setTimeout(() => {
+        errorDiv.remove();
+      }, 5000);
+    }
+
+    // Initialize dashboard when page loads
+    document.addEventListener('DOMContentLoaded', initDashboard);
   </script>
 </body>
 </html> 
