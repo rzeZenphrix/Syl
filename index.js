@@ -1,6 +1,14 @@
 // index.js
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
-// HTTP server is served by the dashboard (dashboard/server.cjs) in production.
+const http = require('http');
+
+const botHealthPort = process.env.BOT_HEALTH_PORT || 3000;
+http
+  .createServer((req, res) => {
+    res.writeHead(200);
+    res.end('OK');
+  })
+  .listen(botHealthPort);
 
 require('dotenv').config();
 const fs = require('fs');
@@ -273,11 +281,11 @@ async function sendErrorToLogChannel(guild, context, error) {
           .setDescription(`An error occurred in **${context}**.\n\`\`\`${error.message || error}\`\`\``)
       .setColor(0xe74c3c)
       .setTimestamp();
-    await channel.send({ embeds: [embed] });
+        await channel.send({ embeds: [embed] });
       }
     }
-  } catch (e) {
-    console.error('Failed to send error to log channel:', e);
+  } catch (err) {
+    console.error('Failed to send error to log channel:', err);
   }
 }
 
