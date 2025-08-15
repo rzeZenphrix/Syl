@@ -97,12 +97,8 @@ app.get('/api/oauth-callback', async (req, res) => {
 
 // Endpoint to get user's guilds
 app.get('/api/user-guilds', async (req, res) => {
-  console.log('GET /api/user-guilds called');
-  console.log('Request headers:', req.headers);
   const auth = req.headers.authorization;
-  console.log('Authorization header:', auth);
   if (!auth || !auth.startsWith('Bearer ')) {
-    console.log('Missing or invalid authorization header');
     return res.status(401).json({ error: 'Missing or invalid token' });
   }
   const token = auth.slice('Bearer '.length);
@@ -129,7 +125,6 @@ app.get('/api/user-guilds', async (req, res) => {
     const guilds = await guildRes.json();
     res.json(guilds);
   } catch (e) {
-    console.error('Error fetching guilds:', e);
     res.status(500).json({ error: 'Failed to fetch guilds', details: e.message });
   }
 });
@@ -137,7 +132,6 @@ app.get('/api/user-guilds', async (req, res) => {
 // --- Add /api/user endpoint ---
 app.get('/api/user', async (req, res) => {
   const auth = req.headers.authorization;
-  console.log('/api/user Authorization header:', auth); // DEBUG
   if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Missing or invalid token' });
   }
@@ -572,26 +566,17 @@ app.post('/api/guild/:guildId/restore', async (req, res) => {
   }
 });
 
-// Add request logging for debugging
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`);
-  next();
-});
-
 // Test endpoint to verify routing is working
 app.get('/api/test', (req, res) => {
   res.json({ message: 'API routing is working' });
 });
 
-// Serve static files manually
-app.get('/css/theme.css', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/css/theme.css'));
-});
+// Serve static files only for specific paths
+app.use('/css', express.static(path.join(__dirname, 'public/css')));
+app.use('/js', express.static(path.join(__dirname, 'public/js')));
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
 
-app.get('/auth.js', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public/auth.js'));
-});
-
+// Serve HTML files directly
 app.get('/login.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/login.html'));
 });
@@ -612,6 +597,11 @@ app.get('/module.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/module.html'));
 });
 
+app.get('/auth.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public/auth.js'));
+});
+
+// Serve index.html for root path
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });
@@ -626,9 +616,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Dashboard server listening on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV}`);
-  console.log(`Discord Client ID: ${process.env.DISCORD_CLIENT_ID ? 'Set' : 'Not set'}`);
-  console.log(`Discord Redirect URI: ${process.env.DISCORD_REDIRECT_URI ? 'Set' : 'Not set'}`);
 }).on('error', (err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
