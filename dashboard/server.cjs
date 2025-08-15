@@ -205,10 +205,11 @@ app.post('/api/guild/:guildId/welcome-config', express.json(), async (req, res) 
   try {
     // Save to database
     const { error } = await supabase
-      .from('guild_configs')
+      .from('module_configs')
       .upsert({
         guild_id: guildId,
-        config_type: 'welcome',
+        module_key: 'welcome',
+        config_type: 'settings',
         config_data: { channelId, message, roleId, enabled }
       });
     
@@ -237,10 +238,11 @@ app.post('/api/guild/:guildId/goodbye-config', express.json(), async (req, res) 
   try {
     // Save to database
     const { error } = await supabase
-      .from('guild_configs')
+      .from('module_configs')
       .upsert({
         guild_id: guildId,
-        config_type: 'goodbye',
+        module_key: 'goodbye',
+        config_type: 'settings',
         config_data: { channelId, message, enabled }
       });
     
@@ -267,10 +269,11 @@ app.get('/api/guild/:guildId/welcome-config', async (req, res) => {
   
   try {
     const { data, error } = await supabase
-      .from('guild_configs')
+      .from('module_configs')
       .select('config_data')
       .eq('guild_id', guildId)
-      .eq('config_type', 'welcome')
+      .eq('module_key', 'welcome')
+      .eq('config_type', 'settings')
       .single();
     
     if (error && error.code !== 'PGRST116') throw error;
@@ -296,16 +299,143 @@ app.get('/api/guild/:guildId/goodbye-config', async (req, res) => {
   
   try {
     const { data, error } = await supabase
-      .from('guild_configs')
+      .from('module_configs')
       .select('config_data')
       .eq('guild_id', guildId)
-      .eq('config_type', 'goodbye')
+      .eq('module_key', 'goodbye')
+      .eq('config_type', 'settings')
       .single();
     
     if (error && error.code !== 'PGRST116') throw error;
     res.json(data?.config_data || { channelId: '', message: '', enabled: false });
   } catch (e) {
     res.status(500).json({ error: 'Failed to load goodbye config', details: e.message });
+  }
+});
+
+// Save moderation configuration
+app.post('/api/guild/:guildId/moderation-config', express.json(), async (req, res) => {
+  const { guildId } = req.params;
+  const { logChannel, modRole, enabled } = req.body;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    // Save to database
+    const { error } = await supabase
+      .from('module_configs')
+      .upsert({
+        guild_id: guildId,
+        module_key: 'moderation',
+        config_type: 'settings',
+        config_data: { logChannel, modRole, enabled }
+      });
+    
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save moderation config', details: e.message });
+  }
+});
+
+// Get moderation configuration
+app.get('/api/guild/:guildId/moderation-config', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('module_configs')
+      .select('config_data')
+      .eq('guild_id', guildId)
+      .eq('module_key', 'moderation')
+      .eq('config_type', 'settings')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    res.json(data?.config_data || { logChannel: '', modRole: '', enabled: false });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load moderation config', details: e.message });
+  }
+});
+
+// Save utility configuration
+app.post('/api/guild/:guildId/utility-config', express.json(), async (req, res) => {
+  const { guildId } = req.params;
+  const { enabled } = req.body;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    // Save to database
+    const { error } = await supabase
+      .from('module_configs')
+      .upsert({
+        guild_id: guildId,
+        module_key: 'utility',
+        config_type: 'settings',
+        config_data: { enabled }
+      });
+    
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save utility config', details: e.message });
+  }
+});
+
+// Get utility configuration
+app.get('/api/guild/:guildId/utility-config', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('module_configs')
+      .select('config_data')
+      .eq('guild_id', guildId)
+      .eq('module_key', 'utility')
+      .eq('config_type', 'settings')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    res.json(data?.config_data || { enabled: false });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load utility config', details: e.message });
   }
 });
 

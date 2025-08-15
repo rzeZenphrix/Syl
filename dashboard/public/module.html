@@ -775,6 +775,76 @@
             </div>
           </div>
         `
+      },
+      moderation: {
+        title: 'Moderation',
+        description: 'Advanced moderation tools including warnings, mutes, and bans',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>`,
+        content: `
+          <div class="config-section animate-slide-in">
+            <h2 class="section-title">
+              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Moderation Settings
+            </h2>
+            <p class="section-description">Configure moderation tools and permissions.</p>
+            
+            <div class="form-group">
+              <label class="form-label">Log Channel</label>
+              <select class="form-input form-select" id="modLogChannel">
+                <option value="">Select a channel...</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Moderator Role</label>
+              <select class="form-input form-select" id="modRole">
+                <option value="">Select a role...</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="moderationEnabled" class="form-checkbox">
+                Enable Moderation Commands
+              </label>
+            </div>
+            
+            <button class="btn btn-primary" onclick="saveModerationConfig()">Save Moderation Settings</button>
+          </div>
+        `
+      },
+      utility: {
+        title: 'Utility Commands',
+        description: 'Helpful utility commands for server management and information',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 12l2 2 4-4"/>
+          <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+        </svg>`,
+        content: `
+          <div class="config-section animate-slide-in">
+            <h2 class="section-title">
+              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 12l2 2 4-4"/>
+                <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/>
+              </svg>
+              Utility Settings
+            </h2>
+            <p class="section-description">Configure utility commands and features.</p>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="utilityEnabled" class="form-checkbox">
+                Enable Utility Commands
+              </label>
+            </div>
+            
+            <button class="btn btn-primary" onclick="saveUtilityConfig()">Save Utility Settings</button>
+          </div>
+        `
       }
     };
 
@@ -1089,6 +1159,58 @@
     function saveTicketConfig() {
       // Save ticket configuration
       showStatus('Ticket settings saved!', 'success');
+    }
+
+    // Moderation functions
+    async function saveModerationConfig() {
+      try {
+        const logChannel = document.getElementById('modLogChannel').value;
+        const modRole = document.getElementById('modRole').value;
+        const enabled = document.getElementById('moderationEnabled').checked;
+        
+        const response = await fetch(`/api/guild/${guildId}/moderation-config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          },
+          body: JSON.stringify({ logChannel, modRole, enabled })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save moderation configuration');
+        }
+        
+        showStatus('Moderation settings saved!', 'success');
+      } catch (error) {
+        console.error('Failed to save moderation config:', error);
+        showError('Failed to save moderation settings: ' + error.message);
+      }
+    }
+
+    // Utility functions
+    async function saveUtilityConfig() {
+      try {
+        const enabled = document.getElementById('utilityEnabled').checked;
+        
+        const response = await fetch(`/api/guild/${guildId}/utility-config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          },
+          body: JSON.stringify({ enabled })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save utility configuration');
+        }
+        
+        showStatus('Utility settings saved!', 'success');
+      } catch (error) {
+        console.error('Failed to save utility config:', error);
+        showError('Failed to save utility settings: ' + error.message);
+      }
     }
 
     // Utility functions
