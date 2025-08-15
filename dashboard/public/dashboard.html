@@ -410,53 +410,46 @@
       background: linear-gradient(
         270deg,
         #6c7fff 0%,
-        #43b581 20%,
-        #ffb347 40%,
-        #ff6f91 60%,
-        #8e54e9 80%,
-        #6c7fff 95%,
+        #43b581 33%,
+        #ffb347 66%,
         #6c7fff 100%
       );
-      background-size: 600% 600%;
+      background-size: 300% 300%;
       background-position: 0% 50%;
       color: #fff;
       border: none;
-      border-radius: 8px;
-      font-size: 1em;
-      font-weight: 600;
-      padding: 0.7em 2.2em;
+      border-radius: 10px;
+      padding: 0.75em 1.15em;
+      font-weight: 700;
       cursor: pointer;
-      box-shadow: 0 1px 6px #6c7fff44;
-      transition: background 0.18s, transform 0.18s, box-shadow 0.18s;
+      transition: box-shadow 0.22s, background 0.22s, transform 0.22s;
+      border: 1.5px solid #23273a;
+      animation: fadeInCard 0.7s cubic-bezier(.23,1.01,.32,1);
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 0.7em;
       justify-content: center;
-      margin-top: 1.2em;
       position: relative;
       overflow: hidden;
-      animation: flowing-gradient-5c 14s linear infinite;
+      will-change: background-position;
+      animation: flowing-gradient-5c 12s linear infinite;
     }
     .module-btn-styled:hover, .module-btn-styled.enabled:hover {
-      animation: flowing-gradient-5c 14s linear infinite;
+      animation: flowing-gradient-5c 12s linear infinite;
       background: linear-gradient(
         270deg,
         #6c7fff 0%,
-        #43b581 20%,
-        #ffb347 40%,
-        #ff6f91 60%,
-        #8e54e9 80%,
-        #6c7fff 95%,
+        #43b581 33%,
+        #ffb347 66%,
         #6c7fff 100%
       );
-      background-size: 600% 600%;
-      background-position: 100% 50%;
+      background-size: 300% 300%;
       transform: scale(1.045);
       box-shadow: 0 2px 12px #43b58144;
     }
     @keyframes flowing-gradient-5c {
       0% { background-position: 0% 50%; }
-      100% { background-position: 100% 50%; }
+      100% { background-position: 200% 50%; }
     }
     .module-btn-styled.enabled {
       background: linear-gradient(90deg, #43b581 60%, #6c7fff 100%);
@@ -648,7 +641,7 @@
       try {
         const token = localStorage.getItem('asylum_token');
         console.log('fetchUser: Attempting fetch with token:', token);
-        const res = await fetch('http://localhost:4000/api/user', { headers: { Authorization: 'Bearer ' + token } });
+        const res = await fetch('/api/user', { headers: { Authorization: 'Bearer ' + token } });
         if (!res.ok) {
           const errText = await res.text();
           console.error('fetchUser 401:', res.status, errText, 'Token:', token, 'Response:', res);
@@ -686,7 +679,7 @@
     if (!guildId) {
       showError('No server selected. Please return to the main dashboard and select a server.');
     } else {
-      fetch(`http://localhost:4000/api/guild/${guildId}/info`).then(async r => {
+      fetch(`/api/guild/${guildId}/info`).then(async r => {
         if (!r.ok) {
           showError('Failed to load server info.');
           return;
@@ -808,7 +801,7 @@
       grid.innerHTML = '';
       const guildId = getGuildId();
       // Fetch activation state from backend
-      fetch(`http://localhost:4000/api/guild/${guildId}/modules`).then(r => r.json()).then(moduleState => {
+      fetch(`/api/guild/${guildId}/modules`).then(r => r.json()).then(moduleState => {
         modulesStyled.forEach((mod, i) => {
           const card = document.createElement('div');
           card.className = 'module-card-styled';
@@ -829,7 +822,7 @@
           btn.onclick = function() {
             if (!enabled) {
               btn.disabled = true;
-              fetch(`http://localhost:4000/api/guild/${guildId}/modules`, {
+              fetch(`/api/guild/${guildId}/modules`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ moduleKey: mod.key, enabled: true })
@@ -855,7 +848,7 @@
           disableBtn.onclick = function() {
             showConfirmDialog(`Are you sure you want to disable the <b>${mod.title}</b> module?`, () => {
               disableBtn.disabled = true;
-              fetch(`http://localhost:4000/api/guild/${guildId}/modules`, {
+              fetch(`/api/guild/${guildId}/modules`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ moduleKey: mod.key, enabled: false })

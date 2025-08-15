@@ -17,7 +17,7 @@ CREATE TABLE guild_modules (
 
 -- Create the user_tokens table
 CREATE TABLE user_tokens (
-    user_id UUID PRIMARY KEY,
+    user_id TEXT PRIMARY KEY,
     access_token TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -61,8 +61,8 @@ WITH CHECK (true);
 CREATE POLICY "Allow users to access their own tokens"
 ON user_tokens FOR ALL
 TO authenticated
-USING (auth.uid()::uuid = user_id)
-WITH CHECK (auth.uid()::uuid = user_id);
+USING (auth.uid()::text = user_id)
+WITH CHECK (auth.uid()::text = user_id);
 
 -- Create indexes
 CREATE INDEX idx_guild_modules_guild_id ON guild_modules(guild_id);

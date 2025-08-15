@@ -54,26 +54,12 @@ app.post('/api/oauth-callback', async (req, res) => {
 
     // For demo, return a fake token (in production, use JWT/session)
     const fakeToken = 'discord-' + user.id;
-    // Store the access token in Supabase for this user
-    // Get or create Supabase user
-    let { data: authUser } = await supabase.auth.getUser(tokenData.access_token);
-    
-    if (!authUser) {
-      const { data: newUser, error: signUpError } = await supabase.auth.signUp({
-        email: `${user.id}@discord.user`,
-        password: crypto.randomBytes(20).toString('hex')
-      });
-      if (signUpError) {
-        console.error('Failed to create Supabase user:', signUpError);
-        return res.status(500).json({ error: 'Failed to create user account' });
-      }
-      authUser = newUser;
-    }
 
+    // Persist the Discord access token keyed by Discord user id
     const { error } = await supabase
       .from('user_tokens')
       .upsert({ 
-        user_id: authUser.id,
+        user_id: user.id,
         access_token: tokenData.access_token 
       });
     
@@ -287,19 +273,19 @@ app.get('/api/guild/:guildId/info', async (req, res) => {
     const icon = guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : '';
     // Fetch channels
     const channelsRes = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
-      headers: { 'Authorization': `Bot ${BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
     const channels = channelsRes.ok ? await channelsRes.json() : [];
     // Fetch roles
     const rolesRes = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
-      headers: { 'Authorization': `Bot ${BOT_TOKEN}` }
+      headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
     const roles = rolesRes.ok ? await rolesRes.json() : [];
     // Fetch member count (approximate, as Discord API does not provide a direct endpoint for member count except via /guilds/{guild.id}/widget.json or presence)
     let activeUsers = '-';
     try {
       const widgetRes = await fetch(`https://discord.com/api/guilds/${guildId}/widget.json`, {
-        headers: { 'Authorization': `Bot ${BOT_TOKEN}` }
+        headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
       });
       if (widgetRes.ok) {
         const widget = await widgetRes.json();

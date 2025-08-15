@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { supabase } = require('../utils/supabase');
+const { isModuleEnabled } = require('../utils/modules');
 
 // Error logging and notification helpers
 const crypto = require('crypto');
@@ -448,6 +449,9 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
+    if (!await isModuleEnabled(msg.guild.id, 'tickets')) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Tickets module is disabled in the dashboard.').setColor(0xe74c3c)] });
+    }
     
     const channel = msg.mentions.channels.first();
     if (!channel) {
@@ -515,6 +519,9 @@ const slashHandlers = {
   ticketsetup: async (interaction) => {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    if (!await isModuleEnabled(interaction.guild.id, 'tickets')) {
+      return interaction.reply({ content: 'The Tickets module is disabled in the dashboard.', ephemeral: true });
     }
     
     const channel = interaction.options.getChannel('channel');
