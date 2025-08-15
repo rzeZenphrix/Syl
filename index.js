@@ -2,12 +2,13 @@
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
 const http = require('http');
 
+const botHealthPort = process.env.BOT_HEALTH_PORT || 3000;
 http
   .createServer((req, res) => {
     res.writeHead(200);
     res.end('OK');
   })
-  .listen(process.env.PORT || 3000);
+  .listen(botHealthPort);
 
 require('dotenv').config();
 const fs = require('fs');
@@ -27,6 +28,7 @@ const {
   PermissionFlagsBits
 } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
+const { isModuleEnabled } = require('./src/utils/modules');
 const CogManager = require('./src/cogManager');
 const { logEvent } = require('./src/logger');
 
@@ -279,11 +281,11 @@ async function sendErrorToLogChannel(guild, context, error) {
           .setDescription(`An error occurred in **${context}**.\n\`\`\`${error.message || error}\`\`\``)
       .setColor(0xe74c3c)
       .setTimestamp();
-    await channel.send({ embeds: [embed] });
+        await channel.send({ embeds: [embed] });
       }
     }
-  } catch (e) {
-    console.error('Failed to send error to log channel:', e);
+  } catch (err) {
+    console.error('Failed to send error to log channel:', err);
   }
 }
 
@@ -367,6 +369,7 @@ client.on('ready', async () => {
         const [guildId, userId] = key.split('-');
         const duration = Math.floor((Date.now() - joinTime) / 1000);
         try {
+          if (!(await isModuleEnabled(guildId, 'stats'))) continue;
           const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
           if (!data) {
             await supabase.from('user_stats').insert({
@@ -414,17 +417,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
       const duration = Math.floor((Date.now() - joinTime) / 1000); // seconds
       userVoiceStates.delete(key);
       // Update user_stats
-      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
-      if (!data) {
-        await supabase.from('user_stats').insert({
-          guild_id: guildId,
-          user_id: userId,
-          vc_seconds: duration
-        });
-      } else {
-        await supabase.from('user_stats').update({
-          vc_seconds: (data.vc_seconds || 0) + duration
-        }).eq('guild_id', guildId).eq('user_id', userId);
+      if (await isModuleEnabled(guildId, 'stats')) {
+        const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+        if (!data) {
+          await supabase.from('user_stats').insert({
+            guild_id: guildId,
+            user_id: userId,
+            vc_seconds: duration
+          });
+        } else {
+          await supabase.from('user_stats').update({
+            vc_seconds: (data.vc_seconds || 0) + duration
+          }).eq('guild_id', guildId).eq('user_id', userId);
+        }
       }
     }
   }
@@ -434,17 +439,19 @@ client.on('voiceStateUpdate', async (oldState, newState) => {
     if (joinTime) {
       const duration = Math.floor((Date.now() - joinTime) / 1000);
       // Update user_stats for the time spent in the previous VC
-      const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
-      if (!data) {
-        await supabase.from('user_stats').insert({
-          guild_id: guildId,
-          user_id: userId,
-          vc_seconds: duration
-        });
-      } else {
-        await supabase.from('user_stats').update({
-          vc_seconds: (data.vc_seconds || 0) + duration
-        }).eq('guild_id', guildId).eq('user_id', userId);
+      if (await isModuleEnabled(guildId, 'stats')) {
+        const { data, error } = await supabase.from('user_stats').select('vc_seconds').eq('guild_id', guildId).eq('user_id', userId).single();
+        if (!data) {
+          await supabase.from('user_stats').insert({
+            guild_id: guildId,
+            user_id: userId,
+            vc_seconds: duration
+          });
+        } else {
+          await supabase.from('user_stats').update({
+            vc_seconds: (data.vc_seconds || 0) + duration
+          }).eq('guild_id', guildId).eq('user_id', userId);
+        }
       }
     }
     // Reset join time for new VC
@@ -500,6 +507,7 @@ client.on('messageCreate', async (msg) => {
   }
   
   // Increment message count and chat uptime in user_stats
+  if (await isModuleEnabled(msg.guild.id, 'stats')) {
   const { data, error } = await supabase.from('user_stats').select('message_count, chat_seconds').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();
   if (error && error.code !== 'PGRST116') {
     console.error('Error fetching user_stats:', error);
@@ -517,6 +525,7 @@ client.on('messageCreate', async (msg) => {
       message_count: (data.message_count || 0) + 1,
       chat_seconds: (data.chat_seconds || 0) + 30 // Add 30s per message
     }).eq('guild_id', msg.guild.id).eq('user_id', msg.author.id);
+  }
   }
   
   // Log every message to modlogs for accurate 'messages today'

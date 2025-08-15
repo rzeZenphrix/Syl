@@ -1,5 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { supabase } = require('../utils/supabase');
+const { isModuleEnabled } = require('../utils/modules');
 
 // Helper function to validate image URLs
 function isValidImageUrl(url) {
@@ -69,6 +70,9 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
+    if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+    }
     const channel = msg.mentions.channels.first();
     if (!channel) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';welcomesetup #channel [message] [color] [image_url]\n\nYou must mention a valid text channel.').setColor(0xe74c3c)] });
@@ -109,6 +113,9 @@ const prefixCommands = {
     if (!await isAdmin(msg.member)) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Unauthorized').setDescription('You need admin permissions.').setColor(0xe74c3c)] });
     }
+    if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+    }
     const channel = msg.mentions.channels.first();
     if (!channel) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Usage').setDescription(';goodbyesetup #channel [message] [color] [image_url]\n\nYou must mention a valid text channel.').setColor(0xe74c3c)] });
@@ -146,6 +153,9 @@ const prefixCommands = {
   },
 
   viewwelcome: async (msg) => {
+    if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+    }
     const { data, error } = await supabase.from('welcome_configs').select('*').eq('guild_id', msg.guild.id).single();
     if (error || !data) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Welcome Config').setDescription('No welcome config found.').setColor(0xe74c3c)] });
@@ -165,6 +175,9 @@ const prefixCommands = {
   },
 
   viewgoodbye: async (msg) => {
+    if (!await isModuleEnabled(msg.guild.id, 'welcome')) {
+      return msg.reply({ embeds: [new EmbedBuilder().setTitle('Module Disabled').setDescription('The Welcome module is disabled in the dashboard.').setColor(0xe74c3c)] });
+    }
     const { data, error } = await supabase.from('goodbye_configs').select('*').eq('guild_id', msg.guild.id).single();
     if (error || !data) {
       return msg.reply({ embeds: [new EmbedBuilder().setTitle('Goodbye Config').setDescription('No goodbye config found.').setColor(0xe74c3c)] });
@@ -220,6 +233,9 @@ const slashHandlers = {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
     }
+    if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
+      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+    }
     
     const channel = interaction.options.getChannel('channel');
     const message = interaction.options.getString('message') || 'Welcome {user} to {server}! 🎉';
@@ -264,6 +280,9 @@ const slashHandlers = {
   goodbyesetup: async (interaction) => {
     if (!await isAdmin(interaction.member)) {
       return interaction.reply({ content: 'You need admin permissions.', ephemeral: true });
+    }
+    if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
+      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
     }
     
     const channel = interaction.options.getChannel('channel');
@@ -328,6 +347,9 @@ const slashHandlers = {
   },
 
   viewwelcome: async (interaction) => {
+    if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
+      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+    }
     const { data, error } = await supabase.from('welcome_configs').select('*').eq('guild_id', interaction.guild.id).single();
     if (error || !data) {
       return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Welcome Config').setDescription('No welcome config found.').setColor(0xe74c3c)] });
@@ -347,6 +369,9 @@ const slashHandlers = {
   },
 
   viewgoodbye: async (interaction) => {
+    if (!await isModuleEnabled(interaction.guild.id, 'welcome')) {
+      return interaction.reply({ content: 'The Welcome module is disabled in the dashboard.', ephemeral: true });
+    }
     const { data, error } = await supabase.from('goodbye_configs').select('*').eq('guild_id', interaction.guild.id).single();
     if (error || !data) {
       return interaction.reply({ embeds: [new EmbedBuilder().setTitle('Goodbye Config').setDescription('No goodbye config found.').setColor(0xe74c3c)] });
