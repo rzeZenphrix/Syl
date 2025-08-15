@@ -341,7 +341,7 @@
     async function fetchUserGuilds() {
       try {
         const token = localStorage.getItem('asylum_token');
-        const response = await fetch('/api/user/guilds', {
+        const response = await fetch('/api/user-guilds', {
           headers: { Authorization: `Bearer ${token}` }
         });
         

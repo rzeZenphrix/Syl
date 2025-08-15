@@ -6,7 +6,7 @@ services:
     buildCommand: |
       npm ci --only=production
       npm audit fix --audit-level=moderate || true
-    startCommand: node dashboard/server.cjs
+    startCommand: node dashboard/server.cjs & node start.js
     healthCheckPath: /index.html
     envVars:
       - key: NODE_ENV
