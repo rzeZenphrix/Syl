@@ -11,5 +11,9 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DISCORD_CLIENT_ID
+        value: 1385547161269440573
+      - key: DISCORD_REDIRECT_URI
+        value: https://syl-cuiw.onrender.com/api/oauth-callback
     autoDeploy: true
  

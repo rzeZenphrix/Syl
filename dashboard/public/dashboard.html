@@ -422,6 +422,109 @@
     .success-animation {
       animation: successPulse 0.6s ease-out;
     }
+
+    /* Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: var(--z-modal);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-primary);
+      max-width: 480px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: var(--shadow-lg);
+      animation: slideInScale 0.3s ease-out;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: var(--space-lg) var(--space-xl);
+      border-bottom: 1px solid var(--border-primary);
+    }
+
+    .modal-header h3 {
+      margin: 0;
+      font-size: var(--font-size-xl);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      padding: var(--space-sm);
+      border-radius: var(--radius-sm);
+      transition: all var(--transition-fast);
+    }
+
+    .modal-close:hover {
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+    }
+
+    .modal-body {
+      padding: var(--space-xl);
+      text-align: center;
+    }
+
+    .modal-icon {
+      margin-bottom: var(--space-lg);
+      color: var(--accent-warning);
+    }
+
+    .modal-body p {
+      margin: 0 0 var(--space-md) 0;
+      color: var(--text-primary);
+      font-size: var(--font-size-base);
+      line-height: 1.6;
+    }
+
+    .modal-warning {
+      color: var(--text-secondary) !important;
+      font-size: var(--font-size-sm) !important;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: var(--space-md);
+      padding: var(--space-lg) var(--space-xl);
+      border-top: 1px solid var(--border-primary);
+      justify-content: flex-end;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes slideInScale {
+      from { 
+        opacity: 0; 
+        transform: scale(0.9) translateY(-20px); 
+      }
+      to { 
+        opacity: 1; 
+        transform: scale(1) translateY(0); 
+      }
+    }
   </style>
 </head>
 <body>
@@ -541,6 +644,36 @@
   <!-- Loading Overlay -->
   <div class="loading-overlay" id="loadingOverlay" style="display: none;">
     <div class="loading-spinner"></div>
+  </div>
+
+  <!-- Module Disable Modal -->
+  <div id="disableModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Disable Module</h3>
+        <button class="modal-close" onclick="closeDisableModal()">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-icon">
+          <svg width="48" height="48" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <p id="disableModalText">Are you sure you want to disable this module?</p>
+        <p class="modal-warning">This will disable all functionality for this module until you re-enable it.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeDisableModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirmDisableBtn">Disable Module</button>
+      </div>
+    </div>
   </div>
 
   <script src="auth.js"></script>
@@ -806,6 +939,16 @@
           }
         }
       });
+
+      // Close modal when clicking outside
+      const modal = document.getElementById('disableModal');
+      if (modal) {
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            closeDisableModal();
+          }
+        });
+      }
     }
 
     // Handle navigation
@@ -905,11 +1048,38 @@
 
     // Disable module
     async function disableModule(moduleKey, button) {
-      if (!confirm(`Are you sure you want to disable the ${moduleKey} module?`)) {
-        return;
-      }
+      // Show custom modal instead of confirm dialog
+      showDisableModal(moduleKey, button);
+    }
 
+    // Show disable confirmation modal
+    function showDisableModal(moduleKey, button) {
+      const modal = document.getElementById('disableModal');
+      const modalText = document.getElementById('disableModalText');
+      const confirmBtn = document.getElementById('confirmDisableBtn');
+      
+      // Find module title
+      const module = availableModules.find(m => m.key === moduleKey);
+      const moduleTitle = module ? module.title : moduleKey;
+      
+      modalText.textContent = `Are you sure you want to disable the ${moduleTitle} module?`;
+      
+      // Set up confirm button
+      confirmBtn.onclick = () => performDisableModule(moduleKey, button);
+      
+      modal.style.display = 'flex';
+    }
+
+    // Close disable modal
+    function closeDisableModal() {
+      const modal = document.getElementById('disableModal');
+      modal.style.display = 'none';
+    }
+
+    // Perform the actual module disable
+    async function performDisableModule(moduleKey, button) {
       try {
+        closeDisableModal();
         button.disabled = true;
         button.innerHTML = '<div class="spinner"></div> Disabling...';
 
