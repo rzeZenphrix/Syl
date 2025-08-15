@@ -548,9 +548,8 @@ app.post('/api/guild/:guildId/restore', async (req, res) => {
 // Optionally, serve static files for the dashboard
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Fallback to index for SPA-like navigation
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api/')) return next();
+// Fallback to index for SPA-like navigation (Express 5: avoid '*' with path-to-regexp)
+app.get(/^(?!\/api\/).*/, (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
