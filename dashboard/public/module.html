@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Module Configuration - SYL</title>
+  <link rel="stylesheet" href="/css/theme.css">
   <style>
     body {
       background: #23272a;
@@ -237,6 +238,7 @@
       document.getElementById('moduleSub').textContent = moduleInfo[moduleKey].desc;
       if (moduleKey === 'boost') showBoostConfig();
       if (moduleKey === 'backup') showBackupConfig();
+      if (moduleKey === 'setup') showSetupConfig();
     }
     function authHeaders() {
       const t = localStorage.getItem('asylum_token');
@@ -492,6 +494,23 @@
           setTimeout(() => boostError.textContent = '', 1800);
         });
       };
+    }
+    function showSetupConfig() {
+      const root = document.getElementById('boostConfig');
+      root.style.display = '';
+      root.innerHTML = `
+        <div class="boost-section-title">Setup</div>
+        <p class="subtle" style="text-align:left;">Use Setup to configure admin roles, prefixes, and key bot options. Only users with appropriate permissions can modify settings.</p>
+        <div class="card" style="text-align:left;">
+          <div class="mb-2"><b>How to use</b></div>
+          <ul style="color:var(--muted); line-height:1.8; padding-left:1.2em;">
+            <li>Run <code>/setup</code> to set admin and extra roles and disable commands.</li>
+            <li>Run <code>/logchannel</code> to set a moderation log channel.</li>
+            <li>Run <code>/prefix</code> to set a custom command prefix.</li>
+            <li>Run <code>/disable-commands</code> to manage which commands are available.</li>
+          </ul>
+        </div>
+      `;
     }
   </script>
 </body>

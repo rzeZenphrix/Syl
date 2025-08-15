@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SYL Bot Dashboard</title>
+  <title>SYL - Server Dashboard</title>
+  <link rel="stylesheet" href="/css/theme.css">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
     body {
@@ -542,7 +543,7 @@
 <body>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header" id="sidebarHeader">
-      <img src="" alt="icon" class="server-icon" id="serverIcon">
+      <img src="" alt="Server icon" class="server-icon" id="serverIcon">
       <span id="sidebarTitle">SYL Bot</span>
     </div>
     <div class="sidebar-nav" id="sidebarNav">
@@ -764,6 +765,14 @@
         desc: 'Track how many people your members invite to your community and rank them in a leaderboard',
         icon: '<svg width="32" height="32" fill="none" stroke="#43b581" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="12" r="6"/><path d="M4 28v-2a8 8 0 0 1 16 0v2"/></svg>',
         badge: 'New',
+        badgeType: 'new'
+      },
+      {
+        key: 'setup',
+        title: 'Setup',
+        desc: 'Configure server roles, channels, and bot preferences for your community.',
+        icon: '<svg width="32" height="32" fill="none" stroke="#6c7fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4M20 2v4M4 10h24"/><rect x="6" y="12" width="20" height="16" rx="3"/></svg>',
+        badge: 'Core',
         badgeType: 'new'
       },
       {
