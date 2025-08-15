@@ -220,6 +220,10 @@
       boost: {
         title: 'Boost Messages',
         desc: 'Send custom messages when someone boosts your server.'
+      },
+      backup: {
+        title: 'Backup & Restore',
+        desc: 'Export and restore server roles, channels, categories, and permissions.'
       }
     };
     document.getElementById('backBtn').onclick = function() {
@@ -232,6 +236,85 @@
       document.getElementById('moduleHeader').textContent = moduleInfo[moduleKey].title;
       document.getElementById('moduleSub').textContent = moduleInfo[moduleKey].desc;
       if (moduleKey === 'boost') showBoostConfig();
+      if (moduleKey === 'backup') showBackupConfig();
+    }
+    function authHeaders() {
+      const t = localStorage.getItem('asylum_token');
+      return t ? { Authorization: 'Bearer ' + t } : {};
+    }
+    function showBackupConfig() {
+      const root = document.getElementById('boostConfig');
+      root.style.display = '';
+      root.innerHTML = `
+        <div class="boost-section-title">Backup</div>
+        <p style="color:#b0b8c1;text-align:left;">Create a full backup of your server's roles, channels, categories, and permissions. Only users with Manage Server can perform backups.</p>
+        <button id="downloadBackup" class="boost-test-btn">Download Backup</button>
+        <div class="boost-section-title" style="margin-top:2em;">Restore</div>
+        <p style="color:#b0b8c1;text-align:left;">Restore from a previously exported backup file. This will create roles/channels. Only users with Manage Server can restore.</p>
+        <input type="file" id="backupFile" accept="application/json" style="margin:0.6em 0 1em 0;" />
+        <button id="restoreBtn" class="boost-save">Restore</button>
+        <div id="backupMsg" class="boost-error"></div>
+      `;
+      const msg = document.getElementById('backupMsg');
+      document.getElementById('downloadBackup').onclick = async () => {
+        msg.style.color = '#aaa';
+        msg.textContent = 'Generating backup...';
+        try {
+          const res = await fetch(`/api/guild/${guildId}/backup`, { headers: authHeaders() });
+          if (!res.ok) {
+            const e = await res.json().catch(()=>({}));
+            msg.style.color = '#ff5555';
+            msg.textContent = e.error || 'Failed to generate backup';
+            return;
+          }
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `guild-${guildId}-backup.json`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          msg.style.color = '#43b581';
+          msg.textContent = 'Backup downloaded.';
+          setTimeout(()=> msg.textContent = '', 1500);
+        } catch {
+          msg.style.color = '#ff5555';
+          msg.textContent = 'Failed to generate backup';
+        }
+      };
+      document.getElementById('restoreBtn').onclick = async () => {
+        const fileInput = document.getElementById('backupFile');
+        if (!fileInput.files || !fileInput.files[0]) {
+          msg.style.color = '#ff5555';
+          msg.textContent = 'Please choose a backup file.';
+          return;
+        }
+        try {
+          const text = await fileInput.files[0].text();
+          const payload = JSON.parse(text);
+          msg.style.color = '#aaa';
+          msg.textContent = 'Restoring...';
+          const res = await fetch(`/api/guild/${guildId}/restore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify(payload)
+          });
+          const out = await res.json().catch(()=>({}));
+          if (!res.ok || !out.success) {
+            msg.style.color = '#ff5555';
+            msg.textContent = out.error || 'Restore failed';
+            return;
+          }
+          msg.style.color = '#43b581';
+          msg.textContent = 'Restore started. Check your server.';
+          setTimeout(()=> msg.textContent = '', 2000);
+        } catch (e) {
+          msg.style.color = '#ff5555';
+          msg.textContent = 'Invalid or unreadable backup file.';
+        }
+      };
     }
     function showBoostConfig() {
       const root = document.getElementById('boostConfig');

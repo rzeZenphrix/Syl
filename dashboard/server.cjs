@@ -8,7 +8,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -327,6 +327,221 @@ app.get('/api/bot-guilds', async (req, res) => {
     res.json(guilds);
   } catch (e) {
     res.status(500).json({ error: 'Failed to fetch bot guilds', details: e.message });
+  }
+});
+
+// Helpers for auth and permissions
+async function getAccessTokenFromAuthHeader(req) {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) return null;
+  const token = auth.slice('Bearer '.length);
+  if (!token.startsWith('discord-')) return null;
+  const userId = token.replace('discord-', '');
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('access_token')
+    .eq('user_id', userId)
+    .single();
+  if (error || !data) return null;
+  return data.access_token;
+}
+
+async function isUserManagerOfGuild(userAccessToken, guildId) {
+  try {
+    const res = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bearer ${userAccessToken}` }
+    });
+    if (!res.ok) return false;
+    const guilds = await res.json();
+    const g = guilds.find(g => g.id === guildId);
+    if (!g) return false;
+    const MANAGE_GUILD = 0x20;
+    try {
+      return (BigInt(g.permissions) & BigInt(MANAGE_GUILD)) !== 0n;
+    } catch {
+      const perms = typeof g.permissions === 'string' ? parseInt(g.permissions, 10) : (g.permissions || 0);
+      return (perms & MANAGE_GUILD) !== 0;
+    }
+  } catch {
+    return false;
+  }
+}
+
+async function isGuildModuleEnabled(guildId, moduleKey) {
+  const { data, error } = await supabase
+    .from('guild_modules')
+    .select('enabled')
+    .eq('guild_id', guildId)
+    .eq('module_key', moduleKey)
+    .single();
+  if (error && error.code !== 'PGRST116') return false;
+  return !!data?.enabled;
+}
+
+// Backup endpoint: export guild structure
+app.get('/api/guild/:guildId/backup', async (req, res) => {
+  const { guildId } = req.params;
+  const accessToken = await getAccessTokenFromAuthHeader(req);
+  if (!accessToken) return res.status(401).json({ error: 'Unauthorized' });
+  const authorized = await isUserManagerOfGuild(accessToken, guildId);
+  if (!authorized) return res.status(403).json({ error: 'Insufficient permissions' });
+  const enabled = await isGuildModuleEnabled(guildId, 'backup');
+  if (!enabled) return res.status(403).json({ error: 'Backup module disabled' });
+
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
+  try {
+    const [guildRes, rolesRes, channelsRes] = await Promise.all([
+      fetch(`https://discord.com/api/guilds/${guildId}`, { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } }),
+      fetch(`https://discord.com/api/guilds/${guildId}/roles`, { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } }),
+      fetch(`https://discord.com/api/guilds/${guildId}/channels`, { headers: { Authorization: `Bot ${process.env.DISCORD_TOKEN}` } })
+    ]);
+    if (!guildRes.ok || !rolesRes.ok || !channelsRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch guild data' });
+    }
+    const guild = await guildRes.json();
+    const roles = await rolesRes.json();
+    const channels = await channelsRes.json();
+    const backup = {
+      version: 1,
+      createdAt: Date.now(),
+      guild: { id: guild.id, name: guild.name, icon: guild.icon, features: guild.features },
+      roles: roles.map(r => ({
+        id: r.id,
+        name: r.name,
+        color: r.color,
+        hoist: r.hoist,
+        permissions: r.permissions,
+        mentionable: r.mentionable,
+        position: r.position,
+        managed: r.managed
+      })),
+      channels: channels.map(c => ({
+        id: c.id,
+        name: c.name,
+        type: c.type,
+        topic: c.topic,
+        nsfw: c.nsfw,
+        bitrate: c.bitrate,
+        user_limit: c.user_limit,
+        rate_limit_per_user: c.rate_limit_per_user,
+        parent_id: c.parent_id,
+        permission_overwrites: c.permission_overwrites,
+        position: c.position
+      }))
+    };
+    const filename = `guild-${guildId}-backup-${new Date().toISOString().replace(/[:.]/g,'-')}.json`;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(backup, null, 2));
+  } catch (e) {
+    res.status(500).json({ error: 'Backup failed', details: e.message });
+  }
+});
+
+// Restore endpoint: recreate roles/channels
+app.post('/api/guild/:guildId/restore', async (req, res) => {
+  const { guildId } = req.params;
+  const backup = req.body;
+  const accessToken = await getAccessTokenFromAuthHeader(req);
+  if (!accessToken) return res.status(401).json({ error: 'Unauthorized' });
+  const authorized = await isUserManagerOfGuild(accessToken, guildId);
+  if (!authorized) return res.status(403).json({ error: 'Insufficient permissions' });
+  const enabled = await isGuildModuleEnabled(guildId, 'backup');
+  if (!enabled) return res.status(403).json({ error: 'Backup module disabled' });
+  if (!backup || !backup.roles || !backup.channels) return res.status(400).json({ error: 'Invalid backup file' });
+  if (!process.env.DISCORD_TOKEN) return res.status(500).json({ error: 'Bot token not configured' });
+
+  const botHeaders = { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}`, 'Content-Type': 'application/json' };
+
+  try {
+    // Create roles (skip @everyone)
+    const roleIdMap = {};
+    const rolesSorted = backup.roles
+      .filter(r => r.name !== '@everyone')
+      .sort((a, b) => a.position - b.position);
+    for (const r of rolesSorted) {
+      const body = {
+        name: r.name,
+        permissions: r.permissions,
+        color: r.color,
+        hoist: r.hoist,
+        mentionable: r.mentionable
+      };
+      const createRes = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+        method: 'POST', headers: botHeaders, body: JSON.stringify(body)
+      });
+      if (createRes.ok) {
+        const created = await createRes.json();
+        roleIdMap[r.id] = created.id;
+      }
+    }
+
+    // Reorder roles
+    const rolesReorderPayload = rolesSorted.map(r => ({ id: roleIdMap[r.id], position: r.position }));
+    if (rolesReorderPayload.length > 0) {
+      await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+        method: 'PATCH', headers: botHeaders, body: JSON.stringify(rolesReorderPayload)
+      });
+    }
+
+    // Create channels: categories first
+    const channelIdMap = {};
+    const categories = backup.channels.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
+    for (const cat of categories) {
+      const body = { name: cat.name, type: 4, position: cat.position };
+      const resp = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+        method: 'POST', headers: botHeaders, body: JSON.stringify(body)
+      });
+      if (resp.ok) {
+        const created = await resp.json();
+        channelIdMap[cat.id] = created.id;
+      }
+    }
+
+    // Create non-category channels
+    const others = backup.channels.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
+    for (const ch of others) {
+      const overwrites = (ch.permission_overwrites || []).map(ow => ({
+        id: ow.type === 0 && roleIdMap[ow.id] ? roleIdMap[ow.id] : ow.id,
+        type: ow.type,
+        allow: ow.allow,
+        deny: ow.deny
+      }));
+      const body = {
+        name: ch.name,
+        type: ch.type,
+        topic: ch.topic,
+        nsfw: ch.nsfw,
+        bitrate: ch.bitrate,
+        user_limit: ch.user_limit,
+        rate_limit_per_user: ch.rate_limit_per_user,
+        parent_id: ch.parent_id ? (channelIdMap[ch.parent_id] || null) : null,
+        permission_overwrites: overwrites
+      };
+      const resp = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+        method: 'POST', headers: botHeaders, body: JSON.stringify(body)
+      });
+      if (resp.ok) {
+        const created = await resp.json();
+        channelIdMap[ch.id] = created.id;
+      }
+    }
+
+    // Reorder channels
+    const positionsPayload = backup.channels.map(c => ({
+      id: channelIdMap[c.id] || null,
+      position: c.position,
+      parent_id: c.parent_id ? (channelIdMap[c.parent_id] || null) : null
+    })).filter(x => !!x.id);
+    if (positionsPayload.length > 0) {
+      await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+        method: 'PATCH', headers: botHeaders, body: JSON.stringify(positionsPayload)
+      });
+    }
+
+    res.json({ success: true, createdRoles: Object.keys(roleIdMap).length, createdChannels: Object.keys(channelIdMap).length });
+  } catch (e) {
+    res.status(500).json({ error: 'Restore failed', details: e.message });
   }
 });
 
