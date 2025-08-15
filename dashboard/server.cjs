@@ -187,6 +187,128 @@ app.post('/api/guild/:guildId/boost-message', express.json(), (req, res) => {
   res.json({ success: true });
 });
 
+// Save welcome configuration
+app.post('/api/guild/:guildId/welcome-config', express.json(), async (req, res) => {
+  const { guildId } = req.params;
+  const { channelId, message, roleId, enabled } = req.body;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    // Save to database
+    const { error } = await supabase
+      .from('guild_configs')
+      .upsert({
+        guild_id: guildId,
+        config_type: 'welcome',
+        config_data: { channelId, message, roleId, enabled }
+      });
+    
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save welcome config', details: e.message });
+  }
+});
+
+// Save goodbye configuration
+app.post('/api/guild/:guildId/goodbye-config', express.json(), async (req, res) => {
+  const { guildId } = req.params;
+  const { channelId, message, enabled } = req.body;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    // Save to database
+    const { error } = await supabase
+      .from('guild_configs')
+      .upsert({
+        guild_id: guildId,
+        config_type: 'goodbye',
+        config_data: { channelId, message, enabled }
+      });
+    
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to save goodbye config', details: e.message });
+  }
+});
+
+// Get welcome configuration
+app.get('/api/guild/:guildId/welcome-config', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('config_data')
+      .eq('guild_id', guildId)
+      .eq('config_type', 'welcome')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    res.json(data?.config_data || { channelId: '', message: '', roleId: '', enabled: false });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load welcome config', details: e.message });
+  }
+});
+
+// Get goodbye configuration
+app.get('/api/guild/:guildId/goodbye-config', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check permissions
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('config_data')
+      .eq('guild_id', guildId)
+      .eq('config_type', 'goodbye')
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    res.json(data?.config_data || { channelId: '', message: '', enabled: false });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to load goodbye config', details: e.message });
+  }
+});
+
 // In-memory module activation state: { [guildId]: { [moduleKey]: true/false } }
 const moduleActivation = {};
 
@@ -282,6 +404,66 @@ app.post('/api/guild/:guildId/boost-test', express.json(), async (req, res) => {
   }
 });
 
+// Fetch guild roles
+app.get('/api/guild/:guildId/roles', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check if user has permission to access this guild
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const rolesRes = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
+      headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
+    });
+    
+    if (!rolesRes.ok) {
+      return res.status(404).json({ error: 'Guild not found or bot not in guild' });
+    }
+    
+    const roles = await rolesRes.json();
+    res.json(roles);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch roles', details: e.message });
+  }
+});
+
+// Fetch guild channels
+app.get('/api/guild/:guildId/channels', async (req, res) => {
+  const { guildId } = req.params;
+  
+  // Check if user has permission to access this guild
+  const userAccessToken = await getAccessTokenFromAuthHeader(req);
+  if (!userAccessToken) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  if (!await isUserManagerOfGuild(userAccessToken, guildId)) {
+    return res.status(403).json({ error: 'Insufficient permissions' });
+  }
+  
+  try {
+    const channelsRes = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
+      headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
+    });
+    
+    if (!channelsRes.ok) {
+      return res.status(404).json({ error: 'Guild not found or bot not in guild' });
+    }
+    
+    const channels = await channelsRes.json();
+    res.json(channels);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch channels', details: e.message });
+  }
+});
+
 // Fetch real server info from Discord
 app.get('/api/guild/:guildId/info', async (req, res) => {
   const { guildId } = req.params;
@@ -316,9 +498,9 @@ app.get('/api/guild/:guildId/info', async (req, res) => {
     res.json({
       name: guild.name,
       icon,
-      activeUsers: activeUsers !== '-' ? activeUsers : (guild.approximate_member_count || '-'),
-      channels: channels.length,
-      roles: roles.length,
+      memberCount: guild.approximate_member_count || '-',
+      channelCount: channels.length,
+      roleCount: roles.length,
       status: 'Online'
     });
   } catch (e) {

@@ -299,6 +299,19 @@
       text-align: center;
     }
 
+    .form-help {
+      font-size: var(--font-size-sm);
+      color: var(--text-secondary);
+      margin-top: var(--space-xs);
+    }
+
+    .form-checkbox {
+      margin-right: var(--space-sm);
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent-primary);
+    }
+
     /* Status messages */
     .status-message {
       padding: var(--space-md);
@@ -440,7 +453,7 @@
   <div class="container">
     <!-- Header -->
     <div class="header">
-      <a href="dashboard.html" class="back-btn">
+      <a href="dashboard.html?guild=${guildId}" class="back-btn" id="backBtn">
         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M15 8H3M8 15l-7-7 7-7"/>
         </svg>
@@ -485,8 +498,8 @@
     // Module configurations
     const moduleConfigs = {
       welcome: {
-        title: 'Welcome & Goodbye',
-        description: 'Configure welcome and goodbye messages for your server',
+        title: 'Welcome Messages',
+        description: 'Configure welcome messages for new members joining your server',
         icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
           <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
           <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
@@ -498,7 +511,7 @@
                 <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
                 <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
               </svg>
-              Welcome Message
+              Welcome Message Settings
             </h2>
             <p class="section-description">Configure the message sent when new members join your server.</p>
             
@@ -511,7 +524,8 @@
             
             <div class="form-group">
               <label class="form-label">Welcome Message</label>
-              <textarea class="form-input form-textarea" id="welcomeMessage" placeholder="Welcome {user} to {server}! You are member #{count}."></textarea>
+              <textarea class="form-input form-textarea" id="welcomeMessage" placeholder="Welcome {user} to {server}! You are member #{count}." rows="4"></textarea>
+              <div class="form-help">Available variables: {user}, {server}, {count}, {mention}</div>
               <div class="message-preview" id="welcomePreview">
                 Welcome @username to Server Name! You are member #123.
               </div>
@@ -524,35 +538,14 @@
               </select>
             </div>
             
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="welcomeEnabled" class="form-checkbox">
+                Enable Welcome Messages
+              </label>
+            </div>
+            
             <button class="btn btn-primary" onclick="saveWelcomeConfig()">Save Welcome Settings</button>
-          </div>
-
-          <div class="config-section animate-slide-in">
-            <h2 class="section-title">
-              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
-                <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
-              </svg>
-              Goodbye Message
-            </h2>
-            <p class="section-description">Configure the message sent when members leave your server.</p>
-            
-            <div class="form-group">
-              <label class="form-label">Goodbye Channel</label>
-              <select class="form-input form-select" id="goodbyeChannel">
-                <option value="">Select a channel...</option>
-              </select>
-            </div>
-            
-            <div class="form-group">
-              <label class="form-label">Goodbye Message</label>
-              <textarea class="form-input form-textarea" id="goodbyeMessage" placeholder="Goodbye {user}! We'll miss you."></textarea>
-              <div class="message-preview" id="goodbyePreview">
-                Goodbye @username! We'll miss you.
-              </div>
-            </div>
-            
-            <button class="btn btn-primary" onclick="saveGoodbyeConfig()">Save Goodbye Settings</button>
           </div>
         `
       },
@@ -595,6 +588,51 @@
             </div>
             
             <button class="btn btn-primary" onclick="saveTicketConfig()">Save Ticket Settings</button>
+          </div>
+        `
+      },
+      goodbye: {
+        title: 'Goodbye Messages',
+        description: 'Configure goodbye messages for members leaving your server',
+        icon: `<svg fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
+          <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
+        </svg>`,
+        content: `
+          <div class="config-section animate-slide-in">
+            <h2 class="section-title">
+              <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 20c1.5 2 4.5 2 6 0l8-12"/>
+                <path d="M8 20V8a4 4 0 0 1 8 0v12"/>
+              </svg>
+              Goodbye Message Settings
+            </h2>
+            <p class="section-description">Configure the message sent when members leave your server.</p>
+            
+            <div class="form-group">
+              <label class="form-label">Goodbye Channel</label>
+              <select class="form-input form-select" id="goodbyeChannel">
+                <option value="">Select a channel...</option>
+              </select>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">Goodbye Message</label>
+              <textarea class="form-input form-textarea" id="goodbyeMessage" placeholder="Goodbye {user}! We'll miss you." rows="4"></textarea>
+              <div class="form-help">Available variables: {user}, {server}</div>
+              <div class="message-preview" id="goodbyePreview">
+                Goodbye @username! We'll miss you.
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">
+                <input type="checkbox" id="goodbyeEnabled" class="form-checkbox">
+                Enable Goodbye Messages
+              </label>
+            </div>
+            
+            <button class="btn btn-primary" onclick="saveGoodbyeConfig()">Save Goodbye Settings</button>
           </div>
         `
       },
@@ -753,11 +791,16 @@
         return;
       }
 
-      // Update page content
-      document.getElementById('moduleTitle').textContent = config.title;
-      document.getElementById('moduleDescription').textContent = config.description;
-      document.getElementById('moduleIcon').innerHTML = config.icon;
-      document.getElementById('configContent').innerHTML = config.content;
+      // Update page content with null checks
+      const moduleTitle = document.getElementById('moduleTitle');
+      const moduleDescription = document.getElementById('moduleDescription');
+      const moduleIcon = document.getElementById('moduleIcon');
+      const configContent = document.getElementById('configContent');
+      
+      if (moduleTitle) moduleTitle.textContent = config.title;
+      if (moduleDescription) moduleDescription.textContent = config.description;
+      if (moduleIcon) moduleIcon.innerHTML = config.icon;
+      if (configContent) configContent.innerHTML = config.content;
 
       // Load module-specific data
       loadModuleData();
@@ -785,6 +828,8 @@
         // Load existing configuration
         if (moduleKey === 'welcome') {
           loadWelcomeConfig();
+        } else if (moduleKey === 'goodbye') {
+          loadGoodbyeConfig();
         } else if (moduleKey === 'tickets') {
           loadTicketConfig();
         }
@@ -830,7 +875,8 @@
       if (file && file.type === 'application/json') {
         selectedBackupFile = file;
         document.getElementById('restoreBtn').disabled = false;
-        document.getElementById('fileUploadLabel').textContent = file.name;
+        const fileUploadLabel = document.getElementById('fileUploadLabel');
+        if (fileUploadLabel) fileUploadLabel.textContent = file.name;
         showStatus('Backup file selected: ' + file.name, 'success');
       } else {
         showError('Please select a valid JSON backup file');
@@ -887,7 +933,7 @@
           progress += Math.random() * 15;
           if (progress > 90) progress = 90;
           progressFill.style.width = progress + '%';
-          progressText.textContent = `Restoring... ${Math.round(progress)}%`;
+          if (progressText) progressText.textContent = `Restoring... ${Math.round(progress)}%`;
         }, 200);
 
         // Read and parse backup file
@@ -914,7 +960,7 @@
         
         if (result.success) {
           progressFill.style.width = '100%';
-          progressText.textContent = 'Restore completed!';
+          if (progressText) progressText.textContent = 'Restore completed!';
           showStatus('Server restored successfully!', 'success');
         } else {
           throw new Error(result.error || 'Restore failed');
@@ -932,19 +978,107 @@
     }
 
     // Welcome/Goodbye functions
-    function loadWelcomeConfig() {
-      // Load existing welcome configuration
-      // This would typically fetch from your backend
+    async function loadWelcomeConfig() {
+      try {
+        const response = await fetch(`/api/guild/${guildId}/welcome-config`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const config = await response.json();
+          
+          const channelSelect = document.getElementById('welcomeChannel');
+          const messageTextarea = document.getElementById('welcomeMessage');
+          const roleSelect = document.getElementById('welcomeRole');
+          const enabledCheckbox = document.getElementById('welcomeEnabled');
+          
+          if (channelSelect) channelSelect.value = config.channelId || '';
+          if (messageTextarea) messageTextarea.value = config.message || '';
+          if (roleSelect) roleSelect.value = config.roleId || '';
+          if (enabledCheckbox) enabledCheckbox.checked = config.enabled || false;
+        }
+      } catch (error) {
+        console.error('Failed to load welcome config:', error);
+      }
     }
 
-    function saveWelcomeConfig() {
-      // Save welcome configuration
-      showStatus('Welcome settings saved!', 'success');
+    async function loadGoodbyeConfig() {
+      try {
+        const response = await fetch(`/api/guild/${guildId}/goodbye-config`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const config = await response.json();
+          
+          const channelSelect = document.getElementById('goodbyeChannel');
+          const messageTextarea = document.getElementById('goodbyeMessage');
+          const enabledCheckbox = document.getElementById('goodbyeEnabled');
+          
+          if (channelSelect) channelSelect.value = config.channelId || '';
+          if (messageTextarea) messageTextarea.value = config.message || '';
+          if (enabledCheckbox) enabledCheckbox.checked = config.enabled || false;
+        }
+      } catch (error) {
+        console.error('Failed to load goodbye config:', error);
+      }
     }
 
-    function saveGoodbyeConfig() {
-      // Save goodbye configuration
-      showStatus('Goodbye settings saved!', 'success');
+    async function saveWelcomeConfig() {
+      try {
+        const channelId = document.getElementById('welcomeChannel').value;
+        const message = document.getElementById('welcomeMessage').value;
+        const roleId = document.getElementById('welcomeRole').value;
+        const enabled = document.getElementById('welcomeEnabled').checked;
+        
+        const response = await fetch(`/api/guild/${guildId}/welcome-config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          },
+          body: JSON.stringify({ channelId, message, roleId, enabled })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save welcome configuration');
+        }
+        
+        showStatus('Welcome settings saved!', 'success');
+      } catch (error) {
+        console.error('Failed to save welcome config:', error);
+        showError('Failed to save welcome settings: ' + error.message);
+      }
+    }
+
+    async function saveGoodbyeConfig() {
+      try {
+        const channelId = document.getElementById('goodbyeChannel').value;
+        const message = document.getElementById('goodbyeMessage').value;
+        const enabled = document.getElementById('goodbyeEnabled').checked;
+        
+        const response = await fetch(`/api/guild/${guildId}/goodbye-config`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('asylum_token')}`
+          },
+          body: JSON.stringify({ channelId, message, enabled })
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save goodbye configuration');
+        }
+        
+        showStatus('Goodbye settings saved!', 'success');
+      } catch (error) {
+        console.error('Failed to save goodbye config:', error);
+        showError('Failed to save goodbye settings: ' + error.message);
+      }
     }
 
     // Ticket functions
@@ -960,12 +1094,18 @@
     // Utility functions
     function showStatus(message, type) {
       const statusDiv = document.getElementById('statusMessage');
+      if (!statusDiv) {
+        console.warn('Status message element not found');
+        return;
+      }
       statusDiv.textContent = message;
       statusDiv.className = `status-message status-${type}`;
       statusDiv.style.display = 'block';
       
       setTimeout(() => {
-        statusDiv.style.display = 'none';
+        if (statusDiv) {
+          statusDiv.style.display = 'none';
+        }
       }, 5000);
     }
 
@@ -974,7 +1114,15 @@
     }
 
     // Initialize page when DOM is loaded
-    document.addEventListener('DOMContentLoaded', initPage);
+    document.addEventListener('DOMContentLoaded', () => {
+      // Update back button href with guild ID
+      const backBtn = document.getElementById('backBtn');
+      if (backBtn && guildId) {
+        backBtn.href = `dashboard.html?guild=${guildId}`;
+      }
+      
+      initPage();
+    });
 
     // File drag and drop
     document.addEventListener('DOMContentLoaded', () => {
