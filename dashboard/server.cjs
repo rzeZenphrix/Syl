@@ -548,7 +548,13 @@ app.post('/api/guild/:guildId/restore', async (req, res) => {
 // Optionally, serve static files for the dashboard
 app.use(express.static(path.join(__dirname, 'public')));
 
-const PORT = process.env.LOGIN_SERVER_PORT || 5174;
+// Fallback to index for SPA-like navigation
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+const PORT = process.env.PORT || process.env.LOGIN_SERVER_PORT || 5174;
 app.listen(PORT, () => {
-  console.log(`Login server running at https://syl-2a38.onrender.com`);
+  console.log(`Dashboard server listening on port ${PORT}`);
 }); 

@@ -1,13 +1,6 @@
 // index.js
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
-const http = require('http');
-
-http
-  .createServer((req, res) => {
-    res.writeHead(200);
-    res.end('OK');
-  })
-  .listen(process.env.PORT || 3000);
+// HTTP server is served by the dashboard (dashboard/server.cjs) in production.
 
 require('dotenv').config();
 const fs = require('fs');
