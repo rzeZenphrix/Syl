@@ -7,7 +7,7 @@ services:
       npm ci --only=production
       npm audit fix --audit-level=moderate || true
     startCommand: node start.js
-    healthCheckPath: /
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production

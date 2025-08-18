@@ -54,14 +54,18 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Health check endpoint (for Render and other health monitoring)
-app.get('/', (req, res) => {
-  res.writeHead(200);
-  res.end('OK');
-});
+// Serve dashboard static files at root (must come before specific route handlers)
+app.use(express.static(path.join(__dirname, 'dashboard/public')));
 
+// Health check endpoint (for Render and other health monitoring)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Simple health check for monitoring (fallback if index.html doesn't exist)
+app.get('/ping', (req, res) => {
+  res.writeHead(200);
+  res.end('OK');
 });
 
 // Serve the OAuth URL from the environment
@@ -1280,7 +1284,7 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000); // Update every 5 minutes
 
-// Serve static files from dashboard/public
+// Keep the /dashboard/public path for backward compatibility
 app.use('/dashboard/public', express.static(path.join(__dirname, 'dashboard/public')));
 
 // Add error handling middleware
@@ -1293,8 +1297,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`🌐 Combined bot and dashboard server listening on port ${PORT}`);
-  console.log(`📊 Dashboard available at: http://localhost:${PORT}/dashboard/public/`);
+  console.log(`📊 Dashboard available at: http://localhost:${PORT}/`);
   console.log(`🔍 Health check available at: http://localhost:${PORT}/health`);
+  console.log(`📁 Static files also available at: http://localhost:${PORT}/dashboard/public/`);
 }).on('error', (err) => {
   console.error('Failed to start server:', err);
   process.exit(1);
