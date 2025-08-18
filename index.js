@@ -31,6 +31,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { isModuleEnabled } = require('./src/utils/modules');
 const CogManager = require('./src/cogManager');
 const { logEvent } = require('./src/logger');
+const { EnhancedLogger } = require('./src/enhanced-logger');
 
 // Environment variables
 const token = process.env.DISCORD_TOKEN;
@@ -40,6 +41,9 @@ const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
 // Initialize Supabase
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Initialize enhanced logger
+const enhancedLogger = new EnhancedLogger(supabase);
 
 // Bot configuration
 const prefixes = [';', '&'];
@@ -1007,6 +1011,121 @@ client.on('guildBanAdd', async (ban) => {
 const { handleStarboardReaction } = require('./src/cogs/utility');
 client.on('messageReactionAdd', (reaction, user) => handleStarboardReaction(reaction, user, true));
 client.on('messageReactionRemove', (reaction, user) => handleStarboardReaction(reaction, user, false));
+
+// Enhanced event handlers for comprehensive logging
+client.on('guildMemberAdd', async (member) => {
+  await enhancedLogger.logMemberEvent(
+    member.guild.id,
+    member.guild,
+    'member_join',
+    member.id,
+    { username: member.user.username, accountAge: Date.now() - member.user.createdTimestamp }
+  );
+});
+
+client.on('guildMemberRemove', async (member) => {
+  await enhancedLogger.logMemberEvent(
+    member.guild.id,
+    member.guild,
+    'member_leave',
+    member.id,
+    { username: member.user.username, roles: member.roles.cache.map(r => r.name) }
+  );
+});
+
+client.on('channelCreate', async (channel) => {
+  if (!channel.guild) return;
+  await enhancedLogger.logChannelEvent(
+    channel.guild.id,
+    channel.guild,
+    'channel_create',
+    channel.id,
+    null,
+    { channelName: channel.name, channelType: channel.type }
+  );
+});
+
+client.on('channelDelete', async (channel) => {
+  if (!channel.guild) return;
+  await enhancedLogger.logChannelEvent(
+    channel.guild.id,
+    channel.guild,
+    'channel_delete',
+    channel.id,
+    null,
+    { channelName: channel.name, channelType: channel.type }
+  );
+});
+
+client.on('roleCreate', async (role) => {
+  await enhancedLogger.logRoleEvent(
+    role.guild.id,
+    role.guild,
+    'role_create',
+    role.id,
+    null,
+    { roleName: role.name, roleColor: role.hexColor, permissions: role.permissions.toArray() }
+  );
+});
+
+// Initialize dashboard API routes when bot is ready
+client.once('ready', async () => {
+  console.log(`Logged in as ${client.user.tag}!`);
+  
+  try {
+    // Initialize dashboard API routes
+    const dashboardServer = require('./dashboard/server.cjs');
+    if (dashboardServer.initializeAPIRoutes) {
+      dashboardServer.initializeAPIRoutes(client);
+    }
+    
+    // Start member tracking for all guilds
+    for (const guild of client.guilds.cache.values()) {
+      await updateMemberTracking(guild);
+    }
+    
+    console.log('Bot initialization complete with enhanced features');
+  } catch (error) {
+    console.error('Error during bot initialization:', error);
+  }
+});
+
+// Function to update member tracking
+async function updateMemberTracking(guild) {
+  try {
+    const members = guild.members.cache;
+    let online = 0, idle = 0, dnd = 0, offline = 0;
+    
+    members.forEach(member => {
+      if (member.user.bot) return;
+      const status = member.presence?.status || 'offline';
+      switch (status) {
+        case 'online': online++; break;
+        case 'idle': idle++; break;
+        case 'dnd': dnd++; break;
+        default: offline++;
+      }
+    });
+
+    await supabase.from('member_tracking').upsert({
+      guild_id: guild.id,
+      total_members: members.size,
+      online_members: online,
+      idle_members: idle,
+      dnd_members: dnd,
+      offline_members: offline
+    });
+  } catch (error) {
+    console.error('Error updating member tracking:', error);
+  }
+}
+
+// Periodic member tracking update
+setInterval(async () => {
+  for (const guild of client.guilds.cache.values()) {
+    await updateMemberTracking(guild);
+  }
+}, 5 * 60 * 1000); // Update every 5 minutes
 
 // Login
 client.login(token); 

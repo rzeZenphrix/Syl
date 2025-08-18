@@ -12,6 +12,14 @@ app.use(express.json({ limit: '10mb' }));
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
+// Import API route modules
+const { initializeSetupRoutes } = require('./api-routes/setup');
+const { initializeRealtimeRoutes } = require('./api-routes/realtime');
+const { initializeLoggingRoutes } = require('./api-routes/logging');
+
+// Discord client for API routes (will be initialized when bot connects)
+let discordClient = null;
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -917,6 +925,28 @@ app.get('/auth.js', (req, res) => {
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public/index.html'));
 });
+
+// Initialize API routes
+function initializeAPIRoutes(client) {
+  discordClient = client;
+  
+  // Setup module routes
+  const setupRoutes = initializeSetupRoutes(supabase, client);
+  app.use('/api/setup', setupRoutes);
+  
+  // Real-time data routes
+  const realtimeRoutes = initializeRealtimeRoutes(supabase, client);
+  app.use('/api/realtime', realtimeRoutes);
+  
+  // Logging routes
+  const loggingRoutes = initializeLoggingRoutes(supabase);
+  app.use('/api/logging', loggingRoutes);
+  
+  console.log('API routes initialized');
+}
+
+// Export function for bot to call
+module.exports.initializeAPIRoutes = initializeAPIRoutes;
 
 const PORT = process.env.PORT || process.env.LOGIN_SERVER_PORT || 5174;
 
