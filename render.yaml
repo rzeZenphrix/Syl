@@ -6,8 +6,8 @@ services:
     buildCommand: |
       npm ci --only=production
       npm audit fix --audit-level=moderate || true
-    startCommand: node dashboard/server.cjs & node start.js
-    healthCheckPath: /index.html
+    startCommand: DASHBOARD_PORT=8080 BOT_HEALTH_PORT=$PORT node dashboard/server.cjs & node start.js
+    healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
