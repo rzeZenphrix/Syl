@@ -10,7 +10,14 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+// Initialize supabase only if environment variables are available
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  console.log('Supabase client initialized');
+} else {
+  console.log('Warning: Supabase not configured - some features may not work');
+}
 
 // Import API route modules
 const { initializeSetupRoutes } = require('./api-routes/setup.cjs');
@@ -948,7 +955,20 @@ function initializeAPIRoutes(client) {
 // Export function for bot to call
 module.exports.initializeAPIRoutes = initializeAPIRoutes;
 
-const PORT = process.env.PORT || process.env.LOGIN_SERVER_PORT || 5174;
+// Smart port configuration for different environments
+// On Render, PORT is set to 10000 for the web service, but we want the dashboard on a different port
+// unless explicitly specified via DASHBOARD_PORT
+let PORT;
+if (process.env.DASHBOARD_PORT) {
+  PORT = process.env.DASHBOARD_PORT;
+} else if (process.env.NODE_ENV === 'production' && process.env.PORT === '10000') {
+  // On Render production, use a different port to avoid conflicts
+  PORT = 8080;
+} else {
+  PORT = process.env.PORT || 5174;
+}
+
+console.log(`Port configuration - NODE_ENV: ${process.env.NODE_ENV}, PORT env: ${process.env.PORT}, Using: ${PORT}`);
 
 // Add error handling
 app.use((err, req, res, next) => {

@@ -38,7 +38,7 @@ try {
     }
   }
   
-  console.log('\n🎯 Starting main bot...');
+  console.log('\n🎯 Starting combined bot and dashboard server...');
   require('./index.js');
   
 } catch (error) {

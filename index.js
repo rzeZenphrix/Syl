@@ -1,18 +1,16 @@
 // index.js
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
-const http = require('http');
+// Combined bot and dashboard server
 
-const botHealthPort = process.env.BOT_HEALTH_PORT || 3000;
-http
-  .createServer((req, res) => {
-    res.writeHead(200);
-    res.end('OK');
-  })
-  .listen(botHealthPort);
+// Setup Express server for both bot health checks and dashboard
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const crypto = require('crypto');
 
 require('dotenv').config();
 const fs = require('fs');
-const path = require('path');
+const fetch = require('node-fetch');
 const {
   Client,
   GatewayIntentBits,
@@ -39,11 +37,250 @@ const clientId = process.env.CLIENT_ID;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
-// Initialize Supabase
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase (conditional to prevent crashes when not configured)
+let supabase = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Supabase client initialized');
+} else {
+  console.log('Warning: Supabase not configured - some features may not work');
+}
 
 // Initialize enhanced logger
 const enhancedLogger = new EnhancedLogger(supabase);
+
+// Setup Express server for dashboard and health checks
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// Serve dashboard static files at root (must come before specific route handlers)
+app.use(express.static(path.join(__dirname, 'dashboard/public')));
+
+// Health check endpoint (for Render and other health monitoring)
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Simple health check for monitoring (fallback if index.html doesn't exist)
+app.get('/ping', (req, res) => {
+  res.writeHead(200);
+  res.end('OK');
+});
+
+// Serve the OAuth URL from the environment
+app.get('/api/oauth-url', (req, res) => {
+  const url = process.env.DISCORD_OAUTH_URL;
+  if (url) {
+    res.json({ url });
+  } else {
+    res.status(500).json({ error: 'OAuth URL not configured.' });
+  }
+});
+
+// OAuth redirect endpoint
+app.get('/api/oauth', (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirectUri = process.env.DISCORD_REDIRECT_URI;
+  const scope = 'identify guilds';
+  
+  if (!clientId || !redirectUri) {
+    return res.status(500).json({ error: 'OAuth not configured properly.' });
+  }
+  
+  const oauthUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  res.redirect(oauthUrl);
+});
+
+// OAuth callback endpoint (GET for Discord redirect)
+app.get('/api/oauth-callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).json({ error: 'Missing code' });
+
+  const params = new URLSearchParams();
+  params.append('client_id', process.env.DISCORD_CLIENT_ID);
+  params.append('client_secret', process.env.DISCORD_CLIENT_SECRET);
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', process.env.DISCORD_REDIRECT_URI);
+  params.append('scope', 'identify guilds');
+
+  try {
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      body: params,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      return res.status(400).json({ error: 'Failed to get access token', details: tokenData });
+    }
+
+    // Get user info
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const user = await userRes.json();
+
+    // For demo, return a fake token (in production, use JWT/session)
+    const fakeToken = 'discord-' + user.id;
+
+    // Persist the Discord access token keyed by Discord user id (if Supabase is available)
+    if (supabase) {
+      const { error } = await supabase
+        .from('user_tokens')
+        .upsert({ 
+          user_id: user.id,
+          access_token: tokenData.access_token 
+        });
+      
+      if (error) {
+        console.error('Failed to store user token:', error);
+      }
+    }
+
+    // Redirect to callback page with token
+    res.redirect(`/dashboard/public/callback.html?token=${fakeToken}&user=${encodeURIComponent(JSON.stringify(user))}`);
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.status(500).json({ error: 'OAuth failed', details: error.message });
+  }
+});
+
+// API endpoint to get current user info
+app.get('/api/user', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+  const token = auth.slice('Bearer '.length);
+  if (!token.startsWith('discord-')) {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+  const userId = token.replace('discord-', '');
+  
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('access_token')
+    .eq('user_id', userId)
+    .single();
+    
+  if (error || !data) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  
+  const accessToken = data.access_token;
+  try {
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!userRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch user from Discord' });
+    }
+    const user = await userRes.json();
+    res.json(user);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch user', details: e.message });
+  }
+});
+
+// API endpoint to get user's guilds
+app.get('/api/user-guilds', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+  const token = auth.slice('Bearer '.length);
+  if (!token.startsWith('discord-')) {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+  const userId = token.replace('discord-', '');
+  
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('access_token')
+    .eq('user_id', userId)
+    .single();
+    
+  if (error || !data) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  
+  const accessToken = data.access_token;
+  try {
+    const guildRes = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!guildRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch guilds from Discord' });
+    }
+    const guilds = await guildRes.json();
+    res.json(guilds);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch guilds', details: e.message });
+  }
+});
+
+// Cache for bot guilds
+let botGuildsCache = { guilds: [], fetchedAt: 0 };
+
+// API endpoint to get bot's guilds
+app.get('/api/bot-guilds', async (req, res) => {
+  if (!hasDiscordCredentials) {
+    return res.status(500).json({ error: 'Bot token not configured' });
+  }
+  
+  const now = Date.now();
+  // Cache for 60 seconds
+  if (botGuildsCache.guilds.length > 0 && now - botGuildsCache.fetchedAt < 60000) {
+    return res.json(botGuildsCache.guilds);
+  }
+  
+  try {
+    const botRes = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bot ${token}` }
+    });
+    if (!botRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch bot guilds from Discord' });
+    }
+    const guilds = await botRes.json();
+    botGuildsCache = { guilds, fetchedAt: now };
+    res.json(guilds);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch bot guilds', details: e.message });
+  }
+});
+
+// Import and initialize dashboard API routes
+const { initializeSetupRoutes } = require('./dashboard/api-routes/setup.cjs');
+const { initializeRealtimeRoutes } = require('./dashboard/api-routes/realtime.cjs');
+const { initializeLoggingRoutes } = require('./dashboard/api-routes/logging.cjs');
+
+// Discord client for API routes (will be initialized when bot connects)
+let discordClientForAPI = null;
+
+// Function to initialize API routes (will be called after bot connects)
+function initializeAPIRoutes() {
+  console.log('Initializing API routes...');
+  
+  const setupRoutes = initializeSetupRoutes(supabase, discordClientForAPI, enhancedLogger);
+  const realtimeRoutes = initializeRealtimeRoutes(supabase, discordClientForAPI, enhancedLogger);
+  const loggingRoutes = initializeLoggingRoutes(supabase, discordClientForAPI, enhancedLogger);
+  
+  app.use('/api/setup', setupRoutes);
+  app.use('/api/realtime', realtimeRoutes);
+  app.use('/api/logging', loggingRoutes);
+  
+  console.log('API routes initialized');
+}
 
 // Bot configuration
 const prefixes = [';', '&'];
@@ -320,10 +557,11 @@ async function isChannelBlacklisted(guildId, channelId) {
   return data && data.length > 0;
 }
 
-// Validate environment variables
-if (!token || !clientId) {
-  console.error('Missing DISCORD_TOKEN or CLIENT_ID');
-  process.exit(1);
+// Check Discord credentials (but don't exit if missing - web server can still run)
+const hasDiscordCredentials = token && clientId;
+if (!hasDiscordCredentials) {
+  console.log('⚠️  Missing DISCORD_TOKEN or CLIENT_ID - Discord bot will not connect');
+  console.log('📊 Web dashboard will still be available');
 }
 
 // Event handlers
@@ -1106,11 +1344,9 @@ client.once('ready', async () => {
     // Load cogs
     await cogManager.loadCogs();
     
-    // Initialize dashboard API routes
-    const dashboardServer = require('./dashboard/server.cjs');
-    if (dashboardServer.initializeAPIRoutes) {
-      dashboardServer.initializeAPIRoutes(client);
-    }
+    // Initialize dashboard API routes with the bot client
+    discordClientForAPI = client;
+    initializeAPIRoutes();
     
     // Start member tracking for all guilds
     for (const guild of client.guilds.cache.values()) {
@@ -1160,5 +1396,35 @@ setInterval(async () => {
   }
 }, 5 * 60 * 1000); // Update every 5 minutes
 
-// Login
-client.login(token); 
+// Keep the /dashboard/public path for backward compatibility
+app.use('/dashboard/public', express.static(path.join(__dirname, 'dashboard/public')));
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start the combined server
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🌐 Combined bot and dashboard server listening on port ${PORT}`);
+  console.log(`📊 Dashboard available at: http://localhost:${PORT}/`);
+  console.log(`🔍 Health check available at: http://localhost:${PORT}/health`);
+  console.log(`📁 Static files also available at: http://localhost:${PORT}/dashboard/public/`);
+}).on('error', (err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
+
+// Login to Discord (only if credentials are available)
+if (hasDiscordCredentials) {
+  console.log('🤖 Starting Discord bot...');
+  client.login(token).catch(error => {
+    console.error('❌ Failed to connect to Discord:', error.message);
+    console.log('📊 Web dashboard will continue running without bot functionality');
+  });
+} else {
+  console.log('🚫 Skipping Discord bot connection - credentials not provided');
+  console.log('📊 Web dashboard is running in standalone mode');
+} 
