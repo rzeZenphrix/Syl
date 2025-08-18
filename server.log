@@ -5,5 +5,6 @@ Warning: Supabase not configured - some features may not work
 🚫 Skipping Discord bot connection - credentials not provided
 📊 Web dashboard is running in standalone mode
 🌐 Combined bot and dashboard server listening on port 8080
-📊 Dashboard available at: http://localhost:8080/dashboard/public/
+📊 Dashboard available at: http://localhost:8080/
 🔍 Health check available at: http://localhost:8080/health
+📁 Static files also available at: http://localhost:8080/dashboard/public/

@@ -147,6 +147,118 @@ app.get('/api/oauth-callback', async (req, res) => {
   }
 });
 
+// API endpoint to get current user info
+app.get('/api/user', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+  const token = auth.slice('Bearer '.length);
+  if (!token.startsWith('discord-')) {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+  const userId = token.replace('discord-', '');
+  
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('access_token')
+    .eq('user_id', userId)
+    .single();
+    
+  if (error || !data) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  
+  const accessToken = data.access_token;
+  try {
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!userRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch user from Discord' });
+    }
+    const user = await userRes.json();
+    res.json(user);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch user', details: e.message });
+  }
+});
+
+// API endpoint to get user's guilds
+app.get('/api/user-guilds', async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid token' });
+  }
+  const token = auth.slice('Bearer '.length);
+  if (!token.startsWith('discord-')) {
+    return res.status(401).json({ error: 'Invalid token format' });
+  }
+  const userId = token.replace('discord-', '');
+  
+  if (!supabase) {
+    return res.status(500).json({ error: 'Database not configured' });
+  }
+  
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('access_token')
+    .eq('user_id', userId)
+    .single();
+    
+  if (error || !data) {
+    return res.status(401).json({ error: 'Session expired. Please log in again.' });
+  }
+  
+  const accessToken = data.access_token;
+  try {
+    const guildRes = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!guildRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch guilds from Discord' });
+    }
+    const guilds = await guildRes.json();
+    res.json(guilds);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch guilds', details: e.message });
+  }
+});
+
+// Cache for bot guilds
+let botGuildsCache = { guilds: [], fetchedAt: 0 };
+
+// API endpoint to get bot's guilds
+app.get('/api/bot-guilds', async (req, res) => {
+  if (!hasDiscordCredentials) {
+    return res.status(500).json({ error: 'Bot token not configured' });
+  }
+  
+  const now = Date.now();
+  // Cache for 60 seconds
+  if (botGuildsCache.guilds.length > 0 && now - botGuildsCache.fetchedAt < 60000) {
+    return res.json(botGuildsCache.guilds);
+  }
+  
+  try {
+    const botRes = await fetch('https://discord.com/api/users/@me/guilds', {
+      headers: { Authorization: `Bot ${token}` }
+    });
+    if (!botRes.ok) {
+      return res.status(500).json({ error: 'Failed to fetch bot guilds from Discord' });
+    }
+    const guilds = await botRes.json();
+    botGuildsCache = { guilds, fetchedAt: now };
+    res.json(guilds);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch bot guilds', details: e.message });
+  }
+});
+
 // Import and initialize dashboard API routes
 const { initializeSetupRoutes } = require('./dashboard/api-routes/setup.cjs');
 const { initializeRealtimeRoutes } = require('./dashboard/api-routes/realtime.cjs');
