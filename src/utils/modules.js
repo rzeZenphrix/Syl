@@ -3,10 +3,19 @@ const { createClient } = require('@supabase/supabase-js');
 
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+let supabase = null;
+
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+}
 
 async function isModuleEnabled(guildId, moduleKey) {
 	try {
+		if (!supabase) {
+			// If Supabase is not configured, assume modules are enabled
+			return true;
+		}
+		
 		const { data, error } = await supabase
 			.from('guild_modules')
 			.select('enabled')

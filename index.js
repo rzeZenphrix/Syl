@@ -1,18 +1,16 @@
 // index.js
 // Discord.js v14 Moderator Bot with Linux-like Commands, Multiple Prefixes & Guild Config
-const http = require('http');
+// Combined bot and dashboard server
 
-const botHealthPort = process.env.BOT_HEALTH_PORT || 3000;
-http
-  .createServer((req, res) => {
-    res.writeHead(200);
-    res.end('OK');
-  })
-  .listen(botHealthPort);
+// Setup Express server for both bot health checks and dashboard
+const express = require('express');
+const cors = require('cors');
+const path = require('path');
+const crypto = require('crypto');
 
 require('dotenv').config();
 const fs = require('fs');
-const path = require('path');
+const fetch = require('node-fetch');
 const {
   Client,
   GatewayIntentBits,
@@ -39,11 +37,134 @@ const clientId = process.env.CLIENT_ID;
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 
-// Initialize Supabase
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase (conditional to prevent crashes when not configured)
+let supabase = null;
+if (supabaseUrl && supabaseKey) {
+  supabase = createClient(supabaseUrl, supabaseKey);
+  console.log('Supabase client initialized');
+} else {
+  console.log('Warning: Supabase not configured - some features may not work');
+}
 
 // Initialize enhanced logger
 const enhancedLogger = new EnhancedLogger(supabase);
+
+// Setup Express server for dashboard and health checks
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+
+// Health check endpoint (for Render and other health monitoring)
+app.get('/', (req, res) => {
+  res.writeHead(200);
+  res.end('OK');
+});
+
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Serve the OAuth URL from the environment
+app.get('/api/oauth-url', (req, res) => {
+  const url = process.env.DISCORD_OAUTH_URL;
+  if (url) {
+    res.json({ url });
+  } else {
+    res.status(500).json({ error: 'OAuth URL not configured.' });
+  }
+});
+
+// OAuth redirect endpoint
+app.get('/api/oauth', (req, res) => {
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirectUri = process.env.DISCORD_REDIRECT_URI;
+  const scope = 'identify guilds';
+  
+  if (!clientId || !redirectUri) {
+    return res.status(500).json({ error: 'OAuth not configured properly.' });
+  }
+  
+  const oauthUrl = `https://discord.com/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scope)}`;
+  res.redirect(oauthUrl);
+});
+
+// OAuth callback endpoint (GET for Discord redirect)
+app.get('/api/oauth-callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).json({ error: 'Missing code' });
+
+  const params = new URLSearchParams();
+  params.append('client_id', process.env.DISCORD_CLIENT_ID);
+  params.append('client_secret', process.env.DISCORD_CLIENT_SECRET);
+  params.append('grant_type', 'authorization_code');
+  params.append('code', code);
+  params.append('redirect_uri', process.env.DISCORD_REDIRECT_URI);
+  params.append('scope', 'identify guilds');
+
+  try {
+    const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      body: params,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    });
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      return res.status(400).json({ error: 'Failed to get access token', details: tokenData });
+    }
+
+    // Get user info
+    const userRes = await fetch('https://discord.com/api/users/@me', {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const user = await userRes.json();
+
+    // For demo, return a fake token (in production, use JWT/session)
+    const fakeToken = 'discord-' + user.id;
+
+    // Persist the Discord access token keyed by Discord user id (if Supabase is available)
+    if (supabase) {
+      const { error } = await supabase
+        .from('user_tokens')
+        .upsert({ 
+          user_id: user.id,
+          access_token: tokenData.access_token 
+        });
+      
+      if (error) {
+        console.error('Failed to store user token:', error);
+      }
+    }
+
+    // Redirect to callback page with token
+    res.redirect(`/dashboard/public/callback.html?token=${fakeToken}&user=${encodeURIComponent(JSON.stringify(user))}`);
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.status(500).json({ error: 'OAuth failed', details: error.message });
+  }
+});
+
+// Import and initialize dashboard API routes
+const { initializeSetupRoutes } = require('./dashboard/api-routes/setup.cjs');
+const { initializeRealtimeRoutes } = require('./dashboard/api-routes/realtime.cjs');
+const { initializeLoggingRoutes } = require('./dashboard/api-routes/logging.cjs');
+
+// Discord client for API routes (will be initialized when bot connects)
+let discordClientForAPI = null;
+
+// Function to initialize API routes (will be called after bot connects)
+function initializeAPIRoutes() {
+  console.log('Initializing API routes...');
+  
+  const setupRoutes = initializeSetupRoutes(supabase, discordClientForAPI, enhancedLogger);
+  const realtimeRoutes = initializeRealtimeRoutes(supabase, discordClientForAPI, enhancedLogger);
+  const loggingRoutes = initializeLoggingRoutes(supabase, discordClientForAPI, enhancedLogger);
+  
+  app.use('/api/setup', setupRoutes);
+  app.use('/api/realtime', realtimeRoutes);
+  app.use('/api/logging', loggingRoutes);
+  
+  console.log('API routes initialized');
+}
 
 // Bot configuration
 const prefixes = [';', '&'];
@@ -1106,11 +1227,9 @@ client.once('ready', async () => {
     // Load cogs
     await cogManager.loadCogs();
     
-    // Initialize dashboard API routes
-    const dashboardServer = require('./dashboard/server.cjs');
-    if (dashboardServer.initializeAPIRoutes) {
-      dashboardServer.initializeAPIRoutes(client);
-    }
+    // Initialize dashboard API routes with the bot client
+    discordClientForAPI = client;
+    initializeAPIRoutes();
     
     // Start member tracking for all guilds
     for (const guild of client.guilds.cache.values()) {
@@ -1159,6 +1278,26 @@ setInterval(async () => {
     await updateMemberTracking(guild);
   }
 }, 5 * 60 * 1000); // Update every 5 minutes
+
+// Serve static files from dashboard/public
+app.use('/dashboard/public', express.static(path.join(__dirname, 'dashboard/public')));
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Server error:', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+// Start the combined server
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🌐 Combined bot and dashboard server listening on port ${PORT}`);
+  console.log(`📊 Dashboard available at: http://localhost:${PORT}/dashboard/public/`);
+  console.log(`🔍 Health check available at: http://localhost:${PORT}/health`);
+}).on('error', (err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
+});
 
 // Login
 client.login(token); 
