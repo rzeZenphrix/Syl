@@ -1,7 +1,7 @@
 // Setup Module API Routes
 const express = require('express');
 const router = express.Router();
-const { EnhancedLogger } = require('../../src/enhanced-logger');
+const { EnhancedLogger } = require('../../src/enhanced-logger.js');
 
 // Initialize logger (will be passed from main server)
 let logger;

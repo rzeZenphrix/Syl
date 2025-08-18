@@ -31,7 +31,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { isModuleEnabled } = require('./src/utils/modules');
 const CogManager = require('./src/cogManager');
 const { logEvent } = require('./src/logger');
-const { EnhancedLogger } = require('./src/enhanced-logger');
+const { EnhancedLogger } = require('./src/enhanced-logger.js');
 
 // Environment variables
 const token = process.env.DISCORD_TOKEN;

@@ -1,7 +1,7 @@
 // Logging System API Routes
 const express = require('express');
 const router = express.Router();
-const { EnhancedLogger } = require('../../src/enhanced-logger');
+const { EnhancedLogger } = require('../../src/enhanced-logger.js');
 
 let logger;
 let supabase;

@@ -13,9 +13,9 @@ app.use(express.json({ limit: '10mb' }));
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 // Import API route modules
-const { initializeSetupRoutes } = require('./api-routes/setup');
-const { initializeRealtimeRoutes } = require('./api-routes/realtime');
-const { initializeLoggingRoutes } = require('./api-routes/logging');
+const { initializeSetupRoutes } = require('./api-routes/setup.cjs');
+const { initializeRealtimeRoutes } = require('./api-routes/realtime.cjs');
+const { initializeLoggingRoutes } = require('./api-routes/logging.cjs');
 
 // Discord client for API routes (will be initialized when bot connects)
 let discordClient = null;

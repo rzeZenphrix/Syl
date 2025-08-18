@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
-const { EnhancedLogger } = require('../enhanced-logger');
+const { EnhancedLogger } = require('../enhanced-logger.js');
 
 // Initialize Supabase and Logger
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);

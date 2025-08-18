@@ -1,12 +1,46 @@
 const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } = require('discord.js');
 const { createClient } = require('@supabase/supabase-js');
-const { isAdmin, logger } = require('./enhanced-setup');
+const { EnhancedLogger } = require('../enhanced-logger.js');
 
-// Initialize Supabase
+// Initialize Supabase and Logger
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const logger = new EnhancedLogger(supabase);
 
 // Dashboard URL
 const DASHBOARD_URL = 'https://syl-cuiw.onrender.com/index.html';
+
+// Permission checking function
+async function isAdmin(member) {
+  try {
+    if (!member || !member.guild) return false;
+    
+    // Always allow the server owner
+    if (member.guild.ownerId === member.id) return true;
+    
+    // Check for Administrator permission
+    if (member.permissions.has('Administrator')) return true;
+    
+    // Check guild config for admin roles
+    const { data, error } = await supabase
+      .from('guild_configs')
+      .select('admin_role_id, extra_role_ids')
+      .eq('guild_id', member.guild.id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') {
+      console.error('Error checking admin roles:', error);
+      return false;
+    }
+    
+    if (!data) return false;
+    
+    const adminRoles = [data.admin_role_id, ...(data.extra_role_ids || [])].filter(Boolean);
+    return member.roles.cache.some(role => adminRoles.includes(role.id));
+  } catch (err) {
+    console.error('Error in isAdmin check:', err);
+    return false;
+  }
+}
 
 // Helper function to create module disabled embed
 function createModuleDisabledEmbed(moduleName, guildId) {
