@@ -441,10 +441,11 @@ async function isChannelBlacklisted(guildId, channelId) {
   return data && data.length > 0;
 }
 
-// Validate environment variables
-if (!token || !clientId) {
-  console.error('Missing DISCORD_TOKEN or CLIENT_ID');
-  process.exit(1);
+// Check Discord credentials (but don't exit if missing - web server can still run)
+const hasDiscordCredentials = token && clientId;
+if (!hasDiscordCredentials) {
+  console.log('⚠️  Missing DISCORD_TOKEN or CLIENT_ID - Discord bot will not connect');
+  console.log('📊 Web dashboard will still be available');
 }
 
 // Event handlers
@@ -1299,5 +1300,14 @@ app.listen(PORT, () => {
   process.exit(1);
 });
 
-// Login
-client.login(token); 
+// Login to Discord (only if credentials are available)
+if (hasDiscordCredentials) {
+  console.log('🤖 Starting Discord bot...');
+  client.login(token).catch(error => {
+    console.error('❌ Failed to connect to Discord:', error.message);
+    console.log('📊 Web dashboard will continue running without bot functionality');
+  });
+} else {
+  console.log('🚫 Skipping Discord bot connection - credentials not provided');
+  console.log('📊 Web dashboard is running in standalone mode');
+} 

@@ -1,4 +1,9 @@
-nohup: ignoring input
-[dotenv@17.2.0] injecting env (0) from .env (tip: ⚙️  write to custom object with { processEnv: myObject })
 Warning: Supabase not configured - some features may not work
-Dashboard server listening on port 5174
+⚠️  Missing DISCORD_TOKEN or CLIENT_ID - Discord bot will not connect
+📊 Web dashboard will still be available
+Warning: Supabase not configured - some features may not work
+🚫 Skipping Discord bot connection - credentials not provided
+📊 Web dashboard is running in standalone mode
+🌐 Combined bot and dashboard server listening on port 8080
+📊 Dashboard available at: http://localhost:8080/dashboard/public/
+🔍 Health check available at: http://localhost:8080/health
