@@ -10,6 +10,7 @@ class CogManager {
     this.slashHandlers = new Map();
     this.buttonHandlers = new Map();
     this.modalHandlers = new Map();
+    this.eventHandlers = new Map();
   }
 
   async loadCogs() {
@@ -66,6 +67,16 @@ class CogManager {
             }
           }
           
+          // Load event handlers
+          if (cog.eventHandlers) {
+            for (const [eventName, handler] of Object.entries(cog.eventHandlers)) {
+              if (!this.eventHandlers.has(eventName)) {
+                this.eventHandlers.set(eventName, []);
+              }
+              this.eventHandlers.get(eventName).push(handler);
+            }
+          }
+          
           console.log(`Loaded cog: ${cog.name}`);
         }
       } catch (error) {
@@ -102,6 +113,14 @@ class CogManager {
 
   getAllPrefixCommands() {
     return Array.from(this.prefixCommands.keys());
+  }
+
+  getEventHandlers(eventName) {
+    return this.eventHandlers.get(eventName) || [];
+  }
+
+  getAllEventHandlers() {
+    return this.eventHandlers;
   }
 }
 

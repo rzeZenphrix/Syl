@@ -1012,8 +1012,9 @@ const { handleStarboardReaction } = require('./src/cogs/utility');
 client.on('messageReactionAdd', (reaction, user) => handleStarboardReaction(reaction, user, true));
 client.on('messageReactionRemove', (reaction, user) => handleStarboardReaction(reaction, user, false));
 
-// Enhanced event handlers for comprehensive logging
+// Enhanced event handlers for comprehensive logging and cog integration
 client.on('guildMemberAdd', async (member) => {
+  // Log member join event
   await enhancedLogger.logMemberEvent(
     member.guild.id,
     member.guild,
@@ -1021,9 +1022,24 @@ client.on('guildMemberAdd', async (member) => {
     member.id,
     { username: member.user.username, accountAge: Date.now() - member.user.createdTimestamp }
   );
+
+  // Execute cog event handlers
+  const handlers = cogManager.getEventHandlers('guildMemberAdd');
+  for (const handler of handlers) {
+    try {
+      await handler(member);
+    } catch (error) {
+      console.error('Error in guildMemberAdd handler:', error);
+      await enhancedLogger.logError(member.guild.id, member.guild, error, { 
+        context: 'guildMemberAdd_handler',
+        memberId: member.id 
+      });
+    }
+  }
 });
 
 client.on('guildMemberRemove', async (member) => {
+  // Log member leave event
   await enhancedLogger.logMemberEvent(
     member.guild.id,
     member.guild,
@@ -1031,6 +1047,20 @@ client.on('guildMemberRemove', async (member) => {
     member.id,
     { username: member.user.username, roles: member.roles.cache.map(r => r.name) }
   );
+
+  // Execute cog event handlers
+  const handlers = cogManager.getEventHandlers('guildMemberRemove');
+  for (const handler of handlers) {
+    try {
+      await handler(member);
+    } catch (error) {
+      console.error('Error in guildMemberRemove handler:', error);
+      await enhancedLogger.logError(member.guild.id, member.guild, error, { 
+        context: 'guildMemberRemove_handler',
+        memberId: member.id 
+      });
+    }
+  }
 });
 
 client.on('channelCreate', async (channel) => {
@@ -1073,6 +1103,9 @@ client.once('ready', async () => {
   console.log(`Logged in as ${client.user.tag}!`);
   
   try {
+    // Load cogs
+    await cogManager.loadCogs();
+    
     // Initialize dashboard API routes
     const dashboardServer = require('./dashboard/server.cjs');
     if (dashboardServer.initializeAPIRoutes) {
