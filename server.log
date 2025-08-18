@@ -1,0 +1,4 @@
+nohup: ignoring input
+[dotenv@17.2.0] injecting env (0) from .env (tip: ⚙️  write to custom object with { processEnv: myObject })
+Warning: Supabase not configured - some features may not work
+Dashboard server listening on port 5174

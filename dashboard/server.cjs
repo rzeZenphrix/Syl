@@ -10,7 +10,14 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+// Initialize supabase only if environment variables are available
+let supabase = null;
+if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY) {
+  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  console.log('Supabase client initialized');
+} else {
+  console.log('Warning: Supabase not configured - some features may not work');
+}
 
 // Import API route modules
 const { initializeSetupRoutes } = require('./api-routes/setup.cjs');
