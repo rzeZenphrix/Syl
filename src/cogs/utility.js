@@ -1349,7 +1349,7 @@ function getAllCommandsByCategory() {
     { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
     { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
     { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
-    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
+    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'welcome-config', 'goodbyesetup'] }
   ];
 }
 

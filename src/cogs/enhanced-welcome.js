@@ -350,7 +350,7 @@ async function handleWelcomeSetupCommand(interaction) {
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
-    await logger.logCommand(guild.id, guild, 'welcomesetup', member.id, true, { 
+    await logger.logCommand(guild.id, guild, 'welcome-config', member.id, true, { 
       channelId: channel?.id,
       embedEnabled 
     });
@@ -520,7 +520,7 @@ async function handleToggleWelcomeCommand(interaction) {
 // Slash command definitions
 const slashCommands = [
   new SlashCommandBuilder()
-    .setName('welcomesetup')
+    .setName('welcome-config')
     .setDescription('Configure welcome messages for new members (admin only)')
     .addChannelOption(option =>
       option.setName('channel')
@@ -567,14 +567,14 @@ const slashCommands = [
 
 // Slash command handlers
 const slashHandlers = {
-  welcomesetup: handleWelcomeSetupCommand,
+  'welcome-config': handleWelcomeSetupCommand,
   viewwelcome: handleViewWelcomeCommand,
   'toggle-welcome': handleToggleWelcomeCommand
 };
 
 // Available commands for this cog
 const availableCommands = {
-  welcomesetup: 'Setup welcome messages for new members (admin only)',
+  'welcome-config': 'Configure welcome messages for new members (admin only)',
   viewwelcome: 'View the current welcome configuration',
   'toggle-welcome': 'Enable or disable welcome messages (admin only)'
 };
