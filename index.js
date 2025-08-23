@@ -748,6 +748,16 @@ client.on('messageCreate', async (msg) => {
     return msg.reply({ embeds: [new EmbedBuilder().setTitle('Channel Blacklisted').setDescription('Commands are disabled in this channel.').setColor(0xe74c3c)] });
   }
   
+  // Handle confirmation messages for dangerous commands
+  try {
+    const serverManagementCog = cogManager.getCog('server-management');
+    if (serverManagementCog && serverManagementCog.handleMessage) {
+      await serverManagementCog.handleMessage(msg);
+    }
+  } catch (e) {
+    console.error('Server management confirmation error:', e);
+  }
+  
   // Increment message count and chat uptime in user_stats
   if (await isModuleEnabled(msg.guild.id, 'stats')) {
   const { data, error } = await supabase.from('user_stats').select('message_count, chat_seconds').eq('guild_id', msg.guild.id).eq('user_id', msg.author.id).single();

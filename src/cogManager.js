@@ -122,6 +122,10 @@ class CogManager {
   getAllEventHandlers() {
     return this.eventHandlers;
   }
+  
+  getCog(cogName) {
+    return this.cogs.get(cogName);
+  }
 }
 
 module.exports = CogManager; 

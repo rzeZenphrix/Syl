@@ -108,6 +108,10 @@ const commandDescriptions = {
   ping: 'Check the bot\'s latency and response time. Usage: `/ping`',
   avatar: 'Display a user\'s avatar in full size. Usage: `/avatar [user]`',
   poll: 'Create a poll with yes/no reactions. Usage: `/poll question:"Your question here"`',
+  
+  // Server management commands (DANGEROUS)
+  lockdown: 'Emergency server lockdown - kicks/bans all members (EXTREMELY DANGEROUS). Usage: `;lockdown kick` or `;lockdown ban`. Requires multiple confirmations.',
+  'steal-emojis': 'Steal up to 20 emojis from a message. Reply to a message with emojis or use `;steal-emojis`. Usage: `;steal-emojis`',
 };
 
 // Translation function with language detection
@@ -1353,7 +1357,8 @@ const PAGE_SIZE = 8;
 function getAllCommandsByCategory() {
   return [
     { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case', 'raid', 'antinuke'] },
-    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'emojis', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
+    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'emojis', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal', 'steal-emojis'] },
+    { category: '🚨 Server Management', commands: ['lockdown'] },
     { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
     { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
     { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'welcome-config', 'goodbyesetup'] }
