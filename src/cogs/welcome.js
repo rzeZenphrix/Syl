@@ -483,15 +483,13 @@ async function sendWelcomeMessage(member) {
   }
 }
 
-// Event handlers
-const eventHandlers = {
-  guildMemberAdd: sendWelcomeMessage
-};
+// Note: Event handlers removed to prevent duplicate welcome messages
+// The enhanced-welcome.js module handles welcome message sending
+// This module only provides the configuration commands
 
 module.exports = {
   name: 'welcome',
   prefixCommands,
   slashCommands,
-  slashHandlers,
-  eventHandlers
+  slashHandlers
 }; 

@@ -186,15 +186,21 @@ async function sendWelcomeMessage(member) {
     const guild = member.guild;
     const guildId = guild.id;
 
+    console.log(`Enhanced-welcome: Processing welcome for ${member.user.tag} in ${guild.name}`);
+
     // Check if welcome is enabled
     if (!await isWelcomeEnabled(guildId)) {
+      console.log(`Enhanced-welcome: Welcome disabled for ${guild.name}`);
       return;
     }
 
     const config = await getWelcomeConfig(guildId);
     if (!config || !config.channel_id) {
+      console.log(`Enhanced-welcome: No config or channel for ${guild.name}`);
       return;
     }
+
+    console.log(`Enhanced-welcome: Config found for ${guild.name}, channel: ${config.channel_id}, show_avatar: ${config.show_avatar}`);
 
     const channel = guild.channels.cache.get(config.channel_id);
     if (!channel || !channel.isTextBased()) {
@@ -256,8 +262,10 @@ async function sendWelcomeMessage(member) {
       }
     );
 
+    console.log(`Enhanced-welcome: Successfully sent welcome message for ${member.user.tag} in ${guild.name}`);
+
   } catch (error) {
-    console.error('Error sending welcome message:', error);
+    console.error('Enhanced-welcome: Error sending welcome message:', error);
     await logger.logError(member.guild.id, member.guild, error, { 
       context: 'sendWelcomeMessage',
       memberId: member.id 
