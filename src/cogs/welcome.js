@@ -221,7 +221,8 @@ const slashCommands = [
     .addStringOption(opt => opt.setName('message').setDescription('Welcome message (use {user}, {server}, {memberCount})').setRequired(false))
     .addStringOption(opt => opt.setName('color').setDescription('Hex color for embed (e.g., #00ff00)').setRequired(false))
     .addStringOption(opt => opt.setName('image').setDescription('Image URL for embed').setRequired(false))
-    .addBooleanOption(opt => opt.setName('embed').setDescription('Use embed format (default: true)').setRequired(false)),
+    .addBooleanOption(opt => opt.setName('embed').setDescription('Use embed format (default: true)').setRequired(false))
+    .addBooleanOption(opt => opt.setName('show_avatar').setDescription('Show user avatar in welcome message (default: true)').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('goodbyesetup')
@@ -257,6 +258,7 @@ const slashHandlers = {
     const color = interaction.options.getString('color') || '#00ff00';
     const image = interaction.options.getString('image');
     const useEmbed = interaction.options.getBoolean('embed') ?? true;
+    const showAvatar = interaction.options.getBoolean('show_avatar') ?? true;
 
     // Validate image URL before saving
     if (image && !isValidImageUrl(image)) {
@@ -276,12 +278,13 @@ const slashHandlers = {
         message: message,
         embed: useEmbed,
         color: color,
-        image: image
+        image: image,
+        show_avatar: showAvatar
       }, { onConflict: ['guild_id'] });
       
       const embed = new EmbedBuilder()
         .setTitle('Welcome Message Setup Complete')
-        .setDescription(`**Channel:** ${channel}\n**Message:** ${message}\n**Color:** ${color}\n**Image:** ${image || 'None'}\n**Embed:** ${useEmbed ? 'Yes' : 'No'}`)
+        .setDescription(`**Channel:** ${channel}\n**Message:** ${message}\n**Color:** ${color}\n**Image:** ${image || 'None'}\n**Embed:** ${useEmbed ? 'Yes' : 'No'}\n**Show Avatar:** ${showAvatar ? 'Yes' : 'No'}`)
         .setColor(0x2ecc71)
         .setTimestamp();
       
@@ -377,6 +380,7 @@ const slashHandlers = {
         { name: 'Message', value: data.message || 'Not set', inline: false },
         { name: 'Embed', value: data.embed ? 'Yes' : 'No', inline: true },
         { name: 'Color', value: data.color || 'Default', inline: true },
+        { name: 'Show Avatar', value: data.show_avatar !== false ? 'Yes' : 'No', inline: true },
         { name: 'Image', value: data.image || 'None', inline: false }
       )
       .setColor(0x1abc9c);
@@ -406,9 +410,82 @@ const slashHandlers = {
   }
 };
 
+// Send welcome message when a member joins
+async function sendWelcomeMessage(member) {
+  try {
+    const guild = member.guild;
+    const guildId = guild.id;
+
+    // Check if welcome module is enabled
+    if (!await isModuleEnabled(guildId, 'welcome')) {
+      return;
+    }
+
+    // Get welcome configuration
+    const { data: config, error } = await supabase
+      .from('welcome_configs')
+      .select('*')
+      .eq('guild_id', guildId)
+      .single();
+
+    if (error || !config || !config.enabled || !config.channel_id) {
+      return;
+    }
+
+    const channel = guild.channels.cache.get(config.channel_id);
+    if (!channel || !channel.isTextBased()) {
+      return;
+    }
+
+    // Process message placeholders
+    let message = config.message || 'Welcome {user} to {server}! 🎉';
+    message = message
+      .replace(/{user}/g, member.toString())
+      .replace(/{username}/g, member.user.username)
+      .replace(/{user\.tag}/g, member.user.tag)
+      .replace(/{user\.mention}/g, member.toString())
+      .replace(/{server}/g, guild.name)
+      .replace(/{guild}/g, guild.name)
+      .replace(/{membercount}/g, guild.memberCount.toString())
+      .replace(/{member\.count}/g, guild.memberCount.toString());
+
+    if (config.embed) {
+      const embed = new EmbedBuilder()
+        .setTitle('👋 Welcome!')
+        .setDescription(message)
+        .setColor(config.color || '#00ff00')
+        .setFooter({ text: `Welcome to ${guild.name}!`, iconURL: guild.iconURL() })
+        .setTimestamp();
+
+      // Only show avatar if enabled (defaults to true for backward compatibility)
+      if (config.show_avatar !== false) {
+        embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+      }
+
+      if (config.image && isValidImageUrl(config.image)) {
+        embed.setImage(config.image);
+      }
+
+      await channel.send({ embeds: [embed] });
+    } else {
+      await channel.send(message);
+    }
+
+    console.log(`Welcome message sent for ${member.user.tag} in ${guild.name}`);
+  } catch (error) {
+    console.error('Error sending welcome message:', error);
+  }
+}
+
+// Event handlers
+const eventHandlers = {
+  guildMemberAdd: sendWelcomeMessage
+};
+
 module.exports = {
   name: 'welcome',
   prefixCommands,
   slashCommands,
-  slashHandlers
+  slashHandlers,
+  eventHandlers
 }; 

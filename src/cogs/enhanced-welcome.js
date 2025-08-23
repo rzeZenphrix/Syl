@@ -95,7 +95,8 @@ async function getWelcomeConfig(guildId) {
       message: 'Welcome {user} to {server}! 🎉',
       embed: true,
       color: '#00ff00',
-      image: null
+      image: null,
+      show_avatar: true
     };
   } catch (err) {
     console.error('Error getting welcome config:', err);
@@ -207,7 +208,6 @@ async function sendWelcomeMessage(member) {
         .setTitle('👋 Welcome!')
         .setDescription(processedMessage)
         .setColor(config.color || '#00ff00')
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
         .addFields([
           {
             name: '👤 Member Info',
@@ -222,6 +222,11 @@ async function sendWelcomeMessage(member) {
         ])
         .setFooter({ text: `Welcome to ${guild.name}!`, iconURL: guild.iconURL() })
         .setTimestamp();
+
+      // Only show avatar if enabled (defaults to true for backward compatibility)
+      if (config.show_avatar !== false) {
+        embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+      }
 
       if (config.image && isValidImageUrl(config.image)) {
         embed.setImage(config.image);
@@ -274,6 +279,7 @@ async function handleWelcomeSetupCommand(interaction) {
     const color = interaction.options.getString('color') || '#00ff00';
     const image = interaction.options.getString('image');
     const embedEnabled = interaction.options.getBoolean('embed') ?? true;
+    const showAvatar = interaction.options.getBoolean('show_avatar') ?? true;
 
     // Validate inputs
     if (channel && channel.type !== ChannelType.GuildText) {
@@ -311,7 +317,8 @@ async function handleWelcomeSetupCommand(interaction) {
       message,
       embed: embedEnabled,
       color,
-      image
+      image,
+      show_avatar: showAvatar
     }, member.id, guild);
 
     const embed = new EmbedBuilder()
@@ -330,7 +337,7 @@ async function handleWelcomeSetupCommand(interaction) {
         },
         {
           name: '🎨 Settings',
-          value: `**Format:** ${embedEnabled ? 'Embed' : 'Plain text'}\n**Color:** ${color}\n**Image:** ${image ? 'Set' : 'None'}`,
+          value: `**Format:** ${embedEnabled ? 'Embed' : 'Plain text'}\n**Color:** ${color}\n**Image:** ${image ? 'Set' : 'None'}\n**Show Avatar:** ${showAvatar ? 'Yes' : 'No'}`,
           inline: true
         },
         {
@@ -399,6 +406,11 @@ async function handleViewWelcomeCommand(interaction) {
         {
           name: '🖼️ Image',
           value: config.image ? '[Set](' + config.image + ')' : 'None',
+          inline: true
+        },
+        {
+          name: '👤 Show Avatar',
+          value: config.show_avatar !== false ? 'Yes' : 'No',
           inline: true
         },
         {
@@ -536,6 +548,11 @@ const slashCommands = [
     .addStringOption(option =>
       option.setName('image')
         .setDescription('Image URL for the welcome embed')
+        .setRequired(false)
+    )
+    .addBooleanOption(option =>
+      option.setName('show_avatar')
+        .setDescription('Show user avatar in welcome message (default: true)')
         .setRequired(false)
     ),
   

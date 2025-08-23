@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.welcome_configs (
     embed boolean DEFAULT true,
     color text DEFAULT '#00ff00',
     image text,
+    show_avatar boolean DEFAULT true,
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );

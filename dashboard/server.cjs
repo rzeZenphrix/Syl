@@ -460,16 +460,32 @@ const moduleActivation = {};
 // Get module activation state (persistent)
 app.get('/api/guild/:guildId/modules', async (req, res) => {
   const { guildId } = req.params;
-  const { data, error } = await supabase
-    .from('guild_modules')
-    .select('module_key, enabled')
-    .eq('guild_id', guildId);
-
-  if (error) return res.status(500).json({ error: 'Database error', details: error.message });
   
-  const state = {};
-  (data || []).forEach(row => { state[row.module_key] = !!row.enabled; });
-  res.json(state);
+  // If Supabase is not configured, return default empty state
+  if (!supabase) {
+    console.log(`Warning: Supabase not configured, returning empty module state for guild ${guildId}`);
+    return res.json({});
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('guild_modules')
+      .select('module_key, enabled')
+      .eq('guild_id', guildId);
+
+    if (error) {
+      console.error('Database error fetching modules:', error);
+      return res.status(500).json({ error: 'Database error', details: error.message });
+    }
+    
+    const state = {};
+    (data || []).forEach(row => { state[row.module_key] = !!row.enabled; });
+    console.log(`Module states for guild ${guildId}:`, state);
+    res.json(state);
+  } catch (err) {
+    console.error('Unexpected error fetching modules:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
 });
 
 // Set module activation state (persistent)
@@ -612,23 +628,51 @@ app.get('/api/guild/:guildId/channels', async (req, res) => {
 // Fetch real server info from Discord
 app.get('/api/guild/:guildId/info', async (req, res) => {
   const { guildId } = req.params;
+  
+  // If Discord token is not configured, return mock data
+  if (!process.env.DISCORD_TOKEN) {
+    console.log(`Warning: Discord token not configured, returning mock data for guild ${guildId}`);
+    return res.json({
+      name: 'Demo Server',
+      icon: '',
+      memberCount: 42,
+      channelCount: 12,
+      roleCount: 8,
+      status: 'Online'
+    });
+  }
+
   try {
     const apiRes = await fetch(`https://discord.com/api/guilds/${guildId}`, {
       headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
-    if (!apiRes.ok) return res.status(404).json({ error: 'Guild not found or bot not in guild' });
+    
+    if (!apiRes.ok) {
+      if (apiRes.status === 404) {
+        console.log(`Guild ${guildId} not found or bot not in guild`);
+        return res.status(404).json({ 
+          error: 'Guild not found or bot not in guild',
+          details: 'Make sure the bot is added to your Discord server'
+        });
+      }
+      throw new Error(`Discord API error: ${apiRes.status} ${apiRes.statusText}`);
+    }
+
     const guild = await apiRes.json();
     const icon = guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png` : '';
+    
     // Fetch channels
     const channelsRes = await fetch(`https://discord.com/api/guilds/${guildId}/channels`, {
       headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
     const channels = channelsRes.ok ? await channelsRes.json() : [];
+    
     // Fetch roles
     const rolesRes = await fetch(`https://discord.com/api/guilds/${guildId}/roles`, {
       headers: { 'Authorization': `Bot ${process.env.DISCORD_TOKEN}` }
     });
     const roles = rolesRes.ok ? await rolesRes.json() : [];
+    
     // Fetch member count (approximate, as Discord API does not provide a direct endpoint for member count except via /guilds/{guild.id}/widget.json or presence)
     let activeUsers = '-';
     try {
@@ -639,17 +683,27 @@ app.get('/api/guild/:guildId/info', async (req, res) => {
         const widget = await widgetRes.json();
         activeUsers = widget.presence_count || widget.members?.length || '-';
       }
-    } catch {}
-    res.json({
+    } catch (widgetError) {
+      console.log('Widget fetch failed (this is normal for many servers):', widgetError.message);
+    }
+    
+    const result = {
       name: guild.name,
       icon,
       memberCount: guild.approximate_member_count || '-',
       channelCount: channels.length,
       roleCount: roles.length,
       status: 'Online'
+    };
+    
+    console.log(`Guild info for ${guildId}:`, result);
+    res.json(result);
+  } catch (error) {
+    console.error('Failed to fetch guild info:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch guild information',
+      details: error.message 
     });
-  } catch (e) {
-    res.status(500).json({ error: 'Failed to fetch guild info', details: e.message });
   }
 });
 
