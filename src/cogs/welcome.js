@@ -458,8 +458,14 @@ async function sendWelcomeMessage(member) {
         .setTimestamp();
 
       // Only show avatar if enabled (defaults to true for backward compatibility)
-      if (config.show_avatar !== false) {
+      const shouldShowAvatar = config.show_avatar === undefined || config.show_avatar === true;
+      console.log(`Avatar setting for ${guild.name}: show_avatar=${config.show_avatar}, shouldShow=${shouldShowAvatar}`);
+      
+      if (shouldShowAvatar) {
         embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+        console.log(`Added avatar thumbnail for ${member.user.tag}`);
+      } else {
+        console.log(`Avatar disabled for ${member.user.tag}`);
       }
 
       if (config.image && isValidImageUrl(config.image)) {
