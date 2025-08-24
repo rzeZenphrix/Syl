@@ -53,6 +53,44 @@ function extractEmojiUrls(message) {
 
 // Prefix commands
 const prefixCommands = {
+  // Server kill command - ADMINISTRATOR ONLY
+  kill: async (msg, args) => {
+    if (!await isAdmin(msg.member)) {
+      return msg.reply('❌ You need administrator permissions to use this command.');
+    }
+
+    // Additional check: Only server owner or users with Administrator permission
+    if (msg.guild.ownerId !== msg.author.id && !msg.member.permissions.has('Administrator')) {
+      return msg.reply('❌ Only the server owner or users with Administrator permission can use this command.');
+    }
+
+    const confirmationId = `kill_${msg.guild.id}_${msg.author.id}_${Date.now()}`;
+    confirmationStates.set(confirmationId, {
+      userId: msg.author.id,
+      guildId: msg.guild.id,
+      step: 1,
+      timestamp: Date.now()
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle('💀 SERVER KILL CONFIRMATION')
+      .setDescription(`**⚠️ THIS WILL PERMANENTLY DELETE THE ENTIRE SERVER!**\n\n🚨 **DANGER - THIS ACTION CANNOT BE UNDONE!**\n🚨 **THE SERVER WILL BE COMPLETELY DESTROYED!**\n🚨 **ALL CHANNELS, ROLES, AND DATA WILL BE LOST!**\n\n**Server:** ${msg.guild.name}\n**Members:** ${msg.guild.memberCount}\n**Channels:** ${msg.guild.channels.cache.size}\n**Roles:** ${msg.guild.roles.cache.size}`)
+      .addFields(
+        { name: '💥 Action', value: 'Delete entire server', inline: true },
+        { name: '👥 Affected', value: `${msg.guild.memberCount} members`, inline: true },
+        { name: '⏰ Step', value: '1 of 3', inline: true }
+      )
+      .setColor(0xff0000)
+      .setFooter({ text: 'Type "CONFIRM KILL" to proceed (case sensitive)' });
+
+    await msg.reply({ embeds: [embed] });
+
+    // Clean up old confirmations
+    setTimeout(() => {
+      confirmationStates.delete(confirmationId);
+    }, 60000); // 1 minute timeout
+  },
+
   // SAFER ALTERNATIVE: Server lockdown instead of kill
   lockdown: async (msg, args) => {
     if (!await isAdmin(msg.member)) {
@@ -197,7 +235,7 @@ const prefixCommands = {
 async function handleMessage(msg) {
   if (msg.author.bot) return;
 
-  // Handle lockdown confirmations
+  // Handle kill confirmations
   for (const [confirmationId, data] of confirmationStates.entries()) {
     if (data.userId === msg.author.id && data.guildId === msg.guild?.id) {
       if (Date.now() - data.timestamp > 60000) {
@@ -205,7 +243,41 @@ async function handleMessage(msg) {
         continue;
       }
 
-      if (data.step === 1 && msg.content === 'CONFIRM LOCKDOWN') {
+      // Handle kill command confirmations
+      if (confirmationId.startsWith('kill_')) {
+        if (data.step === 1 && msg.content === 'CONFIRM KILL') {
+          data.step = 2;
+          const embed = new EmbedBuilder()
+            .setTitle('💀 FINAL SERVER KILL CONFIRMATION')
+            .setDescription(`**⚠️ LAST CHANCE TO CANCEL!**\n\nThis will **PERMANENTLY DELETE** the server "${msg.guild.name}"!\n\n**🚨 THIS ACTION CANNOT BE UNDONE! 🚨**\n\n**TYPE "EXECUTE KILL" TO PROCEED**\n**TYPE ANYTHING ELSE TO CANCEL**`)
+            .addFields({ name: '⏰ Step', value: '2 of 3', inline: true })
+            .setColor(0xff0000)
+            .setFooter({ text: 'The server will be permanently destroyed!' });
+
+          await msg.reply({ embeds: [embed] });
+        } else if (data.step === 2 && msg.content === 'EXECUTE KILL') {
+          data.step = 3;
+          confirmationStates.delete(confirmationId);
+
+          const embed = new EmbedBuilder()
+            .setTitle('💀 EXECUTING SERVER KILL')
+            .setDescription(`Deleting server "${msg.guild.name}"...`)
+            .setColor(0xff0000);
+
+          const statusMsg = await msg.reply({ embeds: [embed] });
+          await executeServerKill(msg.guild, statusMsg, msg.author);
+        } else if (data.step === 2) {
+          // Any other message cancels the kill
+          confirmationStates.delete(confirmationId);
+          const embed = new EmbedBuilder()
+            .setTitle('💀 SERVER KILL CANCELLED')
+            .setDescription('Server kill operation has been cancelled.')
+            .setColor(0x27ae60);
+          await msg.reply({ embeds: [embed] });
+        }
+      }
+      // Handle lockdown confirmations
+      else if (data.step === 1 && msg.content === 'CONFIRM LOCKDOWN') {
         data.step = 2;
         const embed = new EmbedBuilder()
           .setTitle('🚨 FINAL CONFIRMATION')
@@ -293,6 +365,56 @@ async function executeLockdown(guild, mode, statusMsg, executor) {
   }
 }
 
+// Execute server kill (permanent deletion)
+async function executeServerKill(guild, statusMsg, executor) {
+  try {
+    // Log the server kill attempt
+    console.log(`[SERVER KILL] ${executor.tag} (${executor.id}) is deleting server "${guild.name}" (${guild.id})`);
+    
+    // Update status
+    const embed = new EmbedBuilder()
+      .setTitle('💀 DELETING SERVER')
+      .setDescription(`**Server "${guild.name}" is being permanently deleted...**\n\n⚠️ This action cannot be undone!`)
+      .addFields(
+        { name: '👤 Executor', value: executor.tag, inline: true },
+        { name: '📅 Date', value: new Date().toLocaleString(), inline: true }
+      )
+      .setColor(0xff0000)
+      .setTimestamp();
+
+    await statusMsg.edit({ embeds: [embed] });
+
+    // Small delay before deletion to ensure the message is sent
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Delete the server
+    await guild.delete();
+    
+    // Note: We can't send a success message because the server no longer exists
+    console.log(`[SERVER KILL] Server "${guild.name}" (${guild.id}) has been successfully deleted by ${executor.tag}`);
+
+  } catch (error) {
+    console.error('Server kill execution error:', error);
+    
+    // Try to send error message if the guild still exists
+    try {
+      const errorEmbed = new EmbedBuilder()
+        .setTitle('❌ SERVER KILL FAILED')
+        .setDescription(`An error occurred while deleting the server: ${error.message}`)
+        .addFields(
+          { name: '🔍 Error Details', value: error.code ? `Error Code: ${error.code}` : 'Unknown error', inline: true },
+          { name: '👤 Executor', value: executor.tag, inline: true }
+        )
+        .setColor(0xe74c3c)
+        .setTimestamp();
+      
+      await statusMsg.edit({ embeds: [errorEmbed] });
+    } catch (editError) {
+      console.error('Failed to send error message:', editError);
+    }
+  }
+}
+
 module.exports = {
   name: 'server-management',
   prefixCommands,
@@ -302,6 +424,7 @@ module.exports = {
   
   // Available commands
   availableCommands: {
+    kill: 'PERMANENTLY DELETE the entire server (ADMINISTRATOR ONLY - EXTREMELY DANGEROUS). Usage: `;kill` - Requires server owner or Administrator permission',
     lockdown: 'Emergency server lockdown - kicks/bans all members (DANGEROUS). Usage: `;lockdown kick` or `;lockdown ban`',
     'steal-emojis': 'Steal up to 20 emojis from a message. Reply to a message with emojis or use in a channel with emoji messages. Usage: `;steal-emojis`'
   }
