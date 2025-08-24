@@ -101,6 +101,17 @@ const commandDescriptions = {
   // Update help text
   a: 'Short for ;activity. Usage: `;a` for your stats, `;a @user` for another user, `;a l` for leaderboard. Activity resets weekly.',
   'starboard-set': 'Configure a starboard. Usage: `/starboard-set name:<name> emoji:<emoji> threshold:<num> channel:<#channel> exclude:<#chan1,#chan2,...>`',
+  
+  // Utility commands
+  emojis: 'Count and display emojis and stickers in the server. Shows regular emojis, animated emojis, stickers, and server limits. Usage: `/emojis`',
+  server: 'Show detailed server information including member count, creation date, boost level, and more. Usage: `/server`',
+  ping: 'Check the bot\'s latency and response time. Usage: `/ping`',
+  avatar: 'Display a user\'s avatar in full size. Usage: `/avatar [user]`',
+  poll: 'Create a poll with yes/no reactions. Usage: `/poll question:"Your question here"`',
+  
+  // Server management commands (DANGEROUS)
+  lockdown: 'Emergency server lockdown - kicks/bans all members (EXTREMELY DANGEROUS). Usage: `;lockdown kick` or `;lockdown ban`. Requires multiple confirmations.',
+  'steal-emojis': 'Steal up to 20 emojis from a message. Reply to a message with emojis or use `;steal-emojis`. Usage: `;steal-emojis`',
 };
 
 // Translation function with language detection
@@ -1346,10 +1357,11 @@ const PAGE_SIZE = 8;
 function getAllCommandsByCategory() {
   return [
     { category: '🛡️ Moderation', commands: ['ban', 'kick', 'warn', 'warnings', 'clearwarn', 'purge', 'nuke', 'blacklist', 'unblacklist', 'mute', 'unmute', 'timeout', 'spy', 'sniper', 'revert', 'shadowban', 'massban', 'lock', 'unlock', 'modview', 'crontab', 'report', 'modmail', 'panic', 'feedback', 'case', 'raid', 'antinuke'] },
-    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal'] },
+    { category: '🛠️ Utility', commands: ['ls', 'ps', 'whoami', 'whois', 'ping', 'uptime', 'server', 'emojis', 'roles', 'avatar', 'poll', 'say', 'reset', 'man', 'top', 'sysinfo', 'passwd', 'steal', 'steal-emojis'] },
+    { category: '🚨 Server Management', commands: ['lockdown'] },
     { category: '🔧 Setup & Configuration', commands: ['setup', 'showsetup', 'config', 'logchannel', 'autorole', 'prefix', 'reset-config', 'disable-commands', 'co-owners', 'add-co-owner', 'remove-co-owner', 'feedback-channel', 'modmail-channel', 'mod-role', 'report-channel'] },
     { category: '🎫 Tickets', commands: ['ticketsetup', 'ticket', 'close', 'claim'] },
-    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'goodbyesetup'] }
+    { category: '👋 Welcome & Goodbye', commands: ['welcomesetup', 'welcome-config', 'goodbyesetup'] }
   ];
 }
 
@@ -1386,6 +1398,10 @@ const slashCommands = [
   new SlashCommandBuilder()
     .setName('server')
     .setDescription('Show server info'),
+  
+  new SlashCommandBuilder()
+    .setName('emojis')
+    .setDescription('Count emojis and stickers in the server'),
   
   new SlashCommandBuilder()
     .setName('avatar')
@@ -1486,6 +1502,59 @@ slashHandlers = {
         { name: 'Boost Level', value: guild.premiumTier.toString(), inline: true }
       )
       .setColor(0x9b59b6);
+    
+    return interaction.reply({ embeds: [embed] });
+  },
+  
+  emojis: async (interaction) => {
+    const guild = interaction.guild;
+    
+    // Count different types of emojis
+    const allEmojis = guild.emojis.cache;
+    const regularEmojis = allEmojis.filter(emoji => !emoji.animated);
+    const animatedEmojis = allEmojis.filter(emoji => emoji.animated);
+    
+    // Count stickers
+    const allStickers = guild.stickers.cache;
+    
+    // Create lists of emoji names for display (limited to avoid message being too long)
+    const regularEmojiNames = regularEmojis.map(e => e.name).slice(0, 10);
+    const animatedEmojiNames = animatedEmojis.map(e => e.name).slice(0, 10);
+    const stickerNames = allStickers.map(s => s.name).slice(0, 10);
+    
+    const embed = new EmbedBuilder()
+      .setTitle(`🎭 ${guild.name} - Emojis & Stickers`)
+      .setThumbnail(guild.iconURL())
+      .addFields(
+        { 
+          name: '😀 Regular Emojis', 
+          value: `**Count:** ${regularEmojis.size}\n${regularEmojiNames.length > 0 ? `**Examples:** ${regularEmojiNames.join(', ')}${regularEmojis.size > 10 ? '...' : ''}` : '*No regular emojis*'}`, 
+          inline: true 
+        },
+        { 
+          name: '✨ Animated Emojis', 
+          value: `**Count:** ${animatedEmojis.size}\n${animatedEmojiNames.length > 0 ? `**Examples:** ${animatedEmojiNames.join(', ')}${animatedEmojis.size > 10 ? '...' : ''}` : '*No animated emojis*'}`, 
+          inline: true 
+        },
+        { 
+          name: '🏷️ Stickers', 
+          value: `**Count:** ${allStickers.size}\n${stickerNames.length > 0 ? `**Examples:** ${stickerNames.join(', ')}${allStickers.size > 10 ? '...' : ''}` : '*No stickers*'}`, 
+          inline: true 
+        },
+        { 
+          name: '📊 Total', 
+          value: `**${allEmojis.size + allStickers.size}** total emojis and stickers`, 
+          inline: false 
+        },
+        {
+          name: '📈 Server Limits',
+          value: `**Emoji Slots:** ${allEmojis.size}/50 ${guild.premiumTier >= 1 ? '(+50 animated)' : ''}\n**Sticker Slots:** ${allStickers.size}/${guild.premiumTier >= 1 ? '15' : '5'}`,
+          inline: false
+        }
+      )
+      .setColor(0xf39c12)
+      .setFooter({ text: `Server boost level: ${guild.premiumTier}` })
+      .setTimestamp();
     
     return interaction.reply({ embeds: [embed] });
   },

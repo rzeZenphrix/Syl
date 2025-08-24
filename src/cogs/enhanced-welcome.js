@@ -95,7 +95,8 @@ async function getWelcomeConfig(guildId) {
       message: 'Welcome {user} to {server}! 🎉',
       embed: true,
       color: '#00ff00',
-      image: null
+      image: null,
+      show_avatar: true
     };
   } catch (err) {
     console.error('Error getting welcome config:', err);
@@ -185,15 +186,21 @@ async function sendWelcomeMessage(member) {
     const guild = member.guild;
     const guildId = guild.id;
 
+    console.log(`Enhanced-welcome: Processing welcome for ${member.user.tag} in ${guild.name}`);
+
     // Check if welcome is enabled
     if (!await isWelcomeEnabled(guildId)) {
+      console.log(`Enhanced-welcome: Welcome disabled for ${guild.name}`);
       return;
     }
 
     const config = await getWelcomeConfig(guildId);
     if (!config || !config.channel_id) {
+      console.log(`Enhanced-welcome: No config or channel for ${guild.name}`);
       return;
     }
+
+    console.log(`Enhanced-welcome: Config found for ${guild.name}, channel: ${config.channel_id}, show_avatar: ${config.show_avatar}`);
 
     const channel = guild.channels.cache.get(config.channel_id);
     if (!channel || !channel.isTextBased()) {
@@ -207,7 +214,6 @@ async function sendWelcomeMessage(member) {
         .setTitle('👋 Welcome!')
         .setDescription(processedMessage)
         .setColor(config.color || '#00ff00')
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
         .addFields([
           {
             name: '👤 Member Info',
@@ -222,6 +228,17 @@ async function sendWelcomeMessage(member) {
         ])
         .setFooter({ text: `Welcome to ${guild.name}!`, iconURL: guild.iconURL() })
         .setTimestamp();
+
+      // Only show avatar if enabled (defaults to true for backward compatibility)
+      const shouldShowAvatar = config.show_avatar === undefined || config.show_avatar === true;
+      console.log(`Enhanced Avatar setting for ${guild.name}: show_avatar=${config.show_avatar}, shouldShow=${shouldShowAvatar}`);
+      
+      if (shouldShowAvatar) {
+        embed.setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }));
+        console.log(`Enhanced: Added avatar thumbnail for ${member.user.tag}`);
+      } else {
+        console.log(`Enhanced: Avatar disabled for ${member.user.tag}`);
+      }
 
       if (config.image && isValidImageUrl(config.image)) {
         embed.setImage(config.image);
@@ -245,8 +262,10 @@ async function sendWelcomeMessage(member) {
       }
     );
 
+    console.log(`Enhanced-welcome: Successfully sent welcome message for ${member.user.tag} in ${guild.name}`);
+
   } catch (error) {
-    console.error('Error sending welcome message:', error);
+    console.error('Enhanced-welcome: Error sending welcome message:', error);
     await logger.logError(member.guild.id, member.guild, error, { 
       context: 'sendWelcomeMessage',
       memberId: member.id 
@@ -274,6 +293,7 @@ async function handleWelcomeSetupCommand(interaction) {
     const color = interaction.options.getString('color') || '#00ff00';
     const image = interaction.options.getString('image');
     const embedEnabled = interaction.options.getBoolean('embed') ?? true;
+    const showAvatar = interaction.options.getBoolean('show_avatar') ?? true;
 
     // Validate inputs
     if (channel && channel.type !== ChannelType.GuildText) {
@@ -311,7 +331,8 @@ async function handleWelcomeSetupCommand(interaction) {
       message,
       embed: embedEnabled,
       color,
-      image
+      image,
+      show_avatar: showAvatar
     }, member.id, guild);
 
     const embed = new EmbedBuilder()
@@ -330,7 +351,7 @@ async function handleWelcomeSetupCommand(interaction) {
         },
         {
           name: '🎨 Settings',
-          value: `**Format:** ${embedEnabled ? 'Embed' : 'Plain text'}\n**Color:** ${color}\n**Image:** ${image ? 'Set' : 'None'}`,
+          value: `**Format:** ${embedEnabled ? 'Embed' : 'Plain text'}\n**Color:** ${color}\n**Image:** ${image ? 'Set' : 'None'}\n**Show Avatar:** ${showAvatar ? 'Yes' : 'No'}`,
           inline: true
         },
         {
@@ -343,7 +364,7 @@ async function handleWelcomeSetupCommand(interaction) {
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
-    await logger.logCommand(guild.id, guild, 'welcomesetup', member.id, true, { 
+    await logger.logCommand(guild.id, guild, 'welcome-config', member.id, true, { 
       channelId: channel?.id,
       embedEnabled 
     });
@@ -399,6 +420,11 @@ async function handleViewWelcomeCommand(interaction) {
         {
           name: '🖼️ Image',
           value: config.image ? '[Set](' + config.image + ')' : 'None',
+          inline: true
+        },
+        {
+          name: '👤 Show Avatar',
+          value: config.show_avatar !== false ? 'Yes' : 'No',
           inline: true
         },
         {
@@ -508,7 +534,7 @@ async function handleToggleWelcomeCommand(interaction) {
 // Slash command definitions
 const slashCommands = [
   new SlashCommandBuilder()
-    .setName('welcomesetup')
+    .setName('welcome-config')
     .setDescription('Configure welcome messages for new members (admin only)')
     .addChannelOption(option =>
       option.setName('channel')
@@ -537,6 +563,11 @@ const slashCommands = [
       option.setName('image')
         .setDescription('Image URL for the welcome embed')
         .setRequired(false)
+    )
+    .addBooleanOption(option =>
+      option.setName('show_avatar')
+        .setDescription('Show user avatar in welcome message (default: true)')
+        .setRequired(false)
     ),
   
   new SlashCommandBuilder()
@@ -550,14 +581,14 @@ const slashCommands = [
 
 // Slash command handlers
 const slashHandlers = {
-  welcomesetup: handleWelcomeSetupCommand,
+  'welcome-config': handleWelcomeSetupCommand,
   viewwelcome: handleViewWelcomeCommand,
   'toggle-welcome': handleToggleWelcomeCommand
 };
 
 // Available commands for this cog
 const availableCommands = {
-  welcomesetup: 'Setup welcome messages for new members (admin only)',
+  'welcome-config': 'Configure welcome messages for new members (admin only)',
   viewwelcome: 'View the current welcome configuration',
   'toggle-welcome': 'Enable or disable welcome messages (admin only)'
 };
