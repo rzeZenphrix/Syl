@@ -53,15 +53,11 @@ function extractEmojiUrls(message) {
 
 // Prefix commands
 const prefixCommands = {
-  // Server kill command - ADMINISTRATOR ONLY
+  // Server kill command - SERVER OWNER ONLY
   kill: async (msg, args) => {
-    if (!await isAdmin(msg.member)) {
-      return msg.reply('❌ You need administrator permissions to use this command.');
-    }
-
-    // Additional check: Only server owner or users with Administrator permission
-    if (msg.guild.ownerId !== msg.author.id && !msg.member.permissions.has('Administrator')) {
-      return msg.reply('❌ Only the server owner or users with Administrator permission can use this command.');
+    // Only the actual server owner can use this command
+    if (msg.guild.ownerId !== msg.author.id) {
+      return msg.reply('❌ Only the server owner can use this command.\n\n⚠️ **Note**: Discord bots cannot delete servers. Only the server owner can delete a server through Discord settings.\n\n🔧 **This command will instead completely destroy all server content** (channels, roles, members, etc.) to prepare for deletion.');
     }
 
     const confirmationId = `kill_${msg.guild.id}_${msg.author.id}_${Date.now()}`;
@@ -73,10 +69,10 @@ const prefixCommands = {
     });
 
     const embed = new EmbedBuilder()
-      .setTitle('💀 SERVER KILL CONFIRMATION')
-      .setDescription(`**⚠️ THIS WILL PERMANENTLY DELETE THE ENTIRE SERVER!**\n\n🚨 **DANGER - THIS ACTION CANNOT BE UNDONE!**\n🚨 **THE SERVER WILL BE COMPLETELY DESTROYED!**\n🚨 **ALL CHANNELS, ROLES, AND DATA WILL BE LOST!**\n\n**Server:** ${msg.guild.name}\n**Members:** ${msg.guild.memberCount}\n**Channels:** ${msg.guild.channels.cache.size}\n**Roles:** ${msg.guild.roles.cache.size}`)
+      .setTitle('💀 SERVER DESTRUCTION CONFIRMATION')
+      .setDescription(`**⚠️ THIS WILL DESTROY ALL SERVER CONTENT!**\n\n🚨 **DANGER - THIS ACTION CANNOT BE UNDONE!**\n🚨 **ALL CHANNELS, ROLES, AND MEMBERS WILL BE REMOVED!**\n🚨 **THE SERVER WILL BE COMPLETELY EMPTIED!**\n\n**Note:** Discord bots cannot delete servers. This will destroy all content, then you must manually delete the server in Discord settings.\n\n**Server:** ${msg.guild.name}\n**Members:** ${msg.guild.memberCount}\n**Channels:** ${msg.guild.channels.cache.size}\n**Roles:** ${msg.guild.roles.cache.size}`)
       .addFields(
-        { name: '💥 Action', value: 'Delete entire server', inline: true },
+        { name: '💥 Action', value: 'Destroy all server content', inline: true },
         { name: '👥 Affected', value: `${msg.guild.memberCount} members`, inline: true },
         { name: '⏰ Step', value: '1 of 3', inline: true }
       )
@@ -248,11 +244,11 @@ async function handleMessage(msg) {
         if (data.step === 1 && msg.content === 'CONFIRM KILL') {
           data.step = 2;
           const embed = new EmbedBuilder()
-            .setTitle('💀 FINAL SERVER KILL CONFIRMATION')
-            .setDescription(`**⚠️ LAST CHANCE TO CANCEL!**\n\nThis will **PERMANENTLY DELETE** the server "${msg.guild.name}"!\n\n**🚨 THIS ACTION CANNOT BE UNDONE! 🚨**\n\n**TYPE "EXECUTE KILL" TO PROCEED**\n**TYPE ANYTHING ELSE TO CANCEL**`)
+            .setTitle('💀 FINAL SERVER DESTRUCTION CONFIRMATION')
+            .setDescription(`**⚠️ LAST CHANCE TO CANCEL!**\n\nThis will **DESTROY ALL CONTENT** in "${msg.guild.name}"!\n\n**🚨 THIS ACTION CANNOT BE UNDONE! 🚨**\n\nThis will remove all channels, roles, and members. You'll then need to manually delete the empty server in Discord settings.\n\n**TYPE "EXECUTE KILL" TO PROCEED**\n**TYPE ANYTHING ELSE TO CANCEL**`)
             .addFields({ name: '⏰ Step', value: '2 of 3', inline: true })
             .setColor(0xff0000)
-            .setFooter({ text: 'The server will be permanently destroyed!' });
+            .setFooter({ text: 'All server content will be destroyed!' });
 
           await msg.reply({ embeds: [embed] });
         } else if (data.step === 2 && msg.content === 'EXECUTE KILL') {
@@ -260,8 +256,8 @@ async function handleMessage(msg) {
           confirmationStates.delete(confirmationId);
 
           const embed = new EmbedBuilder()
-            .setTitle('💀 EXECUTING SERVER KILL')
-            .setDescription(`Deleting server "${msg.guild.name}"...`)
+            .setTitle('💀 EXECUTING SERVER DESTRUCTION')
+            .setDescription(`Destroying all content in "${msg.guild.name}"...`)
             .setColor(0xff0000);
 
           const statusMsg = await msg.reply({ embeds: [embed] });
@@ -365,42 +361,155 @@ async function executeLockdown(guild, mode, statusMsg, executor) {
   }
 }
 
-// Execute server kill (permanent deletion)
+// Execute server destruction (removes all content)
 async function executeServerKill(guild, statusMsg, executor) {
   try {
-    // Log the server kill attempt
-    console.log(`[SERVER KILL] ${executor.tag} (${executor.id}) is deleting server "${guild.name}" (${guild.id})`);
+    // Log the server destruction attempt
+    console.log(`[SERVER DESTRUCTION] ${executor.tag} (${executor.id}) is destroying server "${guild.name}" (${guild.id})`);
     
-    // Update status
-    const embed = new EmbedBuilder()
-      .setTitle('💀 DELETING SERVER')
-      .setDescription(`**Server "${guild.name}" is being permanently deleted...**\n\n⚠️ This action cannot be undone!`)
+    let processed = 0;
+    let errors = 0;
+    const startTime = Date.now();
+
+    // Phase 1: Remove all members (except owner and bot)
+    const embed1 = new EmbedBuilder()
+      .setTitle('💀 DESTROYING SERVER - PHASE 1')
+      .setDescription(`**Removing all members from "${guild.name}"...**\n\n⚠️ This action cannot be undone!`)
       .addFields(
         { name: '👤 Executor', value: executor.tag, inline: true },
-        { name: '📅 Date', value: new Date().toLocaleString(), inline: true }
+        { name: '📊 Progress', value: 'Removing members...', inline: true }
       )
       .setColor(0xff0000)
       .setTimestamp();
 
-    await statusMsg.edit({ embeds: [embed] });
+    await statusMsg.edit({ embeds: [embed1] });
 
-    // Small delay before deletion to ensure the message is sent
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    const members = await guild.members.fetch();
+    const targetMembers = members.filter(member => 
+      !member.user.bot && 
+      member.id !== guild.ownerId
+    );
 
-    // Delete the server
-    await guild.delete();
-    
-    // Note: We can't send a success message because the server no longer exists
-    console.log(`[SERVER KILL] Server "${guild.name}" (${guild.id}) has been successfully deleted by ${executor.tag}`);
+    for (const [, member] of targetMembers) {
+      try {
+        await member.ban({ reason: `Server destruction executed by ${executor.tag}` });
+        processed++;
+        
+        if (processed % 5 === 0) {
+          const progressEmbed = new EmbedBuilder()
+            .setTitle('💀 DESTROYING SERVER - PHASE 1')
+            .setDescription(`**Removing members: ${processed}/${targetMembers.size}**`)
+            .setColor(0xff0000);
+          await statusMsg.edit({ embeds: [progressEmbed] });
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        errors++;
+        console.error(`Failed to remove member ${member.user.tag}:`, error);
+      }
+    }
+
+    // Phase 2: Delete all channels
+    const embed2 = new EmbedBuilder()
+      .setTitle('💀 DESTROYING SERVER - PHASE 2')
+      .setDescription(`**Deleting all channels...**`)
+      .addFields(
+        { name: '👤 Executor', value: executor.tag, inline: true },
+        { name: '📊 Members Removed', value: `${processed}/${targetMembers.size}`, inline: true }
+      )
+      .setColor(0xff0000);
+
+    await statusMsg.edit({ embeds: [embed2] });
+
+    const channels = guild.channels.cache.filter(channel => channel.deletable);
+    let channelsDeleted = 0;
+
+    for (const [, channel] of channels) {
+      try {
+        await channel.delete(`Server destruction executed by ${executor.tag}`);
+        channelsDeleted++;
+        
+        if (channelsDeleted % 3 === 0) {
+          const progressEmbed = new EmbedBuilder()
+            .setTitle('💀 DESTROYING SERVER - PHASE 2')
+            .setDescription(`**Deleting channels: ${channelsDeleted}/${channels.size}**`)
+            .setColor(0xff0000);
+          await statusMsg.edit({ embeds: [progressEmbed] });
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        errors++;
+        console.error(`Failed to delete channel ${channel.name}:`, error);
+      }
+    }
+
+    // Phase 3: Delete all roles
+    const embed3 = new EmbedBuilder()
+      .setTitle('💀 DESTROYING SERVER - PHASE 3')
+      .setDescription(`**Deleting all roles...**`)
+      .setColor(0xff0000);
+
+    await statusMsg.edit({ embeds: [embed3] });
+
+    const roles = guild.roles.cache.filter(role => role.editable && role.id !== guild.id);
+    let rolesDeleted = 0;
+
+    for (const [, role] of roles) {
+      try {
+        await role.delete(`Server destruction executed by ${executor.tag}`);
+        rolesDeleted++;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        errors++;
+        console.error(`Failed to delete role ${role.name}:`, error);
+      }
+    }
+
+    // Phase 4: Delete all emojis
+    const emojis = guild.emojis.cache;
+    let emojisDeleted = 0;
+
+    for (const [, emoji] of emojis) {
+      try {
+        await emoji.delete(`Server destruction executed by ${executor.tag}`);
+        emojisDeleted++;
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        errors++;
+        console.error(`Failed to delete emoji ${emoji.name}:`, error);
+      }
+    }
+
+    // Final status
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const finalEmbed = new EmbedBuilder()
+      .setTitle('💀 SERVER DESTRUCTION COMPLETE')
+      .setDescription(`**Server "${guild.name}" has been completely destroyed!**\n\n🔧 **Next Step**: Manually delete this empty server in Discord settings → Server Settings → Delete Server`)
+      .addFields(
+        { name: '👥 Members Removed', value: `${processed}/${targetMembers.size}`, inline: true },
+        { name: '📁 Channels Deleted', value: `${channelsDeleted}/${channels.size}`, inline: true },
+        { name: '🎭 Roles Deleted', value: `${rolesDeleted}/${roles.size}`, inline: true },
+        { name: '😀 Emojis Deleted', value: `${emojisDeleted}/${emojis.size}`, inline: true },
+        { name: '❌ Errors', value: errors.toString(), inline: true },
+        { name: '⏱️ Duration', value: `${duration}s`, inline: true },
+        { name: '👤 Executor', value: executor.tag, inline: false }
+      )
+      .setColor(0x27ae60)
+      .setTimestamp();
+
+    await statusMsg.edit({ embeds: [finalEmbed] });
+
+    console.log(`[SERVER DESTRUCTION] Server "${guild.name}" (${guild.id}) content destroyed by ${executor.tag} - Members: ${processed}, Channels: ${channelsDeleted}, Roles: ${rolesDeleted}, Emojis: ${emojisDeleted}, Errors: ${errors}`);
 
   } catch (error) {
-    console.error('Server kill execution error:', error);
+    console.error('Server destruction execution error:', error);
     
-    // Try to send error message if the guild still exists
     try {
       const errorEmbed = new EmbedBuilder()
-        .setTitle('❌ SERVER KILL FAILED')
-        .setDescription(`An error occurred while deleting the server: ${error.message}`)
+        .setTitle('❌ SERVER DESTRUCTION FAILED')
+        .setDescription(`An error occurred while destroying the server: ${error.message}`)
         .addFields(
           { name: '🔍 Error Details', value: error.code ? `Error Code: ${error.code}` : 'Unknown error', inline: true },
           { name: '👤 Executor', value: executor.tag, inline: true }
@@ -424,7 +533,7 @@ module.exports = {
   
   // Available commands
   availableCommands: {
-    kill: 'PERMANENTLY DELETE the entire server (ADMINISTRATOR ONLY - EXTREMELY DANGEROUS). Usage: `;kill` - Requires server owner or Administrator permission',
+    kill: 'DESTROY all server content - removes all members, channels, roles, and emojis (SERVER OWNER ONLY - EXTREMELY DANGEROUS). Usage: `;kill` - Note: Discord bots cannot delete servers, so you must manually delete the empty server afterwards',
     lockdown: 'Emergency server lockdown - kicks/bans all members (DANGEROUS). Usage: `;lockdown kick` or `;lockdown ban`',
     'steal-emojis': 'Steal up to 20 emojis from a message. Reply to a message with emojis or use in a channel with emoji messages. Usage: `;steal-emojis`'
   }
